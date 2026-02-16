@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  HelpCircle, Users, Tag, FileText, Calendar, BarChart3, Settings, 
-  CheckSquare, Globe, LayoutDashboard, Target, 
+import {
+  HelpCircle, Users, Tag, FileText, Calendar, BarChart3, Settings,
+  CheckSquare, Globe, LayoutDashboard, Target,
   MessageSquare, ArrowRight
 } from 'lucide-react'
 import Link from 'next/link'
@@ -67,7 +67,7 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">פונקציות עיקריות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2 flex items-center gap-2">
@@ -122,7 +122,7 @@ export default function HelpPage() {
                     </h4>
                     <p className="text-sm text-grey mb-3">בחר מספר לקוחות ובצע פעולות על כולם יחד:</p>
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
-                      <li>לחץ על "בחר מרובים" כדי להפעיל מצב בחירה</li>
+                      <li>לחץ על &quot;בחר מרובים&quot; כדי להפעיל מצב בחירה</li>
                       <li>סמן את הלקוחות שברצונך לבחור</li>
                       <li>עדכן סטטוס - שנה סטטוס למספר לקוחות בבת אחת</li>
                       <li>הוסף תגיות - הקצה תגיות למספר לקוחות</li>
@@ -136,7 +136,7 @@ export default function HelpPage() {
                       <Users className="h-4 w-4 text-blue-600" />
                       הוספת לקוח חדש
                     </h4>
-                    <p className="text-sm text-grey">לחץ על כפתור "הוסף לקוח חדש" כדי ליצור לקוח חדש במערכת. תצטרך להזין שם, אימייל (אופציונלי), טלפון (אופציונלי) וסטטוס.</p>
+                    <p className="text-sm text-grey">לחץ על כפתור &quot;הוסף לקוח חדש&quot; כדי ליצור לקוח חדש במערכת. תצטרך להזין שם, אימייל (אופציונלי), טלפון (אופציונלי) וסטטוס.</p>
                   </div>
 
                   <div className="bg-grey/5 p-4 rounded-lg">
@@ -171,7 +171,7 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">טאבים ופונקציות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">📋 טבלאות דינמיות</h4>
@@ -196,7 +196,7 @@ export default function HelpPage() {
                       <li>טען תצוגות שמורות</li>
                       <li>מחק תצוגות</li>
                     </ul>
-                    <p className="text-sm text-grey mt-2">לחץ על "שמור תצוגה נוכחית" כדי לשמור את ההגדרות הנוכחיות.</p>
+                    <p className="text-sm text-grey mt-2">לחץ על &quot;שמור תצוגה נוכחית&quot; כדי לשמור את ההגדרות הנוכחיות.</p>
                   </div>
 
                   <div className="bg-grey/5 p-4 rounded-lg">
@@ -285,7 +285,7 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">פונקציות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">📅 לוח שנה חודשי</h4>
@@ -351,11 +351,11 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">פונקציות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">➕ יצירת יעד חדש</h4>
-                    <p className="text-sm text-grey mb-2">לחץ על "הוסף יעד חדש" והגדר:</p>
+                    <p className="text-sm text-grey mb-2">לחץ על &quot;הוסף יעד חדש&quot; והגדר:</p>
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
                       <li>סוג יעד - הכנסות, מספר לקוחות, מספר תשלומים, או מותאם אישית</li>
                       <li>כותרת - שם היעד</li>
@@ -421,7 +421,7 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">פונקציות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">💬 שליחת הודעה מרובת נמענים</h4>
@@ -429,9 +429,9 @@ export default function HelpPage() {
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
                       <li>בחר לקוחות מתוך הרשימה (ניתן לבחור כמה שתרצה)</li>
                       <li>סנן לקוחות לפי סטטוס (הכל, פעיל, ליד, ארכיון)</li>
-                      <li>לחץ על "בחר הכל" כדי לבחור את כל הלקוחות המוצגים</li>
+                      <li>לחץ על &quot;בחר הכל&quot; כדי לבחור את כל הלקוחות המוצגים</li>
                       <li>כתוב את ההודעה</li>
-                      <li>לחץ על "שלח" - ההודעות יישלחו דרך WhatsApp</li>
+                      <li>לחץ על &quot;שלח&quot; - ההודעות יישלחו דרך WhatsApp</li>
                     </ul>
                     <p className="text-sm text-grey mt-2">הערה: רק לקוחות עם מספר טלפון יכולים לקבל הודעות.</p>
                   </div>
@@ -441,7 +441,7 @@ export default function HelpPage() {
                     <p className="text-sm text-grey mb-2">בחלק הימני תוכל לראות רשימת תשלומים ממתינים:</p>
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
                       <li>כל תשלום מציג שם לקוח, סכום ותאריך</li>
-                      <li>לחץ על "שלח תזכורת" כדי לשלוח הודעת תזכורת אוטומטית</li>
+                      <li>לחץ על &quot;שלח תזכורת&quot; כדי לשלוח הודעת תזכורת אוטומטית</li>
                       <li>ההודעה תכלול שם לקוח, סכום ותאריך תשלום</li>
                     </ul>
                     <p className="text-sm text-grey mt-2">התזכורות נשלחות אוטומטית עם פורמט מוכן מראש.</p>
@@ -479,14 +479,14 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">פונקציות:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">📊 כרטיסי סיכום</h4>
                     <p className="text-sm text-grey mb-2">בחלק העליון תוכל לראות:</p>
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
-                      <li>סה"כ לקוחות - מספר כל הלקוחות</li>
-                      <li>סה"כ הכנסות - סכום כל ההכנסות</li>
+                      <li>סה&quot;כ לקוחות - מספר כל הלקוחות</li>
+                      <li>סה&quot;כ הכנסות - סכום כל ההכנסות</li>
                       <li>תשלומים ממתינים - סכום תשלומים שטרם שולמו</li>
                       <li>ממוצע תשלום - ממוצע סכום תשלום</li>
                     </ul>
@@ -531,15 +531,15 @@ export default function HelpPage() {
             <div className="space-y-4 mt-6">
               <div className="border-t pt-4">
                 <h3 className="font-semibold text-lg mb-3">איך זה עובד:</h3>
-                
+
                 <div className="space-y-3">
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">🔗 יצירת קישור שיתוף</h4>
                     <p className="text-sm text-grey mb-2">מעמוד פרטי הלקוח:</p>
                     <ul className="list-disc list-inside text-sm text-grey space-y-1 mr-4">
-                      <li>עבור לטאב "הגדרות" בדף הלקוח</li>
-                      <li>בחלק "שיתוף לקוח" תראה אפשרות ליצור קישור שיתוף</li>
-                      <li>לחץ על "צור קישור שיתוף"</li>
+                      <li>עבור לטאב &quot;הגדרות&quot; בדף הלקוח</li>
+                      <li>בחלק &quot;שיתוף לקוח&quot; תראה אפשרות ליצור קישור שיתוף</li>
+                      <li>לחץ על &quot;צור קישור שיתוף&quot;</li>
                       <li>הקישור יוצר אוטומטית עם token ייחודי ומאובטח</li>
                       <li>העתק את הקישור ושלח ללקוח</li>
                     </ul>
@@ -568,7 +568,7 @@ export default function HelpPage() {
 
                   <div className="bg-grey/5 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">❌ ביטול שיתוף</h4>
-                    <p className="text-sm text-grey">לבטל קישור שיתוף, חזור לדף הלקוח ובטאב "הגדרות" לחץ על "בטל שיתוף". הקישור יהפוך לחסר תוקף מיד.</p>
+                    <p className="text-sm text-grey">לבטל קישור שיתוף, חזור לדף הלקוח ובטאב &quot;הגדרות&quot; לחץ על &quot;בטל שיתוף&quot;. הקישור יהפוך לחסר תוקף מיד.</p>
                   </div>
                 </div>
               </div>

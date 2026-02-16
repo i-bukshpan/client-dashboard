@@ -129,7 +129,6 @@ export function ModuleDataTab({ clientId, moduleType, branchName, readOnly = fal
         records={records}
         columns={columns}
         onRecordUpdate={loadData}
-        onRecordUpdate={loadData}
         customView={currentView}
         onViewConfigChange={setCurrentViewConfig}
         readOnly={readOnly}

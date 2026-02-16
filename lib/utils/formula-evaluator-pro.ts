@@ -123,7 +123,7 @@ function evaluateLOOKUP(formula: string, context: FormulaContext): any {
 
     const record = tableData.find((r) => r[keyColumn] === key || r.data?.[keyColumn] === key)
     if (record) {
-        return record[valueColumn] || record.data?.[value Column] || null
+        return record[valueColumn] || record.data?.[valueColumn] || null
     }
 
     return null

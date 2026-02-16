@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -62,19 +62,14 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
   const [newChartYAxis, setNewChartYAxis] = useState('')
   const [newChartAggregation, setNewChartAggregation] = useState<'SUM' | 'AVERAGE' | 'COUNT'>('SUM')
 
-  useEffect(() => {
-    loadModules()
-    loadCharts()
-  }, [clientId])
-
-  const loadModules = async () => {
+  const loadModules = useCallback(async () => {
     try {
       const result = await getClientSchemas(clientId)
       if (result.success && result.schemas) {
         setAvailableModules(result.schemas)
         if (moduleName) {
-          const module = result.schemas.find(m => m.module_name === moduleName)
-          if (module) {
+          const foundModule = result.schemas.find(m => m.module_name === moduleName)
+          if (foundModule) {
             setNewChartModule(moduleName)
           }
         }
@@ -84,13 +79,18 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [clientId, moduleName])
 
-  const loadCharts = async () => {
+  const loadCharts = useCallback(async () => {
     // TODO: Load saved charts from database or local storage
     // For now, using empty array
     setCharts([])
-  }
+  }, [])
+
+  useEffect(() => {
+    loadModules()
+    loadCharts()
+  }, [loadModules, loadCharts])
 
   const loadChartData = async (chart: ChartConfig) => {
     try {
@@ -106,7 +106,7 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
       records.forEach(record => {
         const xValue = String(record.data[chart.xAxisColumn] || '')
         const yValue = record.data[chart.yAxisColumn]
-        
+
         if (xValue && yValue !== null && yValue !== undefined) {
           if (!grouped[xValue]) {
             grouped[xValue] = []
@@ -234,7 +234,7 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {charts.map((chart) => {
             const data = chartData[chart.id] || []
-            
+
             return (
               <Card key={chart.id} className="p-6 relative">
                 <Button
@@ -251,7 +251,7 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
                     {chart.type === 'bar' ? 'עמודות' : chart.type === 'line' ? 'קו' : 'עוגה'} • {chart.moduleName}
                   </p>
                 </div>
-                
+
                 {data.length === 0 ? (
                   <div className="h-64 flex items-center justify-center text-grey">
                     אין נתונים להצגה
@@ -351,8 +351,8 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
             </div>
             <div>
               <Label>עמודת X (קטגוריה)</Label>
-              <Select 
-                value={newChartXAxis} 
+              <Select
+                value={newChartXAxis}
                 onValueChange={setNewChartXAxis}
                 disabled={!newChartModule || availableColumns.length === 0}
               >
@@ -370,8 +370,8 @@ export function ChartBuilder({ clientId, moduleName }: ChartBuilderProps) {
             </div>
             <div>
               <Label>עמודת Y (ערך)</Label>
-              <Select 
-                value={newChartYAxis} 
+              <Select
+                value={newChartYAxis}
                 onValueChange={setNewChartYAxis}
                 disabled={!newChartModule || availableColumns.filter(c => c.type === 'number').length === 0}
               >
