@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Heebo:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #1e293b;
+  --grey: #64748b;
+  --emerald: #10b981;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  font-family: 'Assistant', 'Heebo', sans-serif;
+  background-color: #f8fafc;
+  color: var(--navy);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Print styles for monthly reports */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .printable-report,
+  .printable-report * {
+    visibility: visible;
+  }
+  
+  .printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    background: white;
+    box-shadow: none;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  
+  .print-header {
+    page-break-after: avoid;
+  }
+  
+  .print-summary {
+    page-break-after: avoid;
+  }
+  
+  .print-details table {
+    page-break-inside: auto;
+  }
+  
+  .print-details tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  .print-footer {
+    page-break-before: avoid;
+  }
+}
+
