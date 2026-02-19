@@ -23,6 +23,7 @@ interface ClientCardProps {
   unreadMessagesCount?: number
   phone?: string | null
   email?: string | null
+  childCount?: number
   monthlyTrends?: {
     income: Array<{ month: string; value: number }>
     expense: Array<{ month: string; value: number }>
@@ -46,6 +47,7 @@ export function ClientCard({
   unreadMessagesCount = 0,
   phone,
   email,
+  childCount = 0,
   monthlyTrends,
 }: ClientCardProps) {
   const netChange = monthlyIncome - monthlyExpense
@@ -96,6 +98,11 @@ export function ClientCard({
                   'bg-grey/20 text-grey'
                 }`}>
                 {status}
+              </span>
+            )}
+            {childCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700" title={`${childCount} לקוחות משנה`}>
+                👥 {childCount}
               </span>
             )}
             {pendingPaymentsCount > 0 && (

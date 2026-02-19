@@ -17,13 +17,13 @@ export async function getSchema(
       .select('*')
       .eq('client_id', clientId)
       .eq('module_name', moduleName)
-    
+
     if (branchName === undefined || branchName === null) {
       query = query.is('branch_name', null)
     } else {
       query = query.eq('branch_name', branchName)
     }
-    
+
     const { data: schema, error } = await query.single()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
@@ -54,13 +54,13 @@ export async function upsertSchema(
       .select('*')
       .eq('client_id', clientId)
       .eq('module_name', moduleName)
-    
+
     if (branchName === undefined || branchName === null) {
       query = query.is('branch_name', null)
     } else {
       query = query.eq('branch_name', branchName)
     }
-    
+
     const { data: existingSchema } = await query.single()
 
     let schema: ClientSchema
@@ -136,13 +136,13 @@ export async function deleteSchema(
       .delete()
       .eq('client_id', clientId)
       .eq('module_name', moduleName)
-    
+
     if (branchName === undefined || branchName === null) {
       query = query.is('branch_name', null)
     } else {
       query = query.eq('branch_name', branchName)
     }
-    
+
     const { error } = await query
 
     if (error) {
@@ -228,3 +228,36 @@ export async function deleteModule(
   }
 }
 
+/**
+ * Server Action: Update financial metadata for a schema
+ */
+export async function updateSchemaFinancial(
+  schemaId: string,
+  financialType: 'income' | 'expense' | null,
+  amountColumn?: string | null,
+  dateColumn?: string | null,
+  descriptionColumn?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('client_schemas')
+      .update({
+        financial_type: financialType,
+        amount_column: financialType ? (amountColumn || null) : null,
+        date_column: financialType ? (dateColumn || null) : null,
+        description_column: financialType ? (descriptionColumn || null) : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', schemaId)
+
+    if (error) {
+      console.error('Error updating schema financial:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Unexpected error updating schema financial:', error)
+    return { success: false, error: error.message || 'Unknown error' }
+  }
+}

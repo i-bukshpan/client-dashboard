@@ -11,11 +11,13 @@ import { EditClientDialog } from '@/components/edit-client-dialog'
 import { CredentialsVault } from '@/components/credentials-vault'
 import { BillingPayments } from '@/components/billing-payments'
 import { ClientShareLink } from '@/components/client-share-link'
+import { ClientLinks } from '@/components/client-links'
 import { StickyNotes } from '@/components/sticky-notes'
 import { Reminders } from '@/components/reminders'
 import { ModuleManager } from '@/components/module-manager'
 import { ModuleDataTab } from '@/components/module-data-tab'
 import { BranchTablesTab } from '@/components/branch-tables-tab'
+import { SubClientsTab } from '@/components/sub-clients-tab'
 import { getClientSchemas } from '@/lib/actions/schema'
 import type { ClientSchema } from '@/lib/supabase'
 import { ChatWidget } from '@/components/chat/chat-widget'
@@ -30,6 +32,8 @@ export default function ClientDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [clientSchemas, setClientSchemas] = useState<ClientSchema[]>([])
   const [schemasLoading, setSchemasLoading] = useState(true)
+  const [childCount, setChildCount] = useState(0)
+  const [parentClient, setParentClient] = useState<Client | null>(null)
 
   const loadClient = useCallback(async () => {
     try {
@@ -49,6 +53,25 @@ export default function ClientDetailPage() {
       }
 
       setClient(data)
+
+      // Check if this client has children
+      const { count } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('parent_id', data.id)
+      setChildCount(count || 0)
+
+      // Check if this client has a parent
+      if (data.parent_id) {
+        const { data: parent } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', data.parent_id)
+          .single()
+        setParentClient(parent || null)
+      } else {
+        setParentClient(null)
+      }
     } catch (error) {
       console.error('Error loading client:', error)
       setError('שגיאה בטעינת נתוני הלקוח')
@@ -101,10 +124,23 @@ export default function ClientDetailPage() {
   return (
     <div className="p-8">
       <div className="mb-6 flex items-center gap-4">
-        <Button variant="ghost" onClick={() => router.push('/')} className="gap-2">
-          <ArrowRight className="h-4 w-4" />
-          חזרה ללוח הבקרה
-        </Button>
+        {parentClient ? (
+          <>
+            <Button variant="ghost" onClick={() => router.push('/')} className="gap-2">
+              <ArrowRight className="h-4 w-4" />
+              לוח בקרה
+            </Button>
+            <span className="text-grey">/</span>
+            <Button variant="ghost" onClick={() => router.push(`/clients/${parentClient.id}`)} className="gap-2">
+              {parentClient.name}
+            </Button>
+          </>
+        ) : (
+          <Button variant="ghost" onClick={() => router.push('/')} className="gap-2">
+            <ArrowRight className="h-4 w-4" />
+            חזרה ללוח הבקרה
+          </Button>
+        )}
       </div>
 
       <div className="mb-8">
@@ -190,9 +226,13 @@ export default function ClientDetailPage() {
                   {branch || 'ראשי'}
                 </TabsTrigger>
               ))}
+              <TabsTrigger value="sub-clients">
+                לקוחות משנה{childCount > 0 ? ` (${childCount})` : ''}
+              </TabsTrigger>
               <TabsTrigger value="credentials">סיסמאות</TabsTrigger>
               <TabsTrigger value="billing">תשלומים</TabsTrigger>
               <TabsTrigger value="notes">פתקים</TabsTrigger>
+              <TabsTrigger value="links">קישורים</TabsTrigger>
               <TabsTrigger value="settings">הגדרות</TabsTrigger>
             </TabsList>
 
@@ -203,10 +243,14 @@ export default function ClientDetailPage() {
                   clientId={clientId}
                   schemas={schemasByBranch.get(branch)!}
                   branchName={branch}
+                  onSchemasChanged={loadSchemas}
                 />
               </TabsContent>
             ))}
 
+            <TabsContent value="sub-clients">
+              <SubClientsTab parentClientId={clientId} parentClientName={client.name} />
+            </TabsContent>
             <TabsContent value="credentials">
               <CredentialsVault clientId={clientId} />
             </TabsContent>
@@ -224,6 +268,9 @@ export default function ClientDetailPage() {
                   <Reminders clientId={clientId} clientName={client.name} />
                 </div>
               </div>
+            </TabsContent>
+            <TabsContent value="links">
+              <ClientLinks clientId={clientId} />
             </TabsContent>
             <TabsContent value="settings">
               <ModuleManager clientId={clientId} onModuleUpdate={handleModuleUpdate} />

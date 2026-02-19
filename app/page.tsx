@@ -26,6 +26,7 @@ interface ClientWithData extends Client {
   pendingPaymentsCount: number
   openRemindersCount: number
   unreadMessagesCount: number
+  childCount: number
   monthlyTrends?: {
     income: Array<{ month: string; value: number }>
     expense: Array<{ month: string; value: number }>
@@ -50,7 +51,7 @@ export default function Dashboard() {
   const loadClients = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('clients').select('*').is('parent_id', null).order('created_at', { ascending: false })
 
       if (error) {
         throw error
@@ -148,6 +149,73 @@ export default function Dashboard() {
         }
       }
 
+      // Also aggregate from financial tables (schemas with financial_type set)
+      try {
+        const { data: financialSchemas } = await supabase
+          .from('client_schemas')
+          .select('*')
+          .not('financial_type', 'is', null)
+          .not('amount_column', 'is', null)
+
+        if (financialSchemas && financialSchemas.length > 0) {
+          // Group schemas by client_id
+          const schemasByClient: Record<string, typeof financialSchemas> = {}
+          for (const schema of financialSchemas) {
+            if (!schemasByClient[schema.client_id]) schemasByClient[schema.client_id] = []
+            schemasByClient[schema.client_id].push(schema)
+          }
+
+          // Load records for each client's financial tables
+          for (const [cId, schemas] of Object.entries(schemasByClient)) {
+            if (!paymentsByClient[cId]) {
+              paymentsByClient[cId] = {
+                balance: 0, monthlyIncome: 0, monthlyExpense: 0, pendingCount: 0,
+                trends: { income: last3Months.map(m => ({ month: m.label, value: 0 })), expense: last3Months.map(m => ({ month: m.label, value: 0 })) }
+              }
+            }
+            const stats = paymentsByClient[cId]
+
+            for (const schema of schemas) {
+              const { data: records } = await supabase
+                .from('client_data_records')
+                .select('data, entry_date')
+                .eq('client_id', cId)
+                .eq('module_type', schema.module_name)
+
+              if (!records) continue
+              for (const record of records) {
+                const amount = parseFloat(record.data?.[schema.amount_column]) || 0
+                if (amount === 0) continue
+                const dateStr = record.data?.[schema.date_column] || record.entry_date || ''
+                const isIncome = schema.financial_type === 'income'
+
+                if (isIncome) stats.balance += amount
+                else stats.balance -= amount
+
+                // Monthly stats (current month)
+                if (dateStr >= startOfMonth && dateStr <= endOfMonth) {
+                  if (isIncome) stats.monthlyIncome += amount
+                  else stats.monthlyExpense += amount
+                }
+
+                // Trends
+                const recordDate = new Date(dateStr)
+                if (!isNaN(recordDate.getTime())) {
+                  last3Months.forEach((month, idx) => {
+                    if (recordDate >= month.start && recordDate <= month.end) {
+                      if (isIncome) stats.trends.income[idx].value += amount
+                      else stats.trends.expense[idx].value += amount
+                    }
+                  })
+                }
+              }
+            }
+          }
+        }
+      } catch (financialError) {
+        console.error('Error loading financial table data:', financialError)
+      }
+
       const remindersByClient: Record<string, number> = {}
       if (allReminders) {
         for (const r of allReminders) {
@@ -166,6 +234,21 @@ export default function Dashboard() {
         }
       }
 
+      // Count children for each client
+      const { data: childCounts } = await supabase
+        .from('clients')
+        .select('parent_id')
+        .not('parent_id', 'is', null)
+
+      const childCountMap: Record<string, number> = {}
+      if (childCounts) {
+        for (const c of childCounts) {
+          if (c.parent_id) {
+            childCountMap[c.parent_id] = (childCountMap[c.parent_id] || 0) + 1
+          }
+        }
+      }
+
       const clientsWithData: ClientWithData[] = data.map((client) => {
         const stats = paymentsByClient[client.id]
         return {
@@ -176,6 +259,7 @@ export default function Dashboard() {
           pendingPaymentsCount: stats?.pendingCount || 0,
           openRemindersCount: remindersByClient[client.id] || 0,
           unreadMessagesCount: unreadByClient[client.id] || 0,
+          childCount: childCountMap[client.id] || 0,
           monthlyTrends: stats?.trends,
           tags: [],
         }
@@ -746,6 +830,7 @@ export default function Dashboard() {
               phone={client.phone}
               email={client.email}
               monthlyTrends={client.monthlyTrends}
+              childCount={client.childCount}
             />
           ))}
         </div>

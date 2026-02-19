@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Save, Globe } from 'lucide-react'
-import { upsertSchema, getSchema, getClientSchemas } from '@/lib/actions/schema'
+import { Plus, Trash2, Save, Globe, DollarSign } from 'lucide-react'
+import { upsertSchema, getSchema, getClientSchemas, updateSchemaFinancial } from '@/lib/actions/schema'
 import { saveDefaultSchema } from '@/lib/actions/default-schemas'
 import type { ColumnDefinition, FormulaMetadata, RelationshipMetadata, ClientSchema } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
@@ -35,6 +35,12 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
   const [showSaveDefaultDialog, setShowSaveDefaultDialog] = useState(false)
   const [defaultDescription, setDefaultDescription] = useState('')
   const [savingDefault, setSavingDefault] = useState(false)
+  const [schemaId, setSchemaId] = useState<string | null>(null)
+  const [financialType, setFinancialType] = useState<'income' | 'expense' | ''>('')
+  const [amountColumn, setAmountColumn] = useState('')
+  const [dateColumn, setDateColumn] = useState('')
+  const [descriptionColumn, setDescriptionColumn] = useState('')
+  const [savingFinancial, setSavingFinancial] = useState(false)
 
   // Load existing schema and available modules on mount
   useEffect(() => {
@@ -45,6 +51,11 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
         const result = await getSchema(clientId, moduleName, branchName || null)
         if (result.success && result.schema) {
           setColumns(result.schema.columns)
+          setSchemaId(result.schema.id)
+          setFinancialType(result.schema.financial_type || '')
+          setAmountColumn(result.schema.amount_column || '')
+          setDateColumn(result.schema.date_column || '')
+          setDescriptionColumn(result.schema.description_column || '')
         } else if (defaultColumns.length > 0) {
           setColumns(defaultColumns)
         } else if (moduleName === 'cash_flow') {
@@ -268,6 +279,113 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
             </Button>
           </div>
         </div>
+
+        {/* Financial Settings */}
+        {schemaId && columns.length > 0 && (
+          <div className={`border rounded-lg p-4 space-y-3 ${financialType ? 'bg-emerald-50/50 border-emerald-200' : 'bg-gray-50/50'}`}>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <DollarSign className="h-4 w-4" />
+              הגדרות פיננסיות
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <Label className="text-xs">סוג פיננסי</Label>
+                <Select value={financialType || '__none__'} onValueChange={async (v) => {
+                  const newType = v === '__none__' ? '' : v as 'income' | 'expense'
+                  setFinancialType(newType)
+                  if (!newType) {
+                    setAmountColumn('')
+                    setDateColumn('')
+                    setDescriptionColumn('')
+                  }
+                  setSavingFinancial(true)
+                  await updateSchemaFinancial(
+                    schemaId,
+                    newType || null,
+                    newType ? amountColumn || null : null,
+                    newType ? dateColumn || null : null,
+                    newType ? descriptionColumn || null : null
+                  )
+                  setSavingFinancial(false)
+                }}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">ללא (מידע בלבד)</SelectItem>
+                    <SelectItem value="income">הכנסה</SelectItem>
+                    <SelectItem value="expense">הוצאה</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {financialType && (
+                <>
+                  <div>
+                    <Label className="text-xs">עמודת סכום</Label>
+                    <Select value={amountColumn || '__none__'} onValueChange={async (v) => {
+                      const col = v === '__none__' ? '' : v
+                      setAmountColumn(col)
+                      setSavingFinancial(true)
+                      await updateSchemaFinancial(schemaId, financialType || null, col || null, dateColumn || null, descriptionColumn || null)
+                      setSavingFinancial(false)
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="בחר עמודה" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {columns.filter(c => c.type === 'number' || c.type === 'currency').map(c => (
+                          <SelectItem key={c.name} value={c.name}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">עמודת תאריך</Label>
+                    <Select value={dateColumn || '__none__'} onValueChange={async (v) => {
+                      const col = v === '__none__' ? '' : v
+                      setDateColumn(col)
+                      setSavingFinancial(true)
+                      await updateSchemaFinancial(schemaId, financialType || null, amountColumn || null, col || null, descriptionColumn || null)
+                      setSavingFinancial(false)
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="בחר עמודה" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {columns.filter(c => c.type === 'date').map(c => (
+                          <SelectItem key={c.name} value={c.name}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">עמודת תיאור</Label>
+                    <Select value={descriptionColumn || '__none__'} onValueChange={async (v) => {
+                      const col = v === '__none__' ? '' : v
+                      setDescriptionColumn(col)
+                      setSavingFinancial(true)
+                      await updateSchemaFinancial(schemaId, financialType || null, amountColumn || null, dateColumn || null, col || null)
+                      setSavingFinancial(false)
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="בחר עמודה" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {columns.filter(c => c.type === 'text').map(c => (
+                          <SelectItem key={c.name} value={c.name}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </div>
+            {savingFinancial && <p className="text-xs text-grey">שומר...</p>}
+          </div>
+        )}
 
         <div className="space-y-3">
           {columns.map((column, index) => (

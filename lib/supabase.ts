@@ -13,6 +13,7 @@ export interface Client {
   status?: string | null // 'פעיל', 'ליד', 'ארכיון'
   internal_notes?: string | null
   share_token?: string | null
+  parent_id?: string | null
   created_at: string
   updated_at: string
   share_permissions?: ClientSharePermissions | null
@@ -52,6 +53,9 @@ export interface Payment {
   notes?: string | null
   category?: string | null
   auto_generate_next?: boolean
+  linked_module?: string | null
+  linked_record_id?: string | null
+  linked_record_label?: string | null
   created_at: string
 }
 
@@ -180,6 +184,10 @@ export interface ClientSchema {
   module_name: string // e.g., 'cash_flow', 'investments', 'scribe_payments'
   branch_name?: string | null // e.g., 'ירושלים', 'בני ברק', 'רעננה' - null = טבלאות ראשיות
   columns: ColumnDefinition[]
+  financial_type?: 'income' | 'expense' | null
+  amount_column?: string | null
+  date_column?: string | null
+  description_column?: string | null
   created_at: string
   updated_at: string
 }
@@ -197,6 +205,17 @@ export interface ClientDataRecord {
 // Extended types for UI usage
 export interface ClientDataRecordWithSchema extends ClientDataRecord {
   schema?: ClientSchema
+}
+
+export interface ClientLink {
+  id: string
+  client_id: string
+  title: string
+  url: string
+  link_type: 'google_sheets' | 'google_drive' | 'google_docs' | 'dropbox' | 'onedrive' | 'website' | 'other'
+  description?: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Message {

@@ -488,6 +488,14 @@ export function ModuleManager({ clientId, onModuleUpdate }: ModuleManagerProps) 
                   <p className="text-sm text-grey">
                     {schema.columns.length} עמודות
                   </p>
+                  {schema.financial_type && (
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium mt-1 ${schema.financial_type === 'income'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                      }`}>
+                      {schema.financial_type === 'income' ? 'הכנסה' : 'הוצאה'}
+                    </span>
+                  )}
                   {schema.branch_name && (
                     <p className="text-xs text-grey mt-1">תחום: {schema.branch_name}</p>
                   )}
