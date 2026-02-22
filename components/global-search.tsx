@@ -201,17 +201,19 @@ export function GlobalSearch() {
   }
 
   return (
-    <div className="relative flex-1 max-w-md" ref={searchRef}>
+    <div className="relative flex-1 max-w-md group" ref={searchRef}>
       <div className="relative">
-        <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-grey" />
+        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 bg-primary/10 rounded-md text-primary group-focus-within:bg-primary group-focus-within:text-white transition-colors duration-300">
+          <Search className="h-4 w-4" />
+        </div>
         <Input
           type="text"
-          placeholder="חיפוש גלובלי: לקוחות, תשלומים, תזכורות..."
+          placeholder="חיפוש גלובלי: לקוחות, תשלומים, משימות..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => query.length >= 2 && results.length > 0 && setOpen(true)}
-          className="pr-10 pl-10"
+          className="pr-11 pl-10 h-11 bg-white/50 backdrop-blur-md border border-border/50 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-2xl transition-all duration-300 placeholder:text-grey/60"
         />
         {query && (
           <button
@@ -220,35 +222,44 @@ export function GlobalSearch() {
               setResults([])
               setOpen(false)
             }}
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-grey hover:text-navy"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-6 h-6 flex items-center justify-center bg-grey/10 hover:bg-rose-100 hover:text-rose-600 rounded-full transition-all"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </button>
         )}
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-grey/20 rounded-lg shadow-lg max-h-96 overflow-y-auto">
-          <div className="p-2">
+        <div className="absolute z-50 w-full mt-3 bg-white/90 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-navy/5 max-h-[450px] overflow-hidden animate-fade-in-up">
+          <div className="p-2 overflow-y-auto max-h-[450px]">
+            <div className="px-3 py-2 text-[10px] font-extrabold text-grey/60 uppercase tracking-widest border-b border-border/30 mb-1">
+              תוצאות חיפוש
+            </div>
             {results.map((result, index) => (
               <button
                 key={`${result.type}-${result.id}`}
                 onClick={() => handleSelect(result)}
-                className={`w-full text-right p-3 rounded-lg hover:bg-grey/10 transition-colors ${
-                  index === focusedIndex ? 'bg-emerald/10 border border-emerald/20' : ''
-                }`}
+                className={`w-full text-right p-3 rounded-xl transition-all duration-200 group/item mb-1 ${index === focusedIndex ? 'bg-primary/5 border border-primary/20 translate-x-1' : 'hover:bg-grey/5 border border-transparent'
+                  }`}
                 onMouseEnter={() => setFocusedIndex(index)}
               >
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 text-grey">{getIcon(result.type)}</div>
+                <div className="flex items-start gap-4">
+                  <div className={`mt-0.5 p-2 rounded-lg transition-colors ${index === focusedIndex ? 'bg-primary text-white' : 'bg-grey/5 text-grey group-hover/item:bg-primary/10 group-hover/item:text-primary'
+                    }`}>
+                    {getIcon(result.type)}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-grey bg-grey/10 px-2 py-0.5 rounded">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${result.type === 'client' ? 'bg-blue-100 text-blue-700' :
+                          result.type === 'payment' ? 'bg-emerald-100 text-emerald' :
+                            result.type === 'reminder' ? 'bg-amber-100 text-amber-700' :
+                              'bg-purple-100 text-purple-700'
+                        }`}>
                         {getTypeLabel(result.type)}
                       </span>
-                      <span className="font-semibold text-navy truncate">{result.title}</span>
+                      <span className="font-bold text-navy truncate block group-hover/item:text-primary transition-colors">{result.title}</span>
                     </div>
-                    <p className="text-sm text-grey truncate">{result.subtitle}</p>
+                    <p className="text-xs text-grey font-medium truncate">{result.subtitle}</p>
                   </div>
                 </div>
               </button>
@@ -258,10 +269,13 @@ export function GlobalSearch() {
       )}
 
       {loading && query.length >= 2 && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-grey/20 rounded-lg shadow-lg p-4">
-          <div className="flex items-center justify-center gap-2 text-grey">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">מחפש...</span>
+        <div className="absolute z-50 w-full mt-3 bg-white/90 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl p-6 animate-fade-in-up">
+          <div className="flex flex-col items-center justify-center gap-3 text-grey">
+            <div className="relative">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Search className="h-3 w-3 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-primary" />
+            </div>
+            <span className="text-sm font-bold tracking-tight">מחפש בנתונים...</span>
           </div>
         </div>
       )}

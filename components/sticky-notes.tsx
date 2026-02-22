@@ -57,6 +57,17 @@ export function StickyNotes({ clientId, readOnly = false }: StickyNotesProps) {
           .eq('id', note.id)
 
         if (error) throw error
+
+        await fetch('/api/activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId,
+            activityType: 'NOTE_ADDED',
+            description: 'הערת לקוח עודכנה',
+            metadata: { length: content.length }
+          })
+        })
       } else {
         // Create new note
         const { data, error } = await supabase
@@ -70,6 +81,17 @@ export function StickyNotes({ clientId, readOnly = false }: StickyNotesProps) {
 
         if (error) throw error
         setNote(data)
+
+        await fetch('/api/activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientId,
+            activityType: 'NOTE_ADDED',
+            description: 'נוספה הערת לקוח חדשה',
+            metadata: { length: content.length }
+          })
+        })
       }
     } catch (error) {
       console.error('Error saving note:', error)

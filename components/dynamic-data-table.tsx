@@ -18,7 +18,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ChatContextTrigger } from '@/components/chat/chat-context-trigger'
-import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, History, Upload, MessageSquarePlus } from 'lucide-react'
+import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, Upload, MessageSquarePlus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { addRecord, updateRecordField, deleteRecord } from '@/lib/actions/data-records'
 import type { ClientDataRecord, ColumnDefinition } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
@@ -26,7 +27,6 @@ import { getAggregatedValue } from '@/lib/actions/aggregations'
 import { evaluateFormulaExpression } from '@/lib/utils/formula-evaluator'
 import { getLookupValue, getLookupOptions } from '@/lib/actions/relationships'
 import { TableFilters } from '@/components/table-filters'
-import { RecordTimeline } from '@/components/record-timeline'
 import { formatDateForCSV, parseDateFromCSV } from '@/lib/utils/date-utils'
 import { CSVImportDialog } from '@/components/csv-import-dialog'
 import {
@@ -121,9 +121,6 @@ export function DynamicDataTable({
   const [showChart, setShowChart] = useState(false)
   const [chartXAxis, setChartXAxis] = useState<string>('')
   const [chartYAxis, setChartYAxis] = useState<string>('')
-  // History dialog state
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
-  const [selectedRecordId, setSelectedRecordId] = useState<string>('')
   // CSV import dialog state
   const [csvImportDialogOpen, setCSVImportDialogOpen] = useState(false)
 
@@ -296,7 +293,7 @@ export function DynamicDataTable({
     return options
   }, [columns, records])
 
-  const handleSaveEdit = useCallback(async (recordId: string, fieldName: string, value?: any) => {
+  const handleSaveEdit = useCallback(async (recordId: string, fieldName: string, moveToNext: boolean = false, value?: any) => {
     if (!editingCell) return
 
     setLoading(true)
@@ -307,26 +304,79 @@ export function DynamicDataTable({
       let processedValue: any = valueToProcess
 
       if (colDef?.type === 'number') {
-        processedValue = valueToProcess === '' ? null : parseFloat(valueToProcess)
+        processedValue = valueToProcess === '' ? null : parseFloat(valueToProcess as string)
         if (isNaN(processedValue)) {
           showToast('error', 'ערך מספרי לא תקין')
           setLoading(false)
           return
         }
       } else if (colDef?.type === 'date' && valueToProcess) {
-        const parsedDate = parseDateFromCSV(valueToProcess)
+        const parsedDate = parseDateFromCSV(valueToProcess as string)
         if (!parsedDate) {
           showToast('error', 'פורמט תאריך לא חוקי. השתמש ב-DD/MM/YYYY')
           setLoading(false)
           return
         }
         processedValue = parsedDate.toISOString()
+      } else if (colDef?.type === 'currency') {
+        // Additional handling for currency if needed before save
+        processedValue = typeof valueToProcess === 'string' ? parseFloat(valueToProcess.replace(/[^0-9.-]+/g, "")) : valueToProcess
+        if (isNaN(processedValue)) {
+          showToast('error', 'ערך מטבע לא תקין')
+          setLoading(false)
+          return
+        }
       }
 
       const result = await updateRecordField(recordId, fieldName, processedValue)
       if (result.success) {
         showToast('success', 'השדה עודכן בהצלחה')
-        setEditingCell(null)
+
+        if (moveToNext) {
+          // Find current column index
+          const currentColumnIndex = columns.findIndex(c => c.name === fieldName);
+          // Find current row index
+          const currentRowIndex = records.findIndex(r => r.id === recordId);
+
+          if (currentColumnIndex !== -1 && currentRowIndex !== -1) {
+            // Try to find the next editable column in the current row
+            let nextColIndex = currentColumnIndex + 1;
+            let nextRowIndex = currentRowIndex;
+            let foundNext = false;
+
+            while (nextRowIndex < records.length && !foundNext) {
+              while (nextColIndex < columns.length) {
+                const nextCol = columns[nextColIndex];
+                const isEditable = !readOnly && nextCol.type !== 'formula' && nextCol.type !== 'calculated' && nextCol.type !== 'reference' && nextCol.type !== 'lookup';
+
+                if (isEditable) {
+                  const nextRecord = records[nextRowIndex];
+                  const nextValue = nextRecord.data[nextCol.name];
+
+                  setEditingCell({ recordId: nextRecord.id, fieldName: nextCol.name, value: nextValue });
+                  const initialValue = nextCol.type === 'date' && nextValue ? formatDateForCSV(nextValue) : (nextValue ?? (nextCol.type === 'number' ? 0 : ''));
+                  setEditValue(initialValue);
+                  foundNext = true;
+                  break;
+                }
+                nextColIndex++;
+              }
+              if (!foundNext) {
+                nextRowIndex++;
+                nextColIndex = 0; // Wrap around to first column of next row
+              }
+            }
+
+            if (!foundNext) {
+              setEditingCell(null); // Reached end of table
+            }
+          } else {
+            setEditingCell(null)
+          }
+        } else {
+          setEditingCell(null)
+        }
+
         onRecordUpdate?.()
       } else {
         showToast('error', result.error || 'שגיאה בעדכון השדה')
@@ -336,7 +386,7 @@ export function DynamicDataTable({
     } finally {
       setLoading(false)
     }
-  }, [editingCell, editValue, columns, showToast, onRecordUpdate])
+  }, [editingCell, editValue, columns, showToast, onRecordUpdate, readOnly, records])
 
   const handleDelete = useCallback(async (recordId: string) => {
     if (!confirm('האם אתה בטוח שברצונך למחוק רשומה זו?')) return
@@ -503,8 +553,13 @@ export function DynamicDataTable({
           const displayValue = value !== undefined && value !== null ? (typeof value === 'number' ? value.toLocaleString('he-IL') : String(value)) : '-'
           const title = isCalculated ? "עמודה מחושבת - רק לקריאה" : "עמודת נוסחה - רק לקריאה"
           return (
-            <div className="p-2 text-emerald font-medium" title={title}>
-              {displayValue}
+            <div className="p-2 text-emerald font-medium flex items-center justify-center min-h-[2rem]" title={title}>
+              <span
+                className="line-clamp-2 break-words text-ellipsis overflow-hidden px-1"
+                title={String(displayValue).length > 30 ? String(displayValue) : undefined}
+              >
+                {displayValue}
+              </span>
             </div>
           )
         }
@@ -524,7 +579,7 @@ export function DynamicDataTable({
                   value={String(foreignKeyValue ?? '')}
                   onChange={(e) => {
                     const sourceKey = colDef.relationship?.source_column_key || colDef.name
-                    handleSaveEdit(record.id, sourceKey, e.target.value === '' ? null : e.target.value)
+                    handleSaveEdit(record.id, sourceKey, false, e.target.value === '' ? null : e.target.value)
                   }}
                   className="w-48 p-2 border rounded text-center"
                   onBlur={() => setEditingCell(null)}
@@ -559,7 +614,12 @@ export function DynamicDataTable({
               }}
               title={readOnly ? '' : "לחץ לעריכה"}
             >
-              {displayValue}
+              <span
+                className="line-clamp-2 break-words text-ellipsis overflow-hidden px-1"
+                title={String(displayValue).length > 30 ? String(displayValue) : undefined}
+              >
+                {displayValue}
+              </span>
             </div>
           )
         }
@@ -572,9 +632,10 @@ export function DynamicDataTable({
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => handleSaveEdit(record.id, colDef.name)}
+                  onBlur={() => handleSaveEdit(record.id, colDef.name, false)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name)
+                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name, true)
+                    if (e.key === 'Tab') { e.preventDefault(); handleSaveEdit(record.id, colDef.name, true) }
                     if (e.key === 'Escape') setEditingCell(null)
                   }}
                   placeholder="DD/MM/YYYY"
@@ -586,9 +647,10 @@ export function DynamicDataTable({
                   type="text"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => handleSaveEdit(record.id, colDef.name)}
+                  onBlur={() => handleSaveEdit(record.id, colDef.name, false)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name)
+                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name, true)
+                    if (e.key === 'Tab') { e.preventDefault(); handleSaveEdit(record.id, colDef.name, true) }
                     if (e.key === 'Escape') setEditingCell(null)
                   }}
                   placeholder="₪0.00"
@@ -601,9 +663,10 @@ export function DynamicDataTable({
                   type="number"
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                  onBlur={() => handleSaveEdit(record.id, colDef.name)}
+                  onBlur={() => handleSaveEdit(record.id, colDef.name, false)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name)
+                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name, true)
+                    if (e.key === 'Tab') { e.preventDefault(); handleSaveEdit(record.id, colDef.name, true) }
                     if (e.key === 'Escape') setEditingCell(null)
                   }}
                   autoFocus
@@ -616,7 +679,8 @@ export function DynamicDataTable({
                   onChange={(e) => setEditValue(e.target.value)}
                   onBlur={() => handleSaveEdit(record.id, colDef.name)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name)
+                    if (e.key === 'Enter') handleSaveEdit(record.id, colDef.name, true)
+                    if (e.key === 'Tab') { e.preventDefault(); handleSaveEdit(record.id, colDef.name, true) }
                     if (e.key === 'Escape') setEditingCell(null)
                   }}
                   autoFocus
@@ -664,8 +728,11 @@ export function DynamicDataTable({
 
         // Apply conditional formatting
         let cellStyle: React.CSSProperties = {}
-        let cellClassName =
-          'cursor-pointer hover:bg-grey/10 p-2 rounded min-h-[2rem] flex items-center justify-center text-center'
+        let isEditable = !readOnly && !isFormula && !isCalculated
+        let cellClassName = `p-2 rounded min-h-[2rem] flex items-center justify-center text-center transition-colors ${isEditable
+          ? 'cursor-text hover:bg-slate-50 border border-transparent hover:border-slate-200 group relative'
+          : ''
+          }`
 
         if (colDef.conditionalFormatting && colDef.conditionalFormatting.length > 0) {
           for (const rule of colDef.conditionalFormatting) {
@@ -713,15 +780,32 @@ export function DynamicDataTable({
           <div
             className={cellClassName}
             style={cellStyle}
+            tabIndex={isEditable ? 0 : undefined}
             onClick={() => {
-              if (!readOnly && !isFormula && !isCalculated) {
+              if (isEditable) {
+                setEditingCell({ recordId: record.id, fieldName: colDef.name, value })
+                const initialValue = colDef.type === 'date' && value ? formatDateForCSV(value) : (value ?? (colDef.type === 'number' ? 0 : ''))
+                setEditValue(initialValue)
+              }
+            }}
+            onKeyDown={(e) => {
+              if (isEditable && e.key === 'Enter') {
+                e.preventDefault()
                 setEditingCell({ recordId: record.id, fieldName: colDef.name, value })
                 const initialValue = colDef.type === 'date' && value ? formatDateForCSV(value) : (value ?? (colDef.type === 'number' ? 0 : ''))
                 setEditValue(initialValue)
               }
             }}
           >
-            {displayValue}
+            <span
+              className="line-clamp-2 break-words text-ellipsis overflow-hidden px-1"
+              title={String(displayValue).length > 30 ? String(displayValue) : undefined}
+            >
+              {displayValue}
+            </span>
+            {isEditable && (
+              <Edit3 className="absolute left-2 h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
           </div>
         )
       },
@@ -784,18 +868,6 @@ export function DynamicDataTable({
             />
             {!readOnly && (
               <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setSelectedRecordId(row.original.id)
-                    setHistoryDialogOpen(true)
-                  }}
-                  className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                  title="היסטוריית שינויים"
-                >
-                  <History className="h-4 w-4" />
-                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -945,11 +1017,11 @@ export function DynamicDataTable({
     const selectCol = cols.find(col => col.id === 'select')
     if (selectCol) {
       const selectIndex = cols.indexOf(selectCol)
-      cols[selectIndex] = {
+      const updatedCol: any = {
         ...selectCol,
-        header: ({ table }) => {
+        header: ({ table }: any) => {
           const allSelected = table.getFilteredRowModel().rows.length > 0 &&
-            table.getFilteredRowModel().rows.every(row => selectedRows.has(row.original.id))
+            table.getFilteredRowModel().rows.every((row: any) => selectedRows.has(row.original.id))
           return (
             <input
               type="checkbox"
@@ -959,7 +1031,7 @@ export function DynamicDataTable({
                 if (allSelected) {
                   setSelectedRows(new Set())
                 } else {
-                  setSelectedRows(new Set(visibleRows.map(row => row.original.id)))
+                  setSelectedRows(new Set(visibleRows.map((row: any) => row.original.id)))
                 }
               }}
               className="cursor-pointer"
@@ -967,9 +1039,10 @@ export function DynamicDataTable({
           )
         },
       }
+      cols[selectIndex] = updatedCol
     }
     return cols as any
-  }, [tableColumns, selectedRows, table, setSelectedRows])
+  }, [tableColumns, selectedRows, setSelectedRows])
 
   const tableFinal = useReactTable({
     data: records,
@@ -992,451 +1065,575 @@ export function DynamicDataTable({
   })
 
   return (
-    <Card className="p-6">
-      <div className="space-y-4">
+    <div className="space-y-6 animate-fade-in-up">
+      <div className="bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-border/50 shadow-sm space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <h3 className="text-lg font-semibold">רשומות נתונים</h3>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-navy tracking-tight">רשומות נתונים</h3>
+              <p className="text-xs font-medium text-grey">נהל רשומות, ערוך שדות ובצע פעולות מרובות</p>
+            </div>
+          </div>
+
+          <div className="flex gap-2 flex-wrap items-center">
             {selectedRows.size > 0 && (
               <Button
                 variant="destructive"
                 onClick={handleBulkDelete}
                 disabled={loading}
-                className="gap-2"
+                className="gap-2 rounded-xl px-4 h-10 font-black shadow-lg shadow-rose-500/10"
               >
                 <Trash2 className="h-4 w-4" />
-                מחק {selectedRows.size} רשומות
+                מחק {selectedRows.size}
               </Button>
             )}
+
             {batchEditMode ? (
-              <>
+              <div className="flex gap-2 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
                 <Button
                   onClick={handleBatchSaveAll}
                   disabled={batchSaving || Object.keys(batchEditData).length === 0}
-                  className="gap-2 bg-emerald hover:bg-emerald/90"
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 px-4 font-black shadow-lg shadow-emerald-500/10"
                 >
                   <Save className="h-4 w-4" />
-                  שמור הכל ({Object.values(batchEditData).reduce((acc, fields) => acc + Object.keys(fields).length, 0)} שינויים)
+                  שמור {Object.keys(batchEditData).length}
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={handleBatchCancelAll}
                   disabled={batchSaving}
-                  className="gap-2"
+                  className="rounded-xl h-9 px-4 font-black text-grey"
                 >
                   <X className="h-4 w-4" />
-                  בטל הכל
+                  ביטול
                 </Button>
-              </>
+              </div>
             ) : (
-              <>
-                {!readOnly && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBatchEditMode(!batchEditMode)}
-                    className={`gap-2 ${batchEditMode ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}`}
-                  >
-                    <Edit3 className="h-4 w-4" />
-                    {batchEditMode ? 'סיים עריכה' : 'עריכה מרובה'}
-                  </Button>
-                )}
-                {!readOnly && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCSVImportDialogOpen(true)}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    ייבוא
-                  </Button>
-                )}
+              !readOnly && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  onClick={handleExportCSV}
-                  className="gap-2"
+                  onClick={() => setBatchEditMode(true)}
+                  disabled={records.length === 0}
+                  className="gap-2 rounded-xl h-10 px-4 font-black border-border/50 hover:bg-white shadow-sm"
                 >
-                  <Download className="h-4 w-4" />
-                  ייצוא
+                  <Edit3 className="h-4 w-4 text-primary" />
+                  עריכה מרובה
                 </Button>
-                {!readOnly && (
-                  <Button
-                    onClick={() => setIsAddingNew(true)}
-                    disabled={loading}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    הוסף רשומה חדשה
-                  </Button>
-                )}
-              </>
+              )
             )}
+
+            <div className="w-px h-6 bg-border/30 mx-1 hidden sm:block" />
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleExportCSV}
+              className="rounded-xl h-10 w-10 border-border/50 hover:bg-white shadow-sm"
+              title="ייצוא ל-CSV"
+            >
+              <Download className="h-4 w-4 text-navy" />
+            </Button>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCSVImportDialogOpen(true)}
+                className="rounded-xl h-10 w-10 border-border/50 hover:bg-white shadow-sm"
+                title="ייבוא מ-CSV"
+              >
+                <Upload className="h-4 w-4 text-navy" />
+              </Button>
+            )}
+            {!readOnly && (
+              <Button
+                onClick={() => setIsAddingNew(true)}
+                disabled={loading}
+                className="gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black px-6 h-10 shadow-lg shadow-blue-500/20"
+              >
+                <Plus className="h-4 w-4" />
+                הוסף רשומה
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-grey pointer-events-none" />
+            <Input
+              placeholder="חיפוש חופשי בכל הטבלה..."
+              value={globalFilter ?? ''}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="w-full pr-11 h-12 rounded-[1.25rem] border-border/30 bg-white/50 focus:bg-white transition-all font-bold"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowColumnFilters(!showColumnFilters)}
+              className={cn(
+                "gap-2 rounded-[1.25rem] h-12 px-6 font-black border-border/30 shadow-sm transition-all",
+                showColumnFilters ? "bg-blue-600 text-white border-blue-600" : "bg-white/50 hover:bg-white"
+              )}
+            >
+              <Filter className="h-4 w-4" />
+              סינונים מתקדמים
+              {columnFilters.length > 0 && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-primary text-[10px] font-black">
+                  {columnFilters.length}
+                </span>
+              )}
+            </Button>
             <Button
               variant="outline"
               onClick={() => setShowChart(!showChart)}
-              className={`gap-2 ${showChart ? 'bg-blue-50 text-blue-700 border-blue-300' : ''}`}
+              className={cn(
+                "gap-2 rounded-[1.25rem] h-12 px-6 font-black border-border/30 shadow-sm transition-all",
+                showChart ? "bg-blue-500 text-white border-blue-500" : "bg-white/50 hover:bg-white"
+              )}
             >
               <BarChart3 className="h-4 w-4" />
               גרף
             </Button>
           </div>
         </div>
+      </div>
 
-        {/* Filters */}
-        <TableFilters
-          columns={columns}
-          columnFilters={columnFilters}
-          globalFilter={globalFilter}
-          onColumnFiltersChange={setColumnFilters}
-          onGlobalFilterChange={setGlobalFilter}
-          showFilters={showColumnFilters}
-          onToggleFilters={() => setShowColumnFilters(!showColumnFilters)}
-          columnValueOptions={columnValueOptions}
-        />
+      {/* Filters */}
+      <TableFilters
+        columns={columns}
+        columnFilters={columnFilters}
+        globalFilter={globalFilter || ''}
+        onColumnFiltersChange={setColumnFilters}
+        onGlobalFilterChange={setGlobalFilter}
+        showFilters={showColumnFilters}
+        onToggleFilters={() => setShowColumnFilters(!showColumnFilters)}
+        columnValueOptions={columnValueOptions}
+      />
 
-        {/* Inline Chart Panel */}
-        {showChart && (
-          <Card className="p-4 bg-blue-50/30 border-blue-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-semibold text-sm">הצג כגרף</h4>
-              <Button variant="ghost" size="sm" onClick={() => setShowChart(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex gap-4 mb-4 flex-wrap">
-              <div>
-                <label className="text-xs text-grey block mb-1">ציר X (קיבוץ)</label>
-                <select
-                  value={chartXAxis}
-                  onChange={(e) => setChartXAxis(e.target.value)}
-                  className="border rounded px-2 py-1 text-sm min-w-[140px]"
-                >
-                  <option value="">בחר עמודה</option>
-                  {columns.filter(c => c.type === 'text' || c.type === 'date').map(c => (
-                    <option key={c.name} value={c.name}>{c.label}</option>
-                  ))}
-                </select>
+      {/* Inline Chart Panel */}
+      {showChart && (
+        <Card className="p-6 bg-blue-50/30 border-blue-200 rounded-[2.5rem] overflow-hidden">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-100 text-blue-600">
+                <BarChart3 className="h-5 w-5" />
               </div>
-              <div>
-                <label className="text-xs text-grey block mb-1">ציר Y (ערך)</label>
-                <select
-                  value={chartYAxis}
-                  onChange={(e) => setChartYAxis(e.target.value)}
-                  className="border rounded px-2 py-1 text-sm min-w-[140px]"
-                >
-                  <option value="">בחר עמודה</option>
-                  {columns.filter(c => c.type === 'number').map(c => (
-                    <option key={c.name} value={c.name}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
+              <h4 className="font-black text-navy uppercase tracking-tight">תצוגת גרף מהירה</h4>
             </div>
-            {chartXAxis && chartYAxis && (() => {
-              // Aggregate data by X axis value
-              const grouped: Record<string, number> = {}
-              records.forEach(record => {
-                let xVal = record.data[chartXAxis]
-                if (xVal === null || xVal === undefined) return
-                const xCol = columns.find(c => c.name === chartXAxis)
-                if (xCol?.type === 'date' && xVal) {
-                  try {
-                    const d = new Date(xVal)
-                    xVal = d.toLocaleDateString('he-IL', { year: 'numeric', month: '2-digit' })
-                  } catch { }
-                }
-                const key = String(xVal)
-                const yVal = typeof record.data[chartYAxis] === 'number' ? record.data[chartYAxis] : parseFloat(String(record.data[chartYAxis] || 0))
-                if (!isNaN(yVal)) {
-                  grouped[key] = (grouped[key] || 0) + yVal
-                }
-              })
-              const chartData = Object.entries(grouped).map(([x, y]) => ({ name: x, value: y })).slice(0, 50)
-              const yLabel = columns.find(c => c.name === chartYAxis)?.label || chartYAxis
-              if (chartData.length === 0) {
-                return <p className="text-sm text-grey text-center py-4">אין נתונים להצגה</p>
+            <Button variant="ghost" size="sm" onClick={() => setShowChart(false)} className="rounded-full">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex gap-6 mb-8 flex-wrap">
+            <div className="space-y-1.5 min-w-[200px] flex-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-grey mr-1">ציר X (קיבוץ)</label>
+              <select
+                value={chartXAxis}
+                onChange={(e) => setChartXAxis(e.target.value)}
+                className="w-full h-11 rounded-xl border-border/40 bg-white/70 px-4 font-bold text-sm focus:bg-white transition-all outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="">בחר עמודה</option>
+                {columns.filter(c => c.type === 'text' || c.type === 'date').map(c => (
+                  <option key={c.name} value={c.name}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5 min-w-[200px] flex-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-grey mr-1">ציר Y (ערך)</label>
+              <select
+                value={chartYAxis}
+                onChange={(e) => setChartYAxis(e.target.value)}
+                className="w-full h-11 rounded-xl border-border/40 bg-white/70 px-4 font-bold text-sm focus:bg-white transition-all outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="">בחר עמודה</option>
+                {columns.filter(c => c.type === 'number' || c.type === 'currency' || c.type === 'calculated').map(c => (
+                  <option key={c.name} value={c.name}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {chartXAxis && chartYAxis && (() => {
+            // Aggregate data by X axis value
+            const grouped: Record<string, number> = {}
+            records.forEach(record => {
+              let xVal = record.data[chartXAxis]
+              if (xVal === null || xVal === undefined) return
+              const xCol = columns.find(c => c.name === chartXAxis)
+              if (xCol?.type === 'date' && xVal) {
+                try {
+                  const d = new Date(xVal)
+                  xVal = d.toLocaleDateString('he-IL', { year: 'numeric', month: '2-digit' })
+                } catch { }
               }
-              return (
-                <div style={{ width: '100%', height: 300 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(val: number) => [`₪${val.toLocaleString('he-IL')}`, yLabel]} />
-                      <Legend />
-                      <Bar dataKey="value" name={yLabel} fill="#10b981" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )
-            })()}
-          </Card>
-        )}
+              const key = String(xVal)
+              const rawY = record.data[chartYAxis]
+              const yVal = typeof rawY === 'number' ? rawY : parseFloat(String(rawY || 0).replace(/[₪,]/g, ''))
+              if (!isNaN(yVal)) {
+                grouped[key] = (grouped[key] || 0) + yVal
+              }
+            })
+            const chartData = Object.entries(grouped).map(([x, y]) => ({ name: x, value: y })).slice(0, 50)
+            const yLabel = columns.find(c => c.name === chartYAxis)?.label || chartYAxis
+            if (chartData.length === 0) {
+              return <p className="text-sm text-grey text-center py-8 bg-white/50 rounded-2xl border-2 border-dashed border-border/30">אין נתונים מספריים להצגה בצירי הבחירה</p>
+            }
+            return (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-border/50" style={{ width: '100%', height: 350 }}>
+                <ResponsiveContainer>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 700, fill: '#64748B' }} axisLine={false} tickLine={false} dy={10} />
+                    <YAxis tick={{ fontSize: 11, fontWeight: 700, fill: '#64748B' }} axisLine={false} tickLine={false} tickFormatter={(val) => `₪${val.toLocaleString()}`} />
+                    <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(val: number) => [`₪${val.toLocaleString('he-IL')}`, yLabel]} />
+                    <Bar dataKey="value" name={yLabel} fill="#3B82F6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )
+          })()}
+        </Card>
+      )}
 
-        {/* Add New Row Form */}
-        {isAddingNew && (
-          <Card className="p-4 bg-emerald/5 border-emerald/20">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mb-4">
-              {columns.map((col) => {
-                // Skip formula, reference, and calculated columns - they are read-only
-                if (col.type === 'formula' || col.type === 'reference' || col.type === 'calculated') {
-                  return null
-                }
+      {/* Add New Row Form */}
+      {isAddingNew && (
+        <Card className="p-8 bg-primary/5 border-primary/20 rounded-[2.5rem] relative overflow-hidden animate-fade-in-up">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -mr-16 -mt-16 blur-3xl" />
+          <div className="flex items-center gap-3 mb-6 relative z-10">
+            <div className="p-2.5 rounded-xl bg-primary/20 text-primary">
+              <Plus className="h-5 w-5" />
+            </div>
+            <h4 className="font-black text-navy uppercase tracking-tight">הוספת רשומה חדשה ל-{moduleType}</h4>
+          </div>
 
-                // Handle lookup columns with dropdown
-                if (col.type === 'lookup' && col.relationship) {
-                  const sourceKey = col.relationship.source_column_key || col.name
-                  const options = lookupOptions[col.name] || []
-                  const selectId = `new-record-${sourceKey}-${moduleType}`
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8 relative z-10">
+            {columns.map((col) => {
+              if (col.type === 'formula' || col.type === 'reference' || col.type === 'calculated') {
+                return null
+              }
 
-                  return (
-                    <div key={`${col.name}-${moduleType}-lookup`}>
-                      <label htmlFor={selectId} className="text-sm font-medium text-grey mb-1 block">{col.label}</label>
-                      <select
-                        id={selectId}
-                        value={newRecordData[sourceKey] || ''}
-                        onChange={(e) =>
-                          setNewRecordData({
-                            ...newRecordData,
-                            [sourceKey]: e.target.value === '' ? null : e.target.value,
-                          })
-                        }
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="">-- בחר ערך --</option>
-                        {options.map((opt, idx) => (
-                          <option key={idx} value={String(opt.value)}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )
-                }
+              if (col.type === 'lookup' && col.relationship) {
+                const sourceKey = col.relationship.source_column_key || col.name
+                const options = lookupOptions[col.name] || []
+                const selectId = `new-record-${sourceKey}-${moduleType}`
 
-                // Regular columns (text, number, date)
-                const inputId = `new-record-${col.name}-${moduleType}`
                 return (
-                  <div key={`${col.name}-${moduleType}`}>
-                    <label htmlFor={inputId} className="text-sm font-medium text-grey mb-1 block">{col.label}</label>
-                    {col.type === 'date' ? (
-                      <Input
-                        id={inputId}
-                        type="date"
-                        value={newRecordData[col.name] || ''}
-                        onChange={(e) =>
-                          setNewRecordData({ ...newRecordData, [col.name]: e.target.value })
-                        }
-                      />
-                    ) : col.type === 'number' || col.type === 'currency' ? (
-                      <Input
-                        id={inputId}
-                        type="text" // Use text for currency to allow '₪' and commas, then parse
-                        value={newRecordData[col.name] !== undefined && newRecordData[col.name] !== null
-                          ? (col.type === 'currency' ? `₪${newRecordData[col.name].toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : String(newRecordData[col.name]))
-                          : ''}
-                        onChange={(e) => {
-                          let val: string | number | null = e.target.value
-                          if (col.type === 'currency' || col.type === 'number') {
-                            const cleanValue = val.toString().replace(/[₪,]/g, '').trim()
-                            const num = parseFloat(cleanValue)
-                            val = isNaN(num) ? '' : num
-                          }
-                          setNewRecordData({
-                            ...newRecordData,
-                            [col.name]: val,
-                          })
-                        }}
-                        dir={col.type === 'currency' ? 'ltr' : 'auto'}
-                        placeholder={col.type === 'currency' ? '₪0.00' : ''}
-                      />
-                    ) : (
-                      <Input
-                        id={inputId}
-                        type="text"
-                        value={newRecordData[col.name] || ''}
-                        onChange={(e) =>
-                          setNewRecordData({ ...newRecordData, [col.name]: e.target.value })
-                        }
-                      />
-                    )}
+                  <div key={`${col.name}-${moduleType}-lookup`} className="space-y-1.5">
+                    <label htmlFor={selectId} className="text-[10px] font-black uppercase tracking-widest text-grey mr-1">{col.label}</label>
+                    <select
+                      id={selectId}
+                      value={newRecordData[sourceKey] || ''}
+                      onChange={(e) =>
+                        setNewRecordData({
+                          ...newRecordData,
+                          [sourceKey]: e.target.value === '' ? null : e.target.value,
+                        })
+                      }
+                      className="w-full h-11 rounded-xl border-border/40 bg-white px-4 font-bold text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                    >
+                      <option value="">-- בחר ערך --</option>
+                      {options.map((opt, idx) => (
+                        <option key={idx} value={String(opt.value)}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )
-              })}
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleAddNew} disabled={loading} className="gap-2">
-                <Save className="h-4 w-4" />
-                שמור
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsAddingNew(false)
-                  setNewRecordData({})
-                }}
-              >
-                <X className="h-4 w-4" />
-                ביטול
-              </Button>
-            </div>
-          </Card>
-        )}
+              }
 
-        {/* Table */}
-        <div className="rounded-md border overflow-x-auto">
-          <table className="w-full">
-            <thead>
+              const inputId = `new-record-${col.name}-${moduleType}`
+              return (
+                <div key={`${col.name}-${moduleType}`} className="space-y-1.5">
+                  <label htmlFor={inputId} className="text-[10px] font-black uppercase tracking-widest text-grey mr-1">{col.label}</label>
+                  {col.type === 'date' ? (
+                    <Input
+                      id={inputId}
+                      type="date"
+                      value={newRecordData[col.name] || ''}
+                      onChange={(e) =>
+                        setNewRecordData({ ...newRecordData, [col.name]: e.target.value })
+                      }
+                      className="h-11 rounded-xl border-border/40 bg-white font-bold"
+                    />
+                  ) : col.type === 'number' || col.type === 'currency' ? (
+                    <Input
+                      id={inputId}
+                      type="text"
+                      value={newRecordData[col.name] !== undefined && newRecordData[col.name] !== null
+                        ? (col.type === 'currency' ? `₪${newRecordData[col.name].toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : String(newRecordData[col.name]))
+                        : ''}
+                      onChange={(e) => {
+                        let val: string | number | null = e.target.value
+                        if (col.type === 'currency' || col.type === 'number') {
+                          const cleanValue = val.toString().replace(/[₪,]/g, '').trim()
+                          const num = parseFloat(cleanValue)
+                          val = isNaN(num) ? '' : num
+                        }
+                        setNewRecordData({
+                          ...newRecordData,
+                          [col.name]: val,
+                        })
+                      }}
+                      dir={col.type === 'currency' ? 'ltr' : 'auto'}
+                      placeholder={col.type === 'currency' ? '₪0.00' : ''}
+                      className="h-11 rounded-xl border-border/40 bg-white font-bold"
+                    />
+                  ) : (
+                    <Input
+                      id={inputId}
+                      type="text"
+                      value={newRecordData[col.name] || ''}
+                      onChange={(e) =>
+                        setNewRecordData({ ...newRecordData, [col.name]: e.target.value })
+                      }
+                      className="h-11 rounded-xl border-border/40 bg-white font-bold"
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex gap-3 relative z-10">
+            <Button onClick={handleAddNew} disabled={loading} className="rounded-xl h-12 px-8 bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-500/20">
+              <Save className="h-5 w-5 ml-2" />
+              שמור רשומה
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setIsAddingNew(false)
+                setNewRecordData({})
+              }}
+              className="rounded-xl h-12 px-8 font-black text-grey"
+            >
+              ביטול
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Table Container */}
+      <div className="bg-white/70 backdrop-blur-xl border border-border/50 rounded-[2.5rem] shadow-xl shadow-navy/5 overflow-hidden">
+        <div className="overflow-x-auto selection-table-container max-h-[800px] relative">
+          <table className="w-full border-collapse border-spacing-0">
+            <thead className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md shadow-sm">
               {tableFinal.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id} className="border-b bg-grey/10">
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className="p-3 text-center font-semibold text-sm"
-                      style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      {{
-                        asc: ' ↑',
-                        desc: ' ↓',
-                      }[header.column.getIsSorted() as string] ?? ''}
-                    </th>
-                  ))}
+                <tr key={headerGroup.id} className="border-b border-border/50">
+                  {headerGroup.headers.map((header, index) => {
+                    const isFirst = index === 0;
+                    const isLast = index === headerGroup.headers.length - 1;
+                    const isCheckbox = header.id === 'select';
+                    const isActions = header.id === 'actions';
+
+                    let stickyClasses = '';
+                    if (isCheckbox) stickyClasses = 'sticky right-0 z-40 bg-slate-50/95 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+                    else if (isActions) stickyClasses = 'sticky left-0 z-40 bg-slate-50/95 shadow-[-1px_0_0_0_rgba(0,0,0,0.05)]';
+                    else if (isFirst) stickyClasses = 'sticky right-0 z-40 bg-slate-50/95 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+
+                    return (
+                      <th
+                        key={header.id}
+                        className={`p-4 text-center text-[10px] font-black uppercase tracking-widest text-grey whitespace-nowrap ${stickyClasses}`}
+                        style={{ cursor: header.column.getCanSort() ? 'pointer' : 'default' }}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                          {{
+                            asc: ' ↑',
+                            desc: ' ↓',
+                          }[header.column.getIsSorted() as string] ?? ''}
+                        </div>
+                      </th>
+                    )
+                  })}
                 </tr>
               ))}
             </thead>
             <tbody>
-              {tableFinal.getRowModel().rows.map((row) => {
-                const recordId = row.original.id
-                const isBatchEditing = batchEditMode
-                return (
-                  <tr key={row.id} className={`border-b hover:bg-grey/5 ${batchEditData[recordId] ? 'bg-yellow-50/50' : ''}`}>
-                    {row.getVisibleCells().map((cell) => {
-                      // In batch edit mode, render editable inputs for non-formula/non-action columns
-                      if (isBatchEditing && cell.column.id !== 'select' && cell.column.id !== 'actions') {
-                        const colDef = visibleColumns.find(c => c.name === cell.column.id)
-                        if (colDef && colDef.type !== 'formula' && colDef.type !== 'reference' && colDef.type !== 'calculated' && colDef.type !== 'lookup') {
-                          const currentVal = batchEditData[recordId]?.[colDef.name] ?? row.original.data[colDef.name] ?? ''
-                          const isChanged = batchEditData[recordId]?.[colDef.name] !== undefined
-                          return (
-                            <td key={cell.id} className="p-1 text-center">
-                              <Input
-                                type={colDef.type === 'number' ? 'number' : colDef.type === 'date' ? 'date' : 'text'}
-                                value={currentVal}
-                                onChange={(e) => {
-                                  const val = colDef.type === 'number' ? (e.target.value === '' ? '' : parseFloat(e.target.value)) : e.target.value
-                                  handleBatchEditChange(recordId, colDef.name, val)
-                                }}
-                                className={`text-center text-sm h-8 ${isChanged ? 'border-yellow-400 bg-yellow-50' : ''}`}
-                              />
-                            </td>
-                          )
-                        }
-                      }
+              {loading ? (
+                // Skeleton Loader Rows
+                Array.from({ length: 5 }).map((_, rowIndex) => (
+                  <tr key={`skeleton-${rowIndex}`} className="border-b border-border/30">
+                    {tableFinal.getVisibleLeafColumns().map((column, colIndex) => {
+                      const isFirst = colIndex === 0;
+                      const isLast = colIndex === tableFinal.getVisibleLeafColumns().length - 1;
+                      const isCheckbox = column.id === 'select';
+                      const isActions = column.id === 'actions';
+
+                      let stickyClasses = '';
+                      if (isCheckbox) stickyClasses = 'sticky right-0 z-20 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+                      else if (isActions) stickyClasses = 'sticky left-0 z-20 bg-white shadow-[-1px_0_0_0_rgba(0,0,0,0.05)]';
+                      else if (isFirst) stickyClasses = 'sticky right-0 z-20 bg-white shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+
                       return (
-                        <td key={cell.id} className="p-2 text-center">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        <td key={`skeleton-col-${rowIndex}-${colIndex}`} className={`p-4 bg-white/70 backdrop-blur-sm ${stickyClasses}`}>
+                          <div className="flex items-center justify-center min-h-[40px]">
+                            <div className={`h-6 bg-slate-200/50 rounded-lg animate-pulse ${column.id === 'select' || column.id === 'actions' ? 'w-8' : 'w-3/4 max-w-[120px]'
+                              }`} />
+                          </div>
                         </td>
                       )
                     })}
                   </tr>
-                )
-              })}
+                ))
+              ) : (
+                tableFinal.getRowModel().rows.map((row) => {
+                  const recordId = row.original.id
+                  return (
+                    <tr key={row.id} className={cn(
+                      "border-b border-border/30 transition-colors duration-200 group relative",
+                      batchEditData[recordId] ? "bg-amber-50/50" : "hover:bg-slate-50/50"
+                    )}>
+                      {row.getVisibleCells().map((cell, colIndex) => {
+                        const isFirst = colIndex === 0;
+                        const isLast = colIndex === row.getVisibleCells().length - 1;
+                        const isCheckbox = cell.column.id === 'select';
+                        const isActions = cell.column.id === 'actions';
+
+                        let stickyClasses = '';
+                        // When hovering the row we want the sticky columns to match the hover background
+                        // We use group-hover for this effect
+                        const bgClass = batchEditData[recordId] ? "bg-amber-50" : "bg-white/70 backdrop-blur-sm group-hover:bg-slate-50/90";
+
+                        if (isCheckbox) stickyClasses = `sticky right-0 z-20 ${bgClass} shadow-[1px_0_0_0_rgba(0,0,0,0.05)]`;
+                        else if (isActions) stickyClasses = `sticky left-0 z-20 ${bgClass} shadow-[-1px_0_0_0_rgba(0,0,0,0.05)]`;
+                        else if (isFirst) stickyClasses = `sticky right-0 z-20 ${bgClass} shadow-[1px_0_0_0_rgba(0,0,0,0.05)]`;
+
+                        if (batchEditMode && cell.column.id !== 'select' && cell.column.id !== 'actions') {
+                          const colDef = visibleColumns.find(c => c.name === cell.column.id)
+                          if (colDef && colDef.type !== 'formula' && colDef.type !== 'reference' && colDef.type !== 'calculated' && colDef.type !== 'lookup') {
+                            const currentVal = batchEditData[recordId]?.[colDef.name] ?? row.original.data[colDef.name] ?? ''
+                            const isChanged = batchEditData[recordId]?.[colDef.name] !== undefined
+                            return (
+                              <td key={cell.id} className={`p-2 text-center ${stickyClasses}`}>
+                                <Input
+                                  type={colDef.type === 'number' ? 'number' : colDef.type === 'date' ? 'date' : 'text'}
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const val = colDef.type === 'number' ? (e.target.value === '' ? '' : parseFloat(e.target.value)) : e.target.value
+                                    handleBatchEditChange(recordId, colDef.name, val)
+                                  }}
+                                  className={cn(
+                                    "text-center text-sm h-10 rounded-xl font-bold transition-all",
+                                    isChanged ? "border-amber-400 bg-amber-50 shadow-sm" : "border-transparent bg-transparent hover:bg-white hover:border-slate-200"
+                                  )}
+                                />
+                              </td>
+                            )
+                          }
+                        }
+                        return (
+                          <td key={cell.id} className={`p-4 text-center ${stickyClasses}`}>
+                            <div className="flex items-center justify-center min-h-[40px]">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </div>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
             {/* Totals Row */}
             {totalsRow && records.length > 0 && (
-              <tfoot>
-                <tr className="border-t-2 border-navy/30 bg-grey/10 font-semibold">
-                  {tableFinal.getHeaderGroups()[0]?.headers.map((header) => {
-                    if (header.id === 'select') return <td key={header.id} className="p-3 text-center text-sm text-grey">Σ</td>
-                    if (header.id === 'actions') return <td key={header.id} className="p-3"></td>
+              <tfoot className="sticky bottom-0 z-30 shadow-[0_-1px_0_0_rgba(0,0,0,0.05)]">
+                <tr className="bg-slate-50/95 backdrop-blur-md">
+                  {tableFinal.getHeaderGroups()[0]?.headers.map((header, index) => {
+                    const isFirst = index === 0;
+                    const isLast = index === tableFinal.getHeaderGroups()[0]?.headers.length - 1;
+                    const isCheckbox = header.id === 'select';
+                    const isActions = header.id === 'actions';
+
+                    let stickyClasses = '';
+                    if (isCheckbox) stickyClasses = 'sticky right-0 z-40 bg-slate-50/95 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+                    else if (isActions) stickyClasses = 'sticky left-0 z-40 bg-slate-50/95 shadow-[-1px_0_0_0_rgba(0,0,0,0.05)]';
+                    else if (isFirst) stickyClasses = 'sticky right-0 z-40 bg-slate-50/95 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]';
+
+                    if (header.id === 'select') return <td key={header.id} className={`p-4 text-center text-sm font-black text-grey ${stickyClasses}`}>Σ</td>
+                    if (header.id === 'actions') return <td key={header.id} className={`p-4 ${stickyClasses}`}></td>
                     const colDef = visibleColumns.find(c => c.name === header.id)
                     if (colDef && totalsRow[colDef.name]) {
                       const { sum, count } = totalsRow[colDef.name]
                       return (
-                        <td key={header.id} className="p-3 text-center">
-                          <div className="text-sm font-bold text-navy">{sum.toLocaleString('he-IL')}</div>
-                          <div className="text-xs text-grey">ממוצע: {count > 0 ? (sum / count).toLocaleString('he-IL', { maximumFractionDigits: 1 }) : '-'}</div>
+                        <td key={header.id} className={`p-4 text-center ${stickyClasses}`}>
+                          <div className="text-sm font-black text-navy" dir="ltr">₪{sum.toLocaleString()}</div>
+                          <div className="text-[10px] font-bold text-grey uppercase tracking-tighter">ממוצע: {count > 0 ? (sum / count).toLocaleString('he-IL', { maximumFractionDigits: 1 }) : '-'}</div>
                         </td>
                       )
                     }
-                    return <td key={header.id} className="p-3"></td>
+                    return <td key={header.id} className={`p-4 ${stickyClasses}`}></td>
                   })}
                 </tr>
               </tfoot>
             )}
           </table>
+
           {records.length === 0 && !isAddingNew && (
-            <div className="p-8 text-center text-grey">
-              <p className="mb-2">אין רשומות עדיין.</p>
-              <p className="text-sm">לחץ על "הוסף רשומה חדשה" כדי להתחיל.</p>
-            </div>
-          )}
-          {columns.length === 0 && (
-            <div className="p-8 text-center text-grey">
-              <p className="mb-2 font-medium">אין סכמה מוגדרת</p>
-              <p className="text-sm">אנא הגדר סכמה בטאב "הגדרות" תחילה.</p>
+            <div className="py-24 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="h-8 w-8 text-slate-300" />
+              </div>
+              <p className="text-navy font-black text-lg">אין רשומות להצגה</p>
+              <p className="text-sm text-grey font-medium mt-1">נסה לשנות את הסינון או להוסיף רשומה חדשה</p>
             </div>
           )}
         </div>
+
+        {/* Pagination bar */}
         {records.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="text-sm text-grey">
-              מציג{' '}
-              {tableFinal.getRowModel().rows.length === 0
-                ? 0
-                : pagination.pageIndex * pagination.pageSize + 1}
-              {'-'}
-              {pagination.pageIndex * pagination.pageSize +
-                tableFinal.getRowModel().rows.length}{' '}
-              מתוך {tableFinal.getFilteredRowModel().rows.length}
+          <div className="p-6 border-t border-border/30 flex flex-wrap items-center justify-between gap-6 bg-slate-50/30">
+            <div className="flex items-center gap-6">
+              <div className="text-xs font-bold text-grey bg-white px-4 py-2 rounded-full border border-border/50 shadow-xs">
+                מציג <span className="text-navy">{pagination.pageIndex * pagination.pageSize + 1}</span>
+                - <span className="text-navy">{Math.min(pagination.pageIndex * pagination.pageSize + tableFinal.getRowModel().rows.length, tableFinal.getFilteredRowModel().rows.length)}</span>
+                מתוך <span className="text-navy font-black uppercase ml-1">{tableFinal.getFilteredRowModel().rows.length}</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-grey">שורות לעמוד:</span>
+                <Select
+                  value={String(pagination.pageSize)}
+                  onValueChange={(value) => setPagination((prev) => ({ ...prev, pageIndex: 0, pageSize: Number(value) }))}
+                >
+                  <SelectTrigger className="w-[80px] h-9 rounded-xl font-bold bg-white border-border/50 focus:ring-primary/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-xl">
+                    {[10, 20, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)} className="font-bold">{size}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-grey">שורות בעמוד</span>
-              <Select
-                value={String(pagination.pageSize)}
-                onValueChange={(value) =>
-                  setPagination((prev) => ({
-                    ...prev,
-                    pageIndex: 0,
-                    pageSize: Number(value),
-                  }))
-                }
-              >
-                <SelectTrigger className="w-[90px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[10, 20, 50, 100].map((size) => (
-                    <SelectItem key={size} value={String(size)}>
-                      {size}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-3">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => tableFinal.previousPage()}
                 disabled={!tableFinal.getCanPreviousPage()}
+                className="rounded-xl font-black h-10 px-4 border-border/50 bg-white hover:bg-slate-50"
               >
                 קודם
               </Button>
-              <span className="text-sm text-grey">
+              <div className="flex items-center justify-center min-w-[100px] h-10 bg-white rounded-xl border border-border/50 text-xs font-black text-navy px-4">
                 עמוד {pagination.pageIndex + 1} מתוך {tableFinal.getPageCount()}
-              </span>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => tableFinal.nextPage()}
                 disabled={!tableFinal.getCanNextPage()}
+                className="rounded-xl font-black h-10 px-4 border-border/50 bg-white hover:bg-slate-50"
               >
                 הבא
               </Button>
@@ -1445,7 +1642,6 @@ export function DynamicDataTable({
         )}
       </div>
 
-      {/* CSV Import Dialog */}
       {/* CSV Import Dialog */}
       {!readOnly && (
         <CSVImportDialog
@@ -1457,7 +1653,6 @@ export function DynamicDataTable({
           onImportComplete={onRecordUpdate || (() => { })}
         />
       )}
-    </Card>
+    </div>
   )
 }
-

@@ -537,144 +537,239 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-navy mb-2">לוח בקרה</h1>
-        <p className="text-grey">ניהול לקוחות - נחמיה דרוק</p>
+      <div className="mb-10 animate-fade-in-up">
+        <h1 className="text-4xl font-extrabold text-navy mb-2 tracking-tight">לוח בקרה</h1>
+        <div className="flex items-center gap-2">
+          <div className="h-1 w-12 bg-primary rounded-full" />
+          <p className="text-grey font-medium">ניהול לקוחות - נחמיה דרוק</p>
+        </div>
       </div>
 
-      {/* KPI Summary Cards */}
-      {!loading && clients.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
-          <div className="bg-white rounded-lg border p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-blue-50">
-                <Users className="h-5 w-5 text-blue-600" />
+      {/* KPI Summary Bento Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 mb-10 overflow-hidden">
+        {loading ? (
+          <>
+            {/* Skeleton Main Balance Card */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm overflow-hidden animate-pulse">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-xl bg-slate-200/60" />
+                <div className="w-24 h-6 bg-slate-200/60 rounded-full" />
               </div>
-              <span className="text-sm text-grey">לקוחות פעילים</span>
+              <div className="w-16 h-10 bg-slate-200/60 rounded-lg mb-2" />
+              <div className="w-32 h-4 bg-slate-200/60 rounded" />
             </div>
-            <div className="text-2xl font-bold text-navy">{dashboardKPIs.activeCount}</div>
-            <div className="text-xs text-grey">מתוך {dashboardKPIs.totalClients} סה"כ</div>
-          </div>
 
-          <div className="bg-white rounded-lg border p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-green-50">
-                <TrendingUp className="h-5 w-5 text-emerald" />
+            {/* Skeleton Income Card */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm overflow-hidden animate-pulse">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-xl bg-slate-200/60" />
+                <div className="w-24 h-6 bg-slate-200/60 rounded-full" />
               </div>
-              <span className="text-sm text-grey">הכנסות חודשי</span>
+              <div className="w-32 h-10 bg-slate-200/60 rounded-lg mb-2" />
+              <div className="w-40 h-4 bg-slate-200/60 rounded" />
             </div>
-            <div className="text-2xl font-bold text-emerald">₪{dashboardKPIs.totalMonthlyIncome.toLocaleString()}</div>
-            <div className="text-xs text-grey">הוצאות: ₪{dashboardKPIs.totalMonthlyExpense.toLocaleString()}</div>
-          </div>
 
-          <div className="bg-white rounded-lg border p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-amber-50">
-                <CreditCard className="h-5 w-5 text-amber-600" />
+            {/* Skeleton Smaller Cards Stack */}
+            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-amber-50/20 rounded-2xl border border-amber-100/50 p-5 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-200/60" />
+                  <div className="w-16 h-4 bg-amber-200/60 rounded" />
+                </div>
+                <div className="w-12 h-8 bg-amber-200/60 rounded mb-2" />
+                <div className="w-20 h-3 bg-amber-200/60 rounded" />
               </div>
-              <span className="text-sm text-grey">תשלומים ממתינים</span>
+              <div className="bg-purple-50/20 rounded-2xl border border-purple-100/50 p-5 shadow-sm animate-pulse">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-lg bg-purple-200/60" />
+                  <div className="w-16 h-4 bg-purple-200/60 rounded" />
+                </div>
+                <div className="w-12 h-8 bg-purple-200/60 rounded mb-2" />
+                <div className="w-20 h-3 bg-purple-200/60 rounded" />
+              </div>
             </div>
-            <div className="text-2xl font-bold text-amber-600">{dashboardKPIs.totalPendingPayments}</div>
-          </div>
+          </>
+        ) : clients.length > 0 ? (
+          <>
+            {/* Main Balance Card - Spans 4 columns */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm glass-card hover-lift animate-fade-in-up delay-100 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-blue-50 text-primary">
+                    <Users className="h-6 w-6" />
+                  </div>
+                  <div className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded-full">סה"כ לקוחות</div>
+                </div>
+                <div className="text-4xl font-bold text-navy mb-1">{dashboardKPIs.activeCount}</div>
+                <div className="text-sm text-grey font-medium">מתוך {dashboardKPIs.totalClients} סה"כ במערכת</div>
+              </div>
+            </div>
 
-          <div className="bg-white rounded-lg border p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-purple-50">
-                <Bell className="h-5 w-5 text-purple-600" />
+            {/* Income Card - Spans 4 columns */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm glass-card hover-lift animate-fade-in-up delay-200 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-green-50 text-emerald">
+                    <TrendingUp className="h-6 w-6" />
+                  </div>
+                  <div className="text-xs font-semibold px-2 py-1 bg-green-50 text-emerald rounded-full">הכנסות החודש</div>
+                </div>
+                <div className="text-4xl font-bold text-emerald mb-1">₪{dashboardKPIs.totalMonthlyIncome.toLocaleString()}</div>
+                <div className="flex items-center gap-2 text-sm text-grey font-medium">
+                  <span>הוצאות:</span>
+                  <span className="text-rose-500">₪{dashboardKPIs.totalMonthlyExpense.toLocaleString()}</span>
+                </div>
               </div>
-              <span className="text-sm text-grey">משימות פתוחות</span>
             </div>
-            <div className="text-2xl font-bold text-purple-600">{dashboardKPIs.totalOpenReminders}</div>
-          </div>
 
-          <div className="bg-white rounded-lg border p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-cyan-50">
-                <UserPlus className="h-5 w-5 text-cyan-600" />
+            {/* Smaller Cards Stack - Spans 4 columns */}
+            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-amber-50/50 rounded-2xl border border-amber-100 p-5 shadow-sm glass-card hover-lift animate-fade-in-up delay-300">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+                    <CreditCard className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-amber-800">ממתינים</span>
+                </div>
+                <div className="text-2xl font-bold text-amber-600">{dashboardKPIs.totalPendingPayments}</div>
+                <div className="text-xs text-amber-700/70 mt-1">תשלומים לטיפול</div>
               </div>
-              <span className="text-sm text-grey">חדשים החודש</span>
+
+              <div className="bg-purple-50/50 rounded-2xl border border-purple-100 p-5 shadow-sm glass-card hover-lift animate-fade-in-up delay-400">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
+                    <Bell className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-purple-800">משימות</span>
+                </div>
+                <div className="text-2xl font-bold text-purple-600">{dashboardKPIs.totalOpenReminders}</div>
+                <div className="text-xs text-purple-700/70 mt-1">פתוחות היום</div>
+              </div>
             </div>
-            <div className="text-2xl font-bold text-cyan-600">{dashboardKPIs.newClientsCount}</div>
+          </>
+        ) : null}
+      </div>
+
+      {/* Alerts Center - Enhanced Bento Layout */}
+      <div className="mb-10 animate-fade-in-up delay-500" dir="rtl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-navy flex items-center gap-2">
+            <div className="h-8 w-1 bg-amber-500 rounded-full" />
+            התראות ומשימות קרובות
+          </h2>
+          <div className="text-xs font-semibold px-3 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-100 italic">
+            עדכון אחרון: {new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
-      )}
-
-      {/* Alerts Center - Moved to top */}
-      <div className="mb-8 bg-white rounded-lg border p-6" dir="rtl">
-        <h2 className="text-xl font-semibold mb-4">התראות ומשימות קרובות</h2>
 
         {alertsLoading ? (
-          <div className="text-center py-4 text-grey">טוען התראות...</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="h-[200px] bg-grey/5 animate-pulse rounded-2xl border border-border/50" />
+            <div className="h-[200px] bg-grey/5 animate-pulse rounded-2xl border border-border/50" />
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Pending Payments */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <DollarSign className="h-5 w-5 text-yellow-600" />
-                <h3 className="font-semibold">תשלומים ממתינים</h3>
+            <div className="bg-white/50 backdrop-blur-sm rounded-2xl border border-border/50 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/20" />
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-yellow-50 text-yellow-600">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-lg">תשלומים ממתינים</h3>
+                </div>
+                <span className="text-xs font-bold text-yellow-700 bg-yellow-100/50 px-2 py-0.5 rounded-full">
+                  {pendingPayments.length} פריטים
+                </span>
               </div>
+
               {pendingPayments.length > 0 ? (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
                   {pendingPayments.map((payment) => (
                     <Link
                       key={payment.id}
                       href={`/clients/${payment.client_id}`}
-                      className="block p-3 border rounded-lg hover:bg-yellow-50 transition-colors"
+                      className="group block p-4 bg-white/40 border border-transparent rounded-xl hover:border-yellow-200 hover:bg-yellow-50/50 transition-all duration-200"
                     >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">
-                            {(payment.client as Client)?.name || 'לקוח לא ידוע'}
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-bold text-sm">
+                            {(payment.client as Client)?.name?.charAt(0) || '?'}
                           </div>
-                          <div className="text-sm text-grey">
-                            {new Date(payment.payment_date).toLocaleDateString('he-IL')}
+                          <div>
+                            <div className="font-bold text-navy group-hover:text-yellow-800 transition-colors">
+                              {(payment.client as Client)?.name || 'לקוח לא ידוע'}
+                            </div>
+                            <div className="text-xs text-grey flex items-center gap-1.5 mt-0.5">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(payment.payment_date).toLocaleDateString('he-IL')}
+                            </div>
                           </div>
                         </div>
-                        <div className="text-lg font-bold text-yellow-600">
-                          ₪{payment.amount.toLocaleString('he-IL')}
+                        <div className="text-right">
+                          <div className="text-lg font-extrabold text-navy">
+                            ₪{payment.amount.toLocaleString('he-IL')}
+                          </div>
+                          <div className="text-[10px] font-bold text-yellow-600 uppercase tracking-wider">ממתין</div>
                         </div>
                       </div>
                     </Link>
                   ))}
                 </div>
               ) : (
-                <div className="py-6 text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-50 mb-2">
-                    <DollarSign className="h-6 w-6 text-green-600" />
+                <div className="py-12 text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-50 mb-4 transform rotate-12 transition-transform hover:rotate-0">
+                    <DollarSign className="h-8 w-8 text-green-600" />
                   </div>
-                  <p className="text-sm text-grey">אין תשלומים ממתינים</p>
-                  <p className="text-xs text-grey mt-1">כל התשלומים עודכנו</p>
+                  <p className="text-base font-bold text-navy">אין תשלומים ממתינים</p>
+                  <p className="text-sm text-grey mt-1">כל התשלומים עודכנו בהצלחה!</p>
                 </div>
               )}
             </div>
 
             {/* Upcoming Reminders */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Calendar className="h-5 w-5 text-blue-600" />
-                <h3 className="font-semibold">משימות קרובות (7 ימים הקרובים)</h3>
+            <div className="bg-white/50 backdrop-blur-sm rounded-2xl border border-border/50 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500/20" />
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-lg">משימות קרובות</h3>
+                </div>
+                <span className="text-xs font-bold text-blue-700 bg-blue-100/50 px-2 py-0.5 rounded-full">
+                  7 ימים
+                </span>
               </div>
+
               {upcomingReminders.length > 0 ? (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
                   {upcomingReminders.map((reminder) => (
                     <Link
                       key={reminder.id}
                       href={reminder.client_id ? `/clients/${reminder.client_id}` : '#'}
-                      className="block p-3 border rounded-lg hover:bg-blue-50 transition-colors"
+                      className="group block p-4 bg-white/40 border border-transparent rounded-xl hover:border-blue-200 hover:bg-blue-50/50 transition-all duration-200"
                     >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{reminder.title}</div>
-                          <div className="text-sm text-grey">
-                            {reminder.client ? (reminder.client as Client).name : 'כללי'}
-                          </div>
-                          <div className="text-sm text-grey">
-                            {new Date(reminder.due_date).toLocaleDateString('he-IL')}
+                        <div className="flex-1">
+                          <div className="font-bold text-navy group-hover:text-blue-800 transition-colors">{reminder.title}</div>
+                          <div className="flex items-center gap-3 mt-1.5">
+                            <div className="text-xs text-grey font-medium flex items-center gap-1.5">
+                              <Users className="h-3 w-3" />
+                              {reminder.client ? (reminder.client as Client).name : 'כללי'}
+                            </div>
+                            <div className="text-xs text-grey font-medium flex items-center gap-1.5">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(reminder.due_date).toLocaleDateString('he-IL')}
+                            </div>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs ${reminder.priority === 'High' ? 'bg-red-100 text-red-700' :
-                          reminder.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${reminder.priority === 'High' ? 'bg-rose-100 text-rose-700' :
+                          reminder.priority === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-sky-100 text-sky-700'
                           }`}>
                           {reminder.priority === 'High' ? 'גבוהה' :
                             reminder.priority === 'Medium' ? 'בינונית' : 'נמוכה'}
@@ -684,12 +779,12 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <div className="py-6 text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 mb-2">
-                    <Calendar className="h-6 w-6 text-blue-600" />
+                <div className="py-12 text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 mb-4 transform -rotate-12 transition-transform hover:rotate-0">
+                    <Calendar className="h-8 w-8 text-blue-600" />
                   </div>
-                  <p className="text-sm text-grey">אין משימות קרובות</p>
-                  <p className="text-xs text-grey mt-1">הכל מסודר ל-7 הימים הקרובים</p>
+                  <p className="text-base font-bold text-navy">אין משימות קרובות</p>
+                  <p className="text-sm text-grey mt-1">היומן שלך פנוי ל-7 הימים הקרובים</p>
                 </div>
               )}
             </div>
@@ -697,81 +792,100 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="mb-6 space-y-4">
-        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-          <GlobalSearch />
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-grey" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-            >
-              <option value="הכל">הכל</option>
-              <option value="פעיל">פעיל</option>
-              <option value="ליד">ליד</option>
-              <option value="ארכיון">ארכיון</option>
-            </select>
-          </div>
-          {availableTags.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-grey" />
-              <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="תגיות" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">כל התגיות</SelectItem>
-                  {availableTags.map(tag => (
-                    <SelectItem key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <div className="mb-10 space-y-6 animate-fade-in-up delay-500">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4 flex-wrap flex-1">
+            <GlobalSearch />
+
+            <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
+              <Filter className="h-4 w-4 text-primary" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-transparent border-none text-sm font-bold text-navy focus:ring-0 cursor-pointer"
+              >
+                <option value="הכל">כל הסטטוסים</option>
+                <option value="פעיל">פעילים</option>
+                <option value="ליד">לידים</option>
+                <option value="ארכיון">ארכיון</option>
+              </select>
             </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setBulkMode(!bulkMode)
-              if (bulkMode) {
-                setSelectedClientIds([])
-              }
-            }}
-            className="gap-2"
-          >
-            {bulkMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-            {bulkMode ? 'יציאה ממצב בחירה' : 'בחר מרובים'}
-          </Button>
-          <div className="flex items-center gap-2">
-            <ArrowUpDown className="h-4 w-4 text-grey" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'name' | 'balance' | 'created')}
-              className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-            >
-              <option value="created">תאריך יצירה</option>
-              <option value="name">שם</option>
-              <option value="balance">יתרה</option>
-            </select>
+
+            {availableTags.length > 0 && (
+              <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
+                <Tag className="h-4 w-4 text-purple-500" />
+                <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
+                  <SelectTrigger className="w-[140px] border-none bg-transparent h-auto p-0 focus:ring-0 font-bold text-navy">
+                    <SelectValue placeholder="תגיות" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 shadow-xl">
+                    <SelectItem value="all">כל התגיות</SelectItem>
+                    {availableTags.map(tag => (
+                      <SelectItem key={tag.id} value={tag.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="gap-1"
+              onClick={() => {
+                setBulkMode(!bulkMode)
+                if (bulkMode) {
+                  setSelectedClientIds([])
+                }
+              }}
+              className={`gap-2 rounded-2xl border-border/50 h-10 px-4 font-bold transition-all ${bulkMode ? 'bg-primary text-white border-primary shadow-md shadow-primary/20' : 'bg-white/50 backdrop-blur-sm hover:bg-white'}`}
             >
-              {sortOrder === 'asc' ? '↑' : '↓'}
+              {bulkMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
+              {bulkMode ? 'ביטול בחירה' : 'בחירה מרובה'}
             </Button>
           </div>
-          <AddClientDialog onAddClient={handleAddClient} />
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
+              <ArrowUpDown className="h-4 w-4 text-grey" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'name' | 'balance' | 'created')}
+                className="bg-transparent border-none text-sm font-bold text-navy focus:ring-0 cursor-pointer"
+              >
+                <option value="created">תאריך</option>
+                <option value="name">שם</option>
+                <option value="balance">יתרה</option>
+              </select>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="h-7 w-7 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </Button>
+            </div>
+
+            <AddClientDialog onAddClient={handleAddClient} />
+          </div>
         </div>
-        {filteredClients.length !== clients.length && (
-          <div className="text-sm text-grey">
+
+        <div className="flex items-center justify-between px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10">
+          <div className="text-xs font-bold text-primary flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
             מציג {filteredClients.length} מתוך {clients.length} לקוחות
           </div>
-        )}
+          {selectedClientIds.length > 0 && (
+            <div className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 animate-fade-in-up">
+              {selectedClientIds.length} לקוחות נבחרו
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bulk Actions Toolbar */}

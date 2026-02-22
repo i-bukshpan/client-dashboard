@@ -67,12 +67,32 @@ export async function getClientByShareToken(
   try {
     const { data: client, error } = await supabase
       .from('clients')
-      .select('id, name, email, phone, status, created_at, share_permissions')
+      .select('id, name, email, phone, status, created_at, share_permissions, parent_id')
       .eq('share_token', token)
       .single()
 
     if (error || !client) {
       return { success: false, error: error?.message || 'Invalid share token' }
+    }
+
+    if (client.parent_id) {
+      const { data: parent } = await supabase
+        .from('clients')
+        .select('share_permissions')
+        .eq('id', client.parent_id)
+        .single()
+
+      if (parent?.share_permissions) {
+        client.share_permissions = {
+          ...parent.share_permissions,
+          show_sub_clients: false
+        }
+      } else {
+        client.share_permissions = {
+          ...(client.share_permissions || {}),
+          show_sub_clients: false
+        }
+      }
     }
 
     return { success: true, client }

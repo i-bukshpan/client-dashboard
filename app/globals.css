@@ -7,6 +7,33 @@
   --navy: #1e293b;
   --grey: #64748b;
   --emerald: #10b981;
+
+  /* Modern HSL palette */
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222 47% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222 47% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221 83% 53%;
+  --radius: 0.75rem;
+
+  /* Glossy / Glassmorphism effects */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
 }
 
 * {
@@ -21,8 +48,65 @@ html {
 
 body {
   font-family: 'Assistant', 'Heebo', sans-serif;
-  background-color: #f8fafc;
+  background-color: hsl(var(--background));
   color: var(--navy);
+  transition: background-color 0.3s ease;
+}
+
+@layer components {
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .hover-lift {
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.1);
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+    opacity: 0;
+  }
+
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .delay-500 {
+    animation-delay: 500ms;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @layer utilities {
@@ -36,12 +120,12 @@ body {
   body * {
     visibility: hidden;
   }
-  
+
   .printable-report,
   .printable-report * {
     visibility: visible;
   }
-  
+
   .printable-report {
     position: absolute;
     left: 0;
@@ -51,35 +135,34 @@ body {
     background: white;
     box-shadow: none;
   }
-  
+
   .no-print {
     display: none !important;
   }
-  
+
   @page {
     size: A4;
     margin: 15mm;
   }
-  
+
   .print-header {
     page-break-after: avoid;
   }
-  
+
   .print-summary {
     page-break-after: avoid;
   }
-  
+
   .print-details table {
     page-break-inside: auto;
   }
-  
+
   .print-details tr {
     page-break-inside: avoid;
     page-break-after: auto;
   }
-  
+
   .print-footer {
     page-break-before: avoid;
   }
 }
-

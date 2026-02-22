@@ -70,26 +70,33 @@ export function BranchTablesTab({ clientId, schemas, branchName, readOnly = fals
 
   return (
     <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
-      <div className="flex items-center justify-between mb-4 gap-2">
-        <TabsList className="flex flex-1 overflow-x-auto gap-1">
-          <TabsTrigger value="dashboard" className="whitespace-nowrap">
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4 bg-white/40 backdrop-blur-md p-2 rounded-[2rem] border border-border/50">
+        <TabsList className="bg-transparent h-auto gap-1 p-0 flex-nowrap overflow-x-auto no-scrollbar">
+          <TabsTrigger
+            value="dashboard"
+            className="rounded-xl px-5 py-2 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm text-grey font-bold transition-all"
+          >
             דשבורד
           </TabsTrigger>
           {schemas.map((schema) => (
-            <TabsTrigger key={schema.id} value={schema.module_name} className="whitespace-nowrap">
+            <TabsTrigger
+              key={schema.id}
+              value={schema.module_name}
+              className="rounded-xl px-5 py-2 data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm text-grey font-bold transition-all"
+            >
               {schema.module_name}
             </TabsTrigger>
           ))}
         </TabsList>
         {!readOnly && (
-          <>
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              className="gap-2 flex-shrink-0"
+              className="gap-2 flex-shrink-0 rounded-xl border-border/50 font-bold hover:bg-white hover:text-primary transition-all pr-4 pl-5 h-10"
               onClick={() => setInvoiceUploadOpen(true)}
             >
-              <FileImage className="h-4 w-4" />
+              <div className="p-1 bg-primary/10 rounded-lg text-primary"><FileImage className="h-4 w-4" /></div>
               סריקת חשבונית
             </Button>
             <InvoiceUpload
@@ -109,7 +116,7 @@ export function BranchTablesTab({ clientId, schemas, branchName, readOnly = fals
                 onComplete={handleBreakdownComplete}
               />
             )}
-          </>
+          </div>
         )}
       </div>
       <TabsContent value="dashboard">

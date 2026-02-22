@@ -201,29 +201,36 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
     }
 
     return (
-        <div className="space-y-4" dir="rtl">
+        <div className="space-y-6" dir="rtl">
             <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <LinkIcon className="h-5 w-5" />
-                    קישורים
-                </h3>
-                <Button size="sm" className="gap-2" onClick={openAddDialog}>
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/10 rounded-xl text-purple-500">
+                        <LinkIcon className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-black text-navy tracking-tight">קישורים ומסמכים</h3>
+                        <p className="text-xs font-medium text-grey">ניהול קישורים חיצוניים, תיקיות גוגל דרייב ומסמכים</p>
+                    </div>
+                </div>
+                <Button size="sm" className="gap-2 rounded-xl bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/20 py-5 px-5 font-bold" onClick={openAddDialog}>
                     <Plus className="h-4 w-4" />
                     הוסף קישור
                 </Button>
             </div>
 
             {links.length === 0 ? (
-                <div className="text-center py-12 border-2 border-dashed rounded-lg border-grey/20">
-                    <LinkIcon className="h-10 w-10 mx-auto mb-3 text-grey/40" />
-                    <p className="text-grey text-sm">אין קישורים. הוסף קישורים לגוגל שיטס, תיקיות, ועוד.</p>
-                    <Button variant="outline" size="sm" className="mt-3 gap-2" onClick={openAddDialog}>
+                <div className="text-center py-16 bg-white/40 backdrop-blur-sm border-2 border-dashed rounded-[2rem] border-grey/20">
+                    <div className="w-16 h-16 bg-grey/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <LinkIcon className="h-8 w-8 text-grey/30" />
+                    </div>
+                    <p className="text-grey font-bold mb-4">אין קישורים עדיין. הוסף קישורים לגוגל שיטס, תיקיות, ועוד.</p>
+                    <Button variant="outline" size="sm" className="gap-2 rounded-xl border-grey/20 font-bold" onClick={openAddDialog}>
                         <Plus className="h-4 w-4" />
                         הוסף קישור ראשון
                     </Button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {links.map((link) => {
                         const config = linkTypeConfig[link.link_type] || linkTypeConfig.other
                         const Icon = config.icon
@@ -231,48 +238,66 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                         return (
                             <div
                                 key={link.id}
-                                className={`group border rounded-lg p-4 transition-all hover:shadow-md ${config.bg}`}
+                                className={`group relative rounded-3xl p-5 transition-all duration-300 glass-card hover-lift overflow-hidden border border-border/50 bg-white/60`}
                             >
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                                        <div className={`mt-0.5 flex-shrink-0 ${config.color}`}>
-                                            <Icon className="h-5 w-5" />
+                                {/* Background glow effect */}
+                                <div className={`absolute top-0 right-0 w-24 h-24 -mr-12 -mt-12 rounded-full opacity-10 blur-xl transition-transform duration-500 group-hover:scale-150 ${config.bg.split(' ')[0]}`} />
+
+                                <div className="flex items-start justify-between gap-3 relative z-10">
+                                    <div className="flex items-start gap-4 min-w-0 flex-1">
+                                        <div className={`p-3 rounded-2xl flex-shrink-0 shadow-sm ring-1 ring-white/50 transition-colors duration-300 ${config.color} ${config.bg}`}>
+                                            <Icon className="h-6 w-6" />
                                         </div>
                                         <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${config.bg} ${config.color} border border-current/10`}>
+                                                    {config.label}
+                                                </span>
+                                            </div>
                                             <a
                                                 href={link.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-sm font-semibold text-navy hover:text-blue-600 flex items-center gap-1 group/link"
+                                                className="text-base font-black text-navy hover:text-primary flex items-center gap-1 group/link mb-1 leading-tight"
                                             >
                                                 <span className="truncate">{link.title}</span>
-                                                <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+                                                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 opacity-0 group-hover/link:opacity-100 transition-all transform -translate-x-1 group-hover/link:translate-x-0" />
                                             </a>
-                                            <span className="text-xs text-grey">{config.label}</span>
                                             {link.description && (
-                                                <p className="text-xs text-grey mt-1 line-clamp-2">{link.description}</p>
+                                                <p className="text-xs text-grey font-medium line-clamp-2 leading-relaxed">{link.description}</p>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+
+                                    <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                                         <Button
                                             variant="ghost"
-                                            size="sm"
+                                            size="icon"
                                             onClick={() => openEditDialog(link)}
-                                            className="h-7 w-7 p-0"
+                                            className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-grey hover:text-primary transition-colors"
                                             title="ערוך"
                                         >
-                                            <Edit className="h-3.5 w-3.5" />
+                                            <Edit className="h-4 w-4" />
                                         </Button>
                                         <Button
                                             variant="ghost"
-                                            size="sm"
+                                            size="icon"
                                             onClick={() => handleDelete(link.id, link.title)}
-                                            className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-rose-500 hover:text-white hover:bg-rose-500 transition-all"
                                             title="מחק"
                                         >
-                                            <Trash2 className="h-3.5 w-3.5" />
+                                            <Trash2 className="h-4 w-4" />
                                         </Button>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t border-border/10 flex items-center justify-between relative z-10">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="text-[10px] font-bold text-grey/60 uppercase tracking-tighter">זמין לצפייה</span>
+                                    </div>
+                                    <div className="text-[10px] font-mono text-grey/40">
+                                        {new URL(link.url).hostname}
                                     </div>
                                 </div>
                             </div>

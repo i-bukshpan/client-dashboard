@@ -1,18 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getClientByShareToken } from '@/lib/actions/client-share'
+import { getClientByShareToken, getClientShareToken } from '@/lib/actions/client-share'
 import { supabase, type ClientSchema } from '@/lib/supabase'
 import { BillingPaymentsPublicView } from '@/components/billing-payments-public-view'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ArrowRight } from 'lucide-react'
 import { ChatWidget } from '@/components/chat/chat-widget'
 
 export default function ClientViewPage() {
   const params = useParams()
+  const router = useRouter()
   const token = params.token as string
   const [client, setClient] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -23,7 +24,11 @@ export default function ClientViewPage() {
   const [highlightRecordId, setHighlightRecordId] = useState<string | null>(null)
 
   // Define defaultTab state to handle initial load or calculation
-  const [defaultTab, setDefaultTab] = useState('overview')
+  const [defaultTab, setDefaultTab] = useState<string | null>(null)
+  const [schemasLoading, setSchemasLoading] = useState(false)
+
+  const [parentToken, setParentToken] = useState<string | null>(null)
+  const [parentName, setParentName] = useState<string | null>(null)
 
   useEffect(() => {
     const handleChatNavigation = (e: CustomEvent) => {
@@ -87,6 +92,23 @@ export default function ClientViewPage() {
           setClientSchemas(schemas)
         }
 
+        // Fetch parent details if it's a sub-client
+        if (result.client.parent_id) {
+          const { data: parent } = await supabase
+            .from('clients')
+            .select('name')
+            .eq('id', result.client.parent_id)
+            .single()
+
+          if (parent) {
+            setParentName(parent.name)
+            const shareRes = await getClientShareToken(result.client.parent_id)
+            if (shareRes.success && shareRes.token) {
+              setParentToken(shareRes.token)
+            }
+          }
+        }
+
       } catch (err: any) {
         setError(err.message || 'שגיאה בטעינת המידע')
       } finally {
@@ -109,6 +131,7 @@ export default function ClientViewPage() {
     allowed_modules: []
   }
 
+  const showSubClients = permissions.show_sub_clients ?? true
   const isReadOnly = !permissions.allow_edit
 
   // Group schemas by branch for tabs (similar to main dashboard)
@@ -137,6 +160,7 @@ export default function ClientViewPage() {
       if (!permissions.show_overview) {
         if (permissions.show_billing) newDefaultTab = 'payments'
         else if (branches.length > 0) newDefaultTab = (branches[0] || 'ראשי')
+        else if (showSubClients) newDefaultTab = 'sub-clients'
         else if (permissions.show_credentials) newDefaultTab = 'credentials'
         else if (permissions.show_notes) newDefaultTab = 'notes'
         else newDefaultTab = ''
@@ -196,6 +220,19 @@ export default function ClientViewPage() {
     <div className="min-h-screen bg-gray-50" dir="rtl">
       <div className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {parentToken && parentName && (
+            <div className="mb-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(`/view/${parentToken}`)}
+                className="gap-2 text-grey hover:text-primary rounded-xl hover:bg-primary/5 px-2 -ml-2"
+              >
+                <ArrowRight className="h-4 w-4" />
+                חזרה ל{parentName}
+              </Button>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-navy">{client.name}</h1>
@@ -217,6 +254,7 @@ export default function ClientViewPage() {
               </TabsTrigger>
             ))}
 
+            {showSubClients && <TabsTrigger value="sub-clients">לקוחות משנה</TabsTrigger>}
             {permissions.show_credentials && <TabsTrigger value="credentials">סיסמאות</TabsTrigger>}
             {permissions.show_notes && <TabsTrigger value="notes">פתקים</TabsTrigger>}
           </TabsList>
@@ -273,6 +311,12 @@ export default function ClientViewPage() {
             </TabsContent>
           ))}
 
+          {showSubClients && (
+            <TabsContent value="sub-clients">
+              <PublicSubClients clientId={client.id} clientName={client.name} readOnly={isReadOnly} />
+            </TabsContent>
+          )}
+
           {permissions.show_credentials && (
             <TabsContent value="credentials">
               <PublicCredentials clientId={client.id} readOnly={isReadOnly} />
@@ -302,10 +346,15 @@ import { BranchTablesTab } from '@/components/branch-tables-tab'
 import { CredentialsVault } from '@/components/credentials-vault'
 import { StickyNotes } from '@/components/sticky-notes'
 import { Reminders } from '@/components/reminders'
+import { SubClientsTab } from '@/components/sub-clients-tab'
 
 // Wrapper components to adapt props or logic
 function PublicBranchTables({ clientId, schemas, branchName, readOnly, activeModule, highlightId }: any) {
   return <BranchTablesTab clientId={clientId} schemas={schemas} branchName={branchName} readOnly={readOnly} activeModule={activeModule} highlightId={highlightId} />
+}
+
+function PublicSubClients({ clientId, clientName, readOnly }: any) {
+  return <SubClientsTab parentClientId={clientId} parentClientName={clientName} readOnly={readOnly} isPublicView={true} />
 }
 
 function PublicCredentials({ clientId, readOnly }: any) {

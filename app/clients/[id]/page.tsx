@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -21,6 +21,7 @@ import { SubClientsTab } from '@/components/sub-clients-tab'
 import { getClientSchemas } from '@/lib/actions/schema'
 import type { ClientSchema } from '@/lib/supabase'
 import { ChatWidget } from '@/components/chat/chat-widget'
+import { Timeline } from '@/components/timeline'
 
 export default function ClientDetailPage() {
   const params = useParams()
@@ -122,50 +123,93 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center gap-4">
-        {parentClient ? (
+    <div className="p-6 sm:p-10 bg-slate-50/50 min-h-screen" dir="rtl">
+      {/* Premium Breadcrumbs */}
+      <div className="mb-8 flex items-center gap-2 text-sm animate-fade-in-up">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.push('/')}
+          className="gap-2 text-grey hover:text-primary rounded-xl hover:bg-primary/5 px-3"
+        >
+          <ArrowRight className="h-4 w-4" />
+          לוח בקרה
+        </Button>
+        {parentClient && (
           <>
-            <Button variant="ghost" onClick={() => router.push('/')} className="gap-2">
-              <ArrowRight className="h-4 w-4" />
-              לוח בקרה
-            </Button>
-            <span className="text-grey">/</span>
-            <Button variant="ghost" onClick={() => router.push(`/clients/${parentClient.id}`)} className="gap-2">
+            <div className="h-4 w-px bg-border/50 rotate-12 mx-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/clients/${parentClient.id}`)}
+              className="gap-2 text-grey hover:text-primary rounded-xl hover:bg-primary/5 px-3"
+            >
               {parentClient.name}
             </Button>
           </>
-        ) : (
-          <Button variant="ghost" onClick={() => router.push('/')} className="gap-2">
-            <ArrowRight className="h-4 w-4" />
-            חזרה ללוח הבקרה
-          </Button>
         )}
+        <div className="h-4 w-px bg-border/50 rotate-12 mx-1" />
+        <span className="font-bold text-navy px-3">{client.name}</span>
       </div>
 
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-navy mb-2">{client.name}</h1>
-            <ClientShareLink clientId={client.id} clientName={client.name} />
-            <div className="flex items-center gap-4 text-sm text-grey flex-wrap">
-              {client.email && <span>אימייל: {client.email}</span>}
-              {client.phone && <span>• טלפון: {client.phone}</span>}
-              {client.status && (
-                <span className={`px-2 py-1 rounded text-xs font-medium ${client.status === 'פעיל' ? 'bg-green-100 text-green-700' :
-                  client.status === 'ליד' ? 'bg-blue-100 text-blue-700' :
-                    'bg-grey/20 text-grey'
-                  }`}>
-                  {client.status}
-                </span>
-              )}
+      {/* Glassmorphism Header & Quick Stats */}
+      <div className="mb-10 animate-fade-in-up delay-100">
+        <div className="bg-white/70 backdrop-blur-xl border border-border/50 rounded-[2.5rem] p-6 sm:p-8 shadow-xl shadow-navy/5 flex flex-col lg:flex-row items-center justify-between gap-8 relative overflow-hidden group">
+          {/* Decorative background element */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 blur-3xl transition-transform duration-1000 group-hover:scale-110" />
+
+          <div className="flex flex-col sm:flex-row items-center gap-6 relative z-10 flex-1 w-full lg:w-auto">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-primary/20 shrink-0 transform -rotate-3 group-hover:rotate-0 transition-transform duration-500">
+              {client.name.charAt(0)}
+            </div>
+
+            <div className="text-center sm:text-right flex-1">
+              <div className="flex items-center justify-center sm:justify-start gap-4 mb-2 flex-wrap">
+                <h1 className="text-4xl font-black text-navy tracking-tight">{client.name}</h1>
+                {!client.parent_id && (
+                  <ClientShareLink clientId={client.id} clientName={client.name} />
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-sm font-bold">
+                <div className="flex items-center gap-2 py-1.5 px-3 rounded-full bg-slate-100/80 border border-slate-200/50 text-slate-600 shadow-xs">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  ID: <span className="font-mono text-xs opacity-70">{client.id.substring(0, 8)}</span>
+                </div>
+                {client.status && (
+                  <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${client.status === 'פעיל' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                    client.status === 'ליד' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                      'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}>
+                    {client.status}
+                  </span>
+                )}
+                {childCount > 0 && (
+                  <div className="px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-xs">
+                    👥 {childCount} לקוחות משנה
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <EditClientDialog client={client} onUpdate={handleClientUpdate} />
+
+          <div className="flex flex-col sm:flex-row items-stretch gap-3 w-full lg:w-auto relative z-10">
+            <div className="flex flex-col gap-2 bg-slate-50/80 rounded-3xl p-4 border border-slate-200/50 flex-1 min-w-[200px] hover:bg-white transition-colors duration-300">
+              <div className="flex items-center justify-between gap-10">
+                <span className="text-[10px] font-black text-grey uppercase tracking-widest">פרטי התקשרות</span>
+                <div className="w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center"><Phone className="h-4 w-4 text-primary" /></div>
+              </div>
+              <div className="space-y-1">
+                {client.email && <p className="text-xs font-bold text-navy truncate">{client.email}</p>}
+                {client.phone && <p className="text-sm font-black text-primary tracking-tight" dir="ltr">{client.phone}</p>}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 shrink-0">
+              <EditClientDialog client={client} onUpdate={handleClientUpdate} />
+            </div>
           </div>
         </div>
-
       </div>
 
       {error && (
@@ -219,26 +263,83 @@ export default function ClientDetailPage() {
           : 'settings'
 
         return (
-          <Tabs defaultValue={defaultTab} className="w-full">
-            <TabsList className="flex w-full overflow-x-auto gap-1">
-              {branches.map((branch) => (
-                <TabsTrigger key={branch || 'ראשי'} value={branch || 'ראשי'} className="whitespace-nowrap">
-                  {branch || 'ראשי'}
-                </TabsTrigger>
-              ))}
-              <TabsTrigger value="sub-clients">
-                לקוחות משנה{childCount > 0 ? ` (${childCount})` : ''}
-              </TabsTrigger>
-              <TabsTrigger value="credentials">סיסמאות</TabsTrigger>
-              <TabsTrigger value="billing">תשלומים</TabsTrigger>
-              <TabsTrigger value="notes">פתקים</TabsTrigger>
-              <TabsTrigger value="links">קישורים</TabsTrigger>
-              <TabsTrigger value="settings">הגדרות</TabsTrigger>
-            </TabsList>
+          <Tabs defaultValue={defaultTab} className="w-full animate-fade-in-up delay-200">
+            {/* Main Categories Navigation */}
+            <div className="bg-white/50 backdrop-blur-md border border-border/50 p-2 rounded-[2rem] mb-6 shadow-sm overflow-hidden auto-cols-auto gap-2 grid grid-cols-2 md:grid-cols-4 w-full">
+              <TabsList className="bg-transparent h-auto p-0 flex gap-2 w-full col-span-2 md:col-span-4 justify-start overflow-x-auto no-scrollbar pb-1">
+
+                {/* Entities Category */}
+                <div className="flex items-center bg-slate-100/50 rounded-2xl p-1 gap-1 border border-slate-200/50 shrink-0">
+                  <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 rotate-180" style={{ writingMode: 'vertical-rl' }}>ישויות ומידע</div>
+                  {branches.map((branch) => (
+                    <TabsTrigger
+                      key={branch || 'ראשי'}
+                      value={branch || 'ראשי'}
+                      className="rounded-xl px-5 py-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md text-grey font-bold transition-all text-sm"
+                    >
+                      {branch || 'ראשי'}
+                    </TabsTrigger>
+                  ))}
+                  {!client.parent_id && (
+                    <TabsTrigger
+                      value="sub-clients"
+                      className="rounded-xl px-5 py-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md text-grey font-bold transition-all text-sm"
+                    >
+                      משנה{childCount > 0 ? ` (${childCount})` : ''}
+                    </TabsTrigger>
+                  )}
+                </div>
+
+                {/* Financial Category */}
+                <div className="flex items-center bg-emerald-50/50 rounded-2xl p-1 gap-1 border border-emerald-100/50 shrink-0">
+                  <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-600/50 rotate-180" style={{ writingMode: 'vertical-rl' }}>כספים</div>
+                  <TabsTrigger
+                    value="billing"
+                    className="rounded-xl px-5 py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-500 font-bold transition-all text-sm"
+                  >
+                    תשלומים ויעדים
+                  </TabsTrigger>
+                </div>
+
+                {/* Resources Category */}
+                <div className="flex items-center bg-purple-50/50 rounded-2xl p-1 gap-1 border border-purple-100/50 shrink-0">
+                  <div className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-purple-600/50 rotate-180" style={{ writingMode: 'vertical-rl' }}>משאבים</div>
+                  <TabsTrigger
+                    value="notes"
+                    className="rounded-xl px-5 py-2 data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md text-slate-500 font-bold transition-all text-sm"
+                  >
+                    פעילות ופתקים
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="links"
+                    className="rounded-xl px-5 py-2 data-[state=active]:bg-purple-500 data-[state=active]:text-white data-[state=active]:shadow-md text-grey font-bold transition-all text-sm"
+                  >
+                    קישורים
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="credentials"
+                    className="rounded-xl px-5 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md text-grey font-bold transition-all text-sm"
+                  >
+                    סיסמאות
+                  </TabsTrigger>
+                </div>
+
+                {/* Settings Category */}
+                <div className="flex items-center bg-slate-800/5 rounded-2xl p-1 gap-1 border border-slate-800/10 shrink-0">
+                  <TabsTrigger
+                    value="settings"
+                    className="rounded-xl px-5 py-2 data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=active]:shadow-md text-grey font-bold transition-all text-sm"
+                  >
+                    הגדרות מודולים
+                  </TabsTrigger>
+                </div>
+
+              </TabsList>
+            </div>
 
             {/* Dynamic tabs for each branch */}
             {branches.map((branch) => (
-              <TabsContent key={branch || 'ראשי'} value={branch || 'ראשי'}>
+              <TabsContent key={branch || 'ראשי'} value={branch || 'ראשי'} className="mt-0 outline-none">
                 <BranchTablesTab
                   clientId={clientId}
                   schemas={schemasByBranch.get(branch)!}
@@ -248,38 +349,57 @@ export default function ClientDetailPage() {
               </TabsContent>
             ))}
 
-            <TabsContent value="sub-clients">
-              <SubClientsTab parentClientId={clientId} parentClientName={client.name} />
-            </TabsContent>
-            <TabsContent value="credentials">
-              <CredentialsVault clientId={clientId} />
-            </TabsContent>
-            <TabsContent value="billing">
+            {!client.parent_id && (
+              <TabsContent value="sub-clients" className="mt-0 outline-none">
+                <SubClientsTab parentClientId={clientId} parentClientName={client.name} />
+              </TabsContent>
+            )}
+
+            <TabsContent value="billing" className="mt-0 outline-none">
               <BillingPayments
                 clientId={clientId}
                 clientName={client.name}
                 clientPhone={client.phone}
               />
             </TabsContent>
-            <TabsContent value="notes">
-              <div className="space-y-6">
-                <StickyNotes clientId={clientId} />
-                <div className="border-t pt-6">
-                  <Reminders clientId={clientId} clientName={client.name} />
+
+            <TabsContent value="notes" className="mt-0 outline-none">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                  <StickyNotes clientId={clientId} />
+                  <div className="bg-white/40 backdrop-blur-md rounded-[2.5rem] border border-border/50 p-6 shadow-sm">
+                    <Reminders clientId={clientId} clientName={client.name} />
+                  </div>
+                </div>
+                <div className="bg-white/40 backdrop-blur-md rounded-[2.5rem] border border-border/50 p-6 shadow-sm">
+                  <h3 className="text-xl font-black text-navy tracking-tight mb-6">ציר זמן פעילות</h3>
+                  <div className="max-h-[600px] overflow-y-auto pr-2 no-scrollbar">
+                    <Timeline clientId={clientId} />
+                  </div>
                 </div>
               </div>
             </TabsContent>
-            <TabsContent value="links">
+
+            <TabsContent value="links" className="mt-0 outline-none">
               <ClientLinks clientId={clientId} />
             </TabsContent>
-            <TabsContent value="settings">
+
+            <TabsContent value="credentials" className="mt-0 outline-none">
+              <CredentialsVault clientId={clientId} />
+            </TabsContent>
+
+            <TabsContent value="settings" className="mt-0 outline-none">
               <ModuleManager clientId={clientId} onModuleUpdate={handleModuleUpdate} />
             </TabsContent>
           </Tabs>
         )
       })()}
 
-      <ChatWidget clientId={client.id} clientName={client.name} senderRole='admin' />
+      <ChatWidget
+        clientId={client.parent_id || client.id}
+        clientName={parentClient?.name || client.name}
+        senderRole='admin'
+      />
     </div>
   )
 }

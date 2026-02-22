@@ -548,66 +548,104 @@ export function BranchDashboard({ clientId, branchName, schemas, readOnly = fals
     const crossTotalEntries = Object.values(crossTotals).filter(t => t.sum !== 0)
 
     return (
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="space-y-8 animate-fade-in-up">
+        <div className="flex items-center justify-between flex-wrap gap-4 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-border/50 shadow-sm">
           <div>
-            <h3 className="text-lg font-semibold">דשבורד תחום — סיכום אוטומטי</h3>
-            <p className="text-sm text-grey mt-1">סיכום של כל הטבלאות בתחום זה. לחץ &quot;הגדרות מתקדמות&quot; להתאמה אישית.</p>
+            <h3 className="text-xl font-black text-navy tracking-tight">כיוון דשבורד — סיכום אוטומטי</h3>
+            <p className="text-xs font-medium text-grey mt-1">ניתוח נתונים אוטומטי מכל הטבלאות המשויכות לסניף זה</p>
           </div>
           {!readOnly && (
-            <Button variant="outline" onClick={() => setIsEditing(true)}>הגדרות מתקדמות</Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditing(true)}
+              className="rounded-xl border-border/50 font-bold hover:bg-white hover:text-primary h-11 px-6 shadow-sm"
+            >
+              הגדרות מתקדמות
+            </Button>
           )}
         </div>
 
         {loading ? (
-          <div className="text-center py-8 text-grey">טוען נתונים...</div>
+          <div className="text-center py-20 bg-white/30 backdrop-blur-md rounded-[2.5rem] border border-border/50">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-grey font-bold">מנתח נתונים ומחשב מדדים...</p>
+          </div>
         ) : (
           <>
-            {/* Cross-table totals */}
+            {/* Bento-grid Cross-table totals */}
             {crossTotalEntries.length > 0 && (
-              <div>
-                <h4 className="text-md font-semibold mb-3">סיכום כולל (חוצה טבלאות)</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                    <div className="text-sm text-blue-600 font-medium">סה&quot;כ רשומות</div>
-                    <div className="text-2xl font-bold text-blue-800">{totalRecords.toLocaleString('he-IL')}</div>
-                    <div className="text-xs text-blue-500">{autoDetectSummary?.moduleSummaries.length || 0} טבלאות</div>
-                  </div>
-                  {crossTotalEntries.slice(0, 3).map((total, i) => (
-                    <div key={i} className="bg-emerald/5 rounded-lg p-4 border border-emerald/20">
-                      <div className="text-sm text-emerald font-medium">סה&quot;כ {total.label}</div>
-                      <div className="text-2xl font-bold text-navy">₪{total.sum.toLocaleString('he-IL')}</div>
-                      <div className="text-xs text-grey">ממוצע: ₪{total.count > 0 ? (total.sum / total.count).toLocaleString('he-IL', { maximumFractionDigits: 1 }) : '0'}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-blue-600 p-6 rounded-[2.5rem] text-white shadow-xl shadow-blue-600/20 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl transition-transform duration-700 group-hover:scale-150" />
+                  <div className="relative z-10 flex flex-col h-full justify-between">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-70">סה&quot;כ רשומות</span>
+                      <div className="text-4xl font-black mt-1 mb-2">{totalRecords.toLocaleString('he-IL')}</div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-white/20 px-2 py-1 rounded-full font-bold">{autoDetectSummary?.moduleSummaries.length || 0} טבלאות</span>
+                    </div>
+                  </div>
                 </div>
+
+                {crossTotalEntries.slice(0, 3).map((total, i) => {
+                  const colors = [
+                    'bg-emerald-600 shadow-lg shadow-emerald-600/20',
+                    'bg-amber-600 shadow-lg shadow-amber-600/20',
+                    'bg-purple-600 shadow-lg shadow-purple-600/20'
+                  ]
+                  const colorClass = colors[i % colors.length]
+
+                  return (
+                    <div key={i} className={`${colorClass} p-6 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden group`}>
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl transition-transform duration-700 group-hover:scale-150" />
+                      <div className="relative z-10 flex flex-col h-full justify-between">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-70">סה&quot;כ {total.label}</span>
+                          <div className="text-4xl font-black mt-1 mb-2" dir="ltr">₪{total.sum.toLocaleString('he-IL')}</div>
+                        </div>
+                        <div className="text-[10px] font-bold opacity-80">
+                          ממוצע: ₪{total.count > 0 ? (total.sum / total.count).toLocaleString('he-IL', { maximumFractionDigits: 1 }) : '0'}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
 
-            {/* Per-module summaries */}
-            <div>
-              <h4 className="text-md font-semibold mb-3">פירוט לפי טבלה</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Per-module summaries with glass-cards */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-black text-navy uppercase tracking-widest px-2">פירוט לפי טבלה</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {autoDetectSummary?.moduleSummaries.map(mod => (
-                  <div key={mod.moduleName} className="border rounded-lg p-4 bg-white">
-                    <div className="flex items-center justify-between mb-2">
-                      <h5 className="font-semibold text-navy">{mod.moduleName}</h5>
-                      <span className="text-xs bg-grey/10 px-2 py-1 rounded">{mod.recordCount} רשומות</span>
+                  <div key={mod.moduleName} className="glass-card hover-lift p-6 rounded-[2rem] border border-border/50 bg-white/60 relative overflow-hidden group">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                          <span className="font-black text-xs">{mod.moduleName.charAt(0)}</span>
+                        </div>
+                        <h5 className="font-black text-navy">{mod.moduleName}</h5>
+                      </div>
+                      <span className="text-[10px] font-black bg-navy/5 text-navy/60 px-3 py-1 rounded-full">{mod.recordCount} רשומות</span>
                     </div>
                     {mod.numericStats.length > 0 ? (
-                      <div className="space-y-1">
+                      <div className="space-y-3">
                         {mod.numericStats.map(stat => (
-                          <div key={stat.columnName} className="flex items-center justify-between text-sm">
-                            <span className="text-grey">{stat.columnLabel}:</span>
-                            <div className="flex gap-3">
-                              <span className="font-medium">סה&quot;כ ₪{stat.sum.toLocaleString('he-IL')}</span>
-                              <span className="text-grey">ממוצע ₪{stat.avg.toLocaleString('he-IL', { maximumFractionDigits: 1 })}</span>
+                          <div key={stat.columnName} className="bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50 flex items-center justify-between group/stat hover:bg-white transition-colors">
+                            <span className="text-xs font-bold text-grey">{stat.columnLabel}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="font-black text-navy text-sm">₪{stat.sum.toLocaleString('he-IL')}</span>
+                              <div className="hidden sm:block w-px h-3 bg-slate-200" />
+                              <span className="hidden sm:block text-[10px] font-medium text-grey">ממוצע: ₪{stat.avg.toLocaleString('he-IL', { maximumFractionDigits: 1 })}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-grey">אין עמודות מספריות בטבלה זו</p>
+                      <div className="py-4 text-center">
+                        <p className="text-xs text-grey font-medium">אין עמודות מספריות בטבלה זו</p>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -615,14 +653,17 @@ export function BranchDashboard({ clientId, branchName, schemas, readOnly = fals
             </div>
 
             {autoDetectSummary?.moduleSummaries.length === 0 && (
-              <div className="text-center py-8 text-grey">
-                <p className="mb-2">אין נתונים בטבלאות עדיין.</p>
-                <p className="text-sm">הוסף רשומות בטבלאות כדי לראות סיכום אוטומטי.</p>
+              <div className="text-center py-20 bg-white/40 backdrop-blur-sm border-2 border-dashed rounded-[2.5rem] border-grey/20">
+                <div className="w-16 h-16 bg-grey/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="h-8 w-8 text-grey/30">📊</div>
+                </div>
+                <p className="text-grey font-bold mb-2">אין נתונים בטבלאות עדיין.</p>
+                <p className="text-xs text-grey">הוסף רשומות בטבלאות כדי לראות סיכום אוטומטי וניתוח נתונים.</p>
               </div>
             )}
           </>
         )}
-      </Card>
+      </div>
     )
   }
 
@@ -1065,121 +1106,147 @@ export function BranchDashboard({ clientId, branchName, schemas, readOnly = fals
   }
 
   return (
-    <Card className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-6 animate-fade-in-up">
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-border/50 shadow-sm">
         <div>
-          <h3 className="text-lg font-semibold">דשבורד תחום</h3>
-          <p className="text-sm text-grey">
-            טבלה ראשית: {config.primary_module_name} · תצוגה לפי {displayColumnLabel || config.primary_display_column_key}
+          <h3 className="text-xl font-black text-navy tracking-tight">דשבורד תחום</h3>
+          <p className="text-xs font-bold text-grey mt-1">
+            טבלה ראשית: <span className="text-primary">{config.primary_module_name}</span> · תצוגה לפי <span className="text-navy">{displayColumnLabel || config.primary_display_column_key}</span>
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={loadRecords} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={loadRecords}
+            disabled={loading}
+            className="rounded-xl border-border/50 font-bold hover:bg-white h-11 px-6 shadow-sm"
+          >
             רענן
           </Button>
           {!readOnly && (
-            <Button variant="outline" onClick={() => setIsEditing(true)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditing(true)}
+              className="rounded-xl border-border/50 font-bold hover:bg-white h-11 px-6 shadow-sm"
+            >
               ערוך הגדרות
             </Button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <Label>חיפוש</Label>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/40 backdrop-blur-md p-6 rounded-[2.5rem] border border-border/50 shadow-sm">
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase text-grey tracking-widest px-1">חיפוש חופשי</Label>
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="חפש לפי שם או מזהה"
+            placeholder="חפש לפי שם או מזהה..."
+            className="rounded-2xl border-border/30 bg-white/50 h-10 px-4 focus:bg-white transition-all"
           />
         </div>
-        <div>
-          <Label>מתאריך</Label>
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase text-grey tracking-widest px-1">מתאריך</Label>
           <Input
             type="date"
             value={dateRange.from || ''}
             onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+            className="rounded-2xl border-border/30 bg-white/50 h-10 px-4 focus:bg-white transition-all"
           />
         </div>
-        <div>
-          <Label>עד תאריך</Label>
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase text-grey tracking-widest px-1">עד תאריך</Label>
           <Input
             type="date"
             value={dateRange.to || ''}
             onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+            className="rounded-2xl border-border/30 bg-white/50 h-10 px-4 focus:bg-white transition-all"
           />
         </div>
       </div>
 
-      <div className="rounded-md border overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-grey/10">
-              <th className="p-3 text-center text-sm font-semibold">
-                {displayColumnLabel || 'פריט'}
-              </th>
-              {config.metrics.map(metric => (
-                <th key={metric.id} className="p-3 text-center text-sm font-semibold">
-                  {metric.label}
+      <div className="rounded-[2.5rem] border border-border/50 bg-white/60 backdrop-blur-md overflow-hidden shadow-xl shadow-navy/5">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-border/30">
+                <th className="p-5 text-right text-xs font-black text-navy uppercase tracking-widest">
+                  {displayColumnLabel || 'פריט'}
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPrimaryRecords.map(record => {
-              const keyValue = record.data[config.primary_key_column_key]
-              const displayValue = record.data[config.primary_display_column_key] ?? keyValue
-              const rowKey = String(keyValue ?? record.id)
-              return (
-                <tr key={rowKey} className="border-b hover:bg-grey/5">
-                  <td className="p-2 text-center font-medium">
-                    {displayValue ?? '-'}
+                {config.metrics.map(metric => (
+                  <th key={metric.id} className="p-5 text-center text-xs font-black text-navy uppercase tracking-widest">
+                    {metric.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/10">
+              {filteredPrimaryRecords.map((record, idx) => {
+                const keyValue = record.data[config.primary_key_column_key]
+                const displayValue = record.data[config.primary_display_column_key] ?? keyValue
+                const rowKey = String(keyValue ?? record.id)
+                return (
+                  <tr key={rowKey} className="hover:bg-primary/5 transition-colors group">
+                    <td className="p-4 text-right">
+                      <div className="font-bold text-navy group-hover:text-primary transition-colors pr-1 border-r-2 border-transparent group-hover:border-primary">
+                        {displayValue ?? '-'}
+                      </div>
+                    </td>
+                    {config.metrics.map(metric => {
+                      const value = metricResults.values[metric.id]?.[String(keyValue)] ?? 0
+                      const isCount = metric.type === 'standard' && metric.operation === 'COUNT'
+                      const display = isCount
+                        ? value.toLocaleString('he-IL')
+                        : `₪${value.toLocaleString('he-IL')}`
+                      return (
+                        <td key={metric.id} className="p-4 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-full text-sm font-black transition-all ${value > 0 ? 'bg-emerald/10 text-emerald' :
+                            value < 0 ? 'bg-rose-500/10 text-rose-500' :
+                              'bg-slate-100 text-slate-400'
+                            }`}>
+                            {display}
+                          </span>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+              {filteredPrimaryRecords.length === 0 && (
+                <tr>
+                  <td colSpan={config.metrics.length + 1} className="p-12 text-center">
+                    <div className="text-grey font-bold">אין נתונים להצגה</div>
+                    <p className="text-xs text-grey/60 mt-1">נסה לשנות את מסנני החיפוש או התאריכים</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {filteredPrimaryRecords.length > 0 && (
+              <tfoot>
+                <tr className="bg-navy/5 border-t-2 border-border/50">
+                  <td className="p-5 text-right">
+                    <span className="text-xs font-black text-navy uppercase tracking-widest">סה&quot;כ</span>
                   </td>
                   {config.metrics.map(metric => {
-                    const value = metricResults.values[metric.id]?.[String(keyValue)] ?? 0
+                    const total = metricResults.totals[metric.id] ?? 0
                     const isCount = metric.type === 'standard' && metric.operation === 'COUNT'
                     const display = isCount
-                      ? value.toLocaleString('he-IL')
-                      : `₪${value.toLocaleString('he-IL')}`
+                      ? total.toLocaleString('he-IL')
+                      : `₪${total.toLocaleString('he-IL')}`
                     return (
-                      <td key={metric.id} className="p-2 text-center">
-                        {display}
+                      <td key={metric.id} className="p-5 text-center">
+                        <span className="text-lg font-black text-navy" dir="ltr">
+                          {display}
+                        </span>
                       </td>
                     )
                   })}
                 </tr>
-              )
-            })}
-            {filteredPrimaryRecords.length === 0 && (
-              <tr>
-                <td colSpan={config.metrics.length + 1} className="p-6 text-center text-grey">
-                  אין נתונים להצגה
-                </td>
-              </tr>
+              </tfoot>
             )}
-          </tbody>
-          {filteredPrimaryRecords.length > 0 && (
-            <tfoot>
-              <tr className="border-t bg-grey/5">
-                <td className="p-2 text-center text-sm font-semibold">סה&quot;כ</td>
-                {config.metrics.map(metric => {
-                  const total = metricResults.totals[metric.id] ?? 0
-                  const isCount = metric.type === 'standard' && metric.operation === 'COUNT'
-                  const display = isCount
-                    ? total.toLocaleString('he-IL')
-                    : `₪${total.toLocaleString('he-IL')}`
-                  return (
-                    <td key={metric.id} className="p-2 text-center text-sm font-semibold">
-                      {display}
-                    </td>
-                  )
-                })}
-              </tr>
-            </tfoot>
-          )}
-        </table>
+          </table>
+        </div>
       </div>
-    </Card>
+    </div>
   )
 }
