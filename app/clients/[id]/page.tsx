@@ -8,20 +8,33 @@ import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { supabase, type Client } from '@/lib/supabase'
 import { EditClientDialog } from '@/components/edit-client-dialog'
-import { CredentialsVault } from '@/components/credentials-vault'
-import { BillingPayments } from '@/components/billing-payments'
 import { ClientShareLink } from '@/components/client-share-link'
 import { ClientLinks } from '@/components/client-links'
 import { StickyNotes } from '@/components/sticky-notes'
 import { Reminders } from '@/components/reminders'
-import { ModuleManager } from '@/components/module-manager'
-import { ModuleDataTab } from '@/components/module-data-tab'
-import { BranchTablesTab } from '@/components/branch-tables-tab'
-import { SubClientsTab } from '@/components/sub-clients-tab'
 import { getClientSchemas } from '@/lib/actions/schema'
 import type { ClientSchema } from '@/lib/supabase'
 import { ChatWidget } from '@/components/chat/chat-widget'
 import { Timeline } from '@/components/timeline'
+import dynamic from 'next/dynamic'
+
+// ── Code splitting: lazy-load heavy tab components ──
+// These are only loaded when the user actually clicks on their respective tab
+const BillingPayments = dynamic(() => import('@/components/billing-payments').then(m => ({ default: m.BillingPayments })), {
+  loading: () => <div className="py-12 text-center text-grey animate-pulse">טוען תשלומים...</div>,
+})
+const ModuleManager = dynamic(() => import('@/components/module-manager').then(m => ({ default: m.ModuleManager })), {
+  loading: () => <div className="py-12 text-center text-grey animate-pulse">טוען הגדרות...</div>,
+})
+const BranchTablesTab = dynamic(() => import('@/components/branch-tables-tab').then(m => ({ default: m.BranchTablesTab })), {
+  loading: () => <div className="py-12 text-center text-grey animate-pulse">טוען טבלאות...</div>,
+})
+const SubClientsTab = dynamic(() => import('@/components/sub-clients-tab').then(m => ({ default: m.SubClientsTab })), {
+  loading: () => <div className="py-12 text-center text-grey animate-pulse">טוען לקוחות משנה...</div>,
+})
+const CredentialsVault = dynamic(() => import('@/components/credentials-vault').then(m => ({ default: m.CredentialsVault })), {
+  loading: () => <div className="py-12 text-center text-grey animate-pulse">טוען סיסמאות...</div>,
+})
 
 export default function ClientDetailPage() {
   const params = useParams()
@@ -99,8 +112,11 @@ export default function ClientDetailPage() {
   }, [clientId])
 
   useEffect(() => {
-    loadClient()
-    loadSchemas()
+    const loadAll = async () => {
+      // ── Optimized: parallel loading of client + schemas ──
+      await Promise.all([loadClient(), loadSchemas()])
+    }
+    loadAll()
   }, [loadClient, loadSchemas])
 
   const handleModuleUpdate = () => {

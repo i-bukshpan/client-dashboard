@@ -10,28 +10,14 @@ import { GlobalSearch } from '@/components/global-search'
 import { BulkActionsToolbar } from '@/components/bulk-actions-toolbar'
 import { EmptyState } from '@/components/empty-state'
 import { supabase, type Client, type Payment, type Reminder } from '@/lib/supabase'
-import { getClientTags, getAllTags } from '@/lib/actions/tags'
+import { getAllTags } from '@/lib/actions/tags'
 import type { ClientTag } from '@/lib/actions/tags'
 import Link from 'next/link'
 import { logAction } from '@/lib/audit-log'
 import { deleteClient } from '@/lib/actions/clients'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { loadDashboardData, refreshClientCounts, type ClientWithData, type DashboardAlerts } from '@/lib/actions/dashboard'
 
-
-interface ClientWithData extends Client {
-  currentBalance: number
-  monthlyIncome: number
-  monthlyExpense: number
-  tags?: ClientTag[]
-  pendingPaymentsCount: number
-  openRemindersCount: number
-  unreadMessagesCount: number
-  childCount: number
-  monthlyTrends?: {
-    income: Array<{ month: string; value: number }>
-    expense: Array<{ month: string; value: number }>
-  }
-}
 
 export default function Dashboard() {
   const [clients, setClients] = useState<ClientWithData[]>([])
@@ -48,311 +34,53 @@ export default function Dashboard() {
   const [availableTags, setAvailableTags] = useState<ClientTag[]>([])
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('all')
 
-  const loadClients = async () => {
+  // ── Optimized: Single batched server action for all dashboard data ──
+  const loadAllDashboardData = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase.from('clients').select('*').is('parent_id', null).order('created_at', { ascending: false })
+      setAlertsLoading(true)
 
-      if (error) {
-        throw error
-      }
+      const result = await loadDashboardData()
 
-      if (!data || data.length === 0) {
-        setClients([])
-        setFilteredClients([])
+      if (!result.success || !result.data) {
+        console.error('Error loading dashboard:', result.error)
         return
       }
 
-      // Load all payments in a single query
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-
-      const { data: allPayments } = await supabase
-        .from('payments')
-        .select('client_id, amount, payment_status, payment_date, payment_type')
-
-      // Load all pending reminders count
-      const { data: allReminders } = await supabase
-        .from('reminders')
-        .select('client_id')
-        .eq('is_completed', false)
-
-      // Load all unread messages count
-      const { data: allUnread } = await supabase
-        .from('messages')
-        .select('client_id')
-        .eq('is_read', false)
-        .eq('sender_role', 'client')
-
-      // Compute per-client stats
-      const paymentsByClient: Record<string, {
-        balance: number
-        monthlyIncome: number
-        monthlyExpense: number
-        pendingCount: number
-        trends: { income: Array<{ month: string; value: number }>; expense: Array<{ month: string; value: number }> }
-      }> = {}
-
-      // Calculate last 3 months for trends
-      const last3Months: Array<{ start: Date; end: Date; label: string }> = []
-      for (let i = 2; i >= 0; i--) {
-        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
-        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59)
-        last3Months.push({
-          start: monthStart,
-          end: monthEnd,
-          label: `${monthDate.getMonth() + 1}/${monthDate.getFullYear()}`
-        })
-      }
-
-      if (allPayments) {
-        for (const p of allPayments) {
-          if (!paymentsByClient[p.client_id]) {
-            paymentsByClient[p.client_id] = {
-              balance: 0,
-              monthlyIncome: 0,
-              monthlyExpense: 0,
-              pendingCount: 0,
-              trends: {
-                income: last3Months.map(m => ({ month: m.label, value: 0 })),
-                expense: last3Months.map(m => ({ month: m.label, value: 0 }))
-              }
-            }
-          }
-          const stats = paymentsByClient[p.client_id]
-          if (p.payment_status === 'שולם') {
-            const isIncome = !p.payment_type || p.payment_type === 'income'
-            const isExpense = p.payment_type === 'expense' || p.payment_type === 'rent' || p.payment_type === 'utility' || p.payment_type === 'salary'
-            if (isIncome) stats.balance += p.amount
-            if (isExpense) stats.balance -= p.amount
-
-            // Monthly stats (current month)
-            if (p.payment_date >= startOfMonth && p.payment_date <= endOfMonth) {
-              if (isIncome) stats.monthlyIncome += p.amount
-              if (isExpense) stats.monthlyExpense += p.amount
-            }
-
-            // Trends calculation (last 3 months)
-            const paymentDate = new Date(p.payment_date)
-            last3Months.forEach((month, idx) => {
-              if (paymentDate >= month.start && paymentDate <= month.end) {
-                if (isIncome) stats.trends.income[idx].value += p.amount
-                if (isExpense) stats.trends.expense[idx].value += p.amount
-              }
-            })
-          }
-          if (p.payment_status === 'ממתין') {
-            stats.pendingCount++
-          }
-        }
-      }
-
-      // Also aggregate from financial tables (schemas with financial_type set)
-      try {
-        const { data: financialSchemas } = await supabase
-          .from('client_schemas')
-          .select('*')
-          .not('financial_type', 'is', null)
-          .not('amount_column', 'is', null)
-
-        if (financialSchemas && financialSchemas.length > 0) {
-          // Group schemas by client_id
-          const schemasByClient: Record<string, typeof financialSchemas> = {}
-          for (const schema of financialSchemas) {
-            if (!schemasByClient[schema.client_id]) schemasByClient[schema.client_id] = []
-            schemasByClient[schema.client_id].push(schema)
-          }
-
-          // Load records for each client's financial tables
-          for (const [cId, schemas] of Object.entries(schemasByClient)) {
-            if (!paymentsByClient[cId]) {
-              paymentsByClient[cId] = {
-                balance: 0, monthlyIncome: 0, monthlyExpense: 0, pendingCount: 0,
-                trends: { income: last3Months.map(m => ({ month: m.label, value: 0 })), expense: last3Months.map(m => ({ month: m.label, value: 0 })) }
-              }
-            }
-            const stats = paymentsByClient[cId]
-
-            for (const schema of schemas) {
-              const { data: records } = await supabase
-                .from('client_data_records')
-                .select('data, entry_date')
-                .eq('client_id', cId)
-                .eq('module_type', schema.module_name)
-
-              if (!records) continue
-              for (const record of records) {
-                const amount = parseFloat(record.data?.[schema.amount_column]) || 0
-                if (amount === 0) continue
-                const dateStr = record.data?.[schema.date_column] || record.entry_date || ''
-                const isIncome = schema.financial_type === 'income'
-
-                if (isIncome) stats.balance += amount
-                else stats.balance -= amount
-
-                // Monthly stats (current month)
-                if (dateStr >= startOfMonth && dateStr <= endOfMonth) {
-                  if (isIncome) stats.monthlyIncome += amount
-                  else stats.monthlyExpense += amount
-                }
-
-                // Trends
-                const recordDate = new Date(dateStr)
-                if (!isNaN(recordDate.getTime())) {
-                  last3Months.forEach((month, idx) => {
-                    if (recordDate >= month.start && recordDate <= month.end) {
-                      if (isIncome) stats.trends.income[idx].value += amount
-                      else stats.trends.expense[idx].value += amount
-                    }
-                  })
-                }
-              }
-            }
-          }
-        }
-      } catch (financialError) {
-        console.error('Error loading financial table data:', financialError)
-      }
-
-      const remindersByClient: Record<string, number> = {}
-      if (allReminders) {
-        for (const r of allReminders) {
-          if (r.client_id) {
-            remindersByClient[r.client_id] = (remindersByClient[r.client_id] || 0) + 1
-          }
-        }
-      }
-
-      const unreadByClient: Record<string, number> = {}
-      if (allUnread) {
-        for (const m of allUnread) {
-          if (m.client_id) {
-            unreadByClient[m.client_id] = (unreadByClient[m.client_id] || 0) + 1
-          }
-        }
-      }
-
-      // Count children for each client
-      const { data: childCounts } = await supabase
-        .from('clients')
-        .select('parent_id')
-        .not('parent_id', 'is', null)
-
-      const childCountMap: Record<string, number> = {}
-      if (childCounts) {
-        for (const c of childCounts) {
-          if (c.parent_id) {
-            childCountMap[c.parent_id] = (childCountMap[c.parent_id] || 0) + 1
-          }
-        }
-      }
-
-      const clientsWithData: ClientWithData[] = data.map((client) => {
-        const stats = paymentsByClient[client.id]
-        return {
-          ...client,
-          currentBalance: stats?.balance || 0,
-          monthlyIncome: stats?.monthlyIncome || 0,
-          monthlyExpense: stats?.monthlyExpense || 0,
-          pendingPaymentsCount: stats?.pendingCount || 0,
-          openRemindersCount: remindersByClient[client.id] || 0,
-          unreadMessagesCount: unreadByClient[client.id] || 0,
-          childCount: childCountMap[client.id] || 0,
-          monthlyTrends: stats?.trends,
-          tags: [],
-        }
-      })
-
-      setClients(clientsWithData)
-      setFilteredClients(clientsWithData)
-
-      // Load tags for all clients in parallel
-      const tagPromises = clientsWithData.map(client => getClientTags(client.id))
-      const tagResults = await Promise.all(tagPromises)
-      const tagsMap: Record<string, ClientTag[]> = {}
-      clientsWithData.forEach((client, i) => {
-        if (tagResults[i].success && tagResults[i].tags) {
-          tagsMap[client.id] = tagResults[i].tags!
-        }
-      })
-
-      // Update clients with tags
-      const finalClients = clientsWithData.map(client => ({
-        ...client,
-        tags: tagsMap[client.id] || []
-      }))
-      setClients(finalClients)
+      setClients(result.data.clients)
+      setFilteredClients(result.data.clients)
+      setPendingPayments(result.data.alerts.pendingPayments)
+      setUpcomingReminders(result.data.alerts.upcomingReminders)
+      setAvailableTags(result.data.availableTags)
     } catch (error) {
-      console.error('Error loading clients:', error)
+      console.error('Error loading dashboard data:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadAlerts = async () => {
-    try {
-      setAlertsLoading(true)
-
-      // Load pending payments
-      const { data: payments, error: paymentsError } = await supabase
-        .from('payments')
-        .select('*, clients(*)')
-        .eq('payment_status', 'ממתין')
-        .order('payment_date', { ascending: true })
-        .limit(10)
-
-      if (paymentsError) throw paymentsError
-
-      // Load reminders due in next 7 days
-      const nextWeek = new Date()
-      nextWeek.setDate(nextWeek.getDate() + 7)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const { data: reminders, error: remindersError } = await supabase
-        .from('reminders')
-        .select('*, clients(*)')
-        .eq('is_completed', false)
-        .lte('due_date', nextWeek.toISOString())
-        .gte('due_date', today.toISOString())
-        .order('due_date', { ascending: true })
-        .limit(10)
-
-      if (remindersError) throw remindersError
-
-      setPendingPayments((payments || []) as Array<Payment & { client: Client }>)
-      setUpcomingReminders((reminders || []) as Array<Reminder & { client: Client | null }>)
-    } catch (error) {
-      console.error('Error loading alerts:', error)
-    } finally {
       setAlertsLoading(false)
     }
   }
 
-  const loadAvailableTags = async () => {
-    const result = await getAllTags()
-    if (result.success && result.tags) {
-      setAvailableTags(result.tags)
-    }
-  }
-
   useEffect(() => {
-    loadClients()
-    loadAlerts()
-    loadAvailableTags()
+    loadAllDashboardData()
 
-    // Realtime subscription for unread message counts
+    // Realtime subscription — lightweight refresh instead of full reload
     const channel = supabase
       .channel('dashboard-unread-counts')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'messages'
-      }, () => {
-        // If a new client message arrives, or an existing one is updated/deleted, refresh counts
-        loadClients()
+      }, async () => {
+        // Lightweight: only refresh counts, not full dashboard
+        const result = await refreshClientCounts()
+        if (result.success && result.counts) {
+          setClients(prev => prev.map(client => ({
+            ...client,
+            unreadMessagesCount: result.counts![client.id]?.unread ?? client.unreadMessagesCount,
+            pendingPaymentsCount: result.counts![client.id]?.pending ?? client.pendingPaymentsCount,
+            openRemindersCount: result.counts![client.id]?.reminders ?? client.openRemindersCount,
+          })))
+        }
       })
       .subscribe()
 
@@ -360,20 +88,6 @@ export default function Dashboard() {
       supabase.removeChannel(channel)
     }
   }, [])
-
-  const loadClientTags = async (clientIds: string[]) => {
-    const tagsMap: Record<string, ClientTag[]> = {}
-    for (const clientId of clientIds) {
-      const result = await getClientTags(clientId)
-      if (result.success && result.tags) {
-        tagsMap[clientId] = result.tags
-      }
-    }
-    setClients(prev => prev.map(client => ({
-      ...client,
-      tags: tagsMap[client.id] || []
-    })))
-  }
 
   useEffect(() => {
     let filtered = [...clients]
@@ -452,6 +166,11 @@ export default function Dashboard() {
         currentBalance: 0,
         monthlyIncome: 0,
         monthlyExpense: 0,
+        tags: [],
+        pendingPaymentsCount: 0,
+        openRemindersCount: 0,
+        unreadMessagesCount: 0,
+        childCount: 0,
       }
 
       setClients([clientWithData, ...clients])
@@ -475,7 +194,7 @@ export default function Dashboard() {
         setFilteredClients(filteredClients.filter(c => c.id !== clientId))
         setSelectedClientIds(selectedClientIds.filter(id => id !== clientId))
         // Reload alerts in case this client had pending items
-        loadAlerts()
+        loadAllDashboardData()
       } else {
         alert(`שגיאה במחיקת הלקוח: ${result.error}`)
       }
@@ -502,8 +221,7 @@ export default function Dashboard() {
   }
 
   const handleBulkActionComplete = () => {
-    loadClients()
-    loadAlerts()
+    loadAllDashboardData()
   }
 
   const handleClearSelection = () => {
@@ -952,4 +670,3 @@ export default function Dashboard() {
     </div>
   )
 }
-

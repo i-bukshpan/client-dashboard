@@ -21,7 +21,7 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
-  
+
   // Form state
   const [goalType, setGoalType] = useState<'revenue' | 'clients' | 'payments' | 'custom'>('revenue')
   const [targetValue, setTargetValue] = useState('')
@@ -58,27 +58,47 @@ export default function GoalsPage() {
   }
 
   const updateGoalProgresses = async (goalsToUpdate = goals) => {
-    for (const goal of goalsToUpdate.filter(g => g.status === 'active')) {
-      let currentValue = 0
+    const activeGoals = goalsToUpdate.filter(g => g.status === 'active')
+    if (activeGoals.length === 0) return
 
-      if (goal.goal_type === 'revenue') {
-        const summary = await getFinancialSummary()
-        if (summary.success && summary.summary) {
-          currentValue = summary.summary.totalRevenue
+    // ── Optimized: batch all queries in parallel instead of per-goal ──
+    const needsRevenue = activeGoals.some(g => g.goal_type === 'revenue')
+    const needsClients = activeGoals.some(g => g.goal_type === 'clients')
+    const needsPayments = activeGoals.some(g => g.goal_type === 'payments')
+
+    const [revenueResult, clientsCountResult, paymentsCountResult] = await Promise.all([
+      needsRevenue ? getFinancialSummary() : Promise.resolve(null),
+      needsClients ? supabase.from('clients').select('*', { count: 'exact', head: true }) : Promise.resolve(null),
+      needsPayments ? supabase.from('payments').select('*', { count: 'exact', head: true }) : Promise.resolve(null),
+    ])
+
+    const revenueValue = revenueResult?.success && revenueResult?.summary ? revenueResult.summary.totalRevenue : 0
+    const clientsCount = (clientsCountResult as any)?.count || 0
+    const paymentsCount = (paymentsCountResult as any)?.count || 0
+
+    // Update only goals whose value actually changed
+    const updatePromises = activeGoals
+      .map(goal => {
+        let currentValue = 0
+        if (goal.goal_type === 'revenue') currentValue = revenueValue
+        else if (goal.goal_type === 'clients') currentValue = clientsCount
+        else if (goal.goal_type === 'payments') currentValue = paymentsCount
+
+        if (currentValue !== goal.current_value) {
+          return updateGoalProgress(goal.id, currentValue)
         }
-      } else if (goal.goal_type === 'clients') {
-        const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true })
-        currentValue = count || 0
-      } else if (goal.goal_type === 'payments') {
-        const { count } = await supabase.from('payments').select('*', { count: 'exact', head: true })
-        currentValue = count || 0
-      }
+        return null
+      })
+      .filter(Boolean)
 
-      if (currentValue !== goal.current_value) {
-        await updateGoalProgress(goal.id, currentValue)
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises)
+      // Only reload if something actually changed
+      const result = await getGoals()
+      if (result.success && result.goals) {
+        setGoals(result.goals)
       }
     }
-    loadGoals()
   }
 
   const handleOpenDialog = (goal?: Goal) => {
@@ -163,111 +183,127 @@ export default function GoalsPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <div className="text-center py-12">
-          <p className="text-grey">טוען יעדים...</p>
+      <div className="p-6 sm:p-8">
+        <div className="mb-8 animate-pulse">
+          <div className="h-8 w-48 bg-slate-200 dark:bg-slate-700 rounded-lg mb-2" />
+          <div className="h-4 w-64 bg-slate-200 dark:bg-slate-700 rounded" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-56 shimmer rounded-2xl" />
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-8" dir="rtl">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-6 sm:p-8" dir="rtl">
+      <div className="mb-10 flex items-center justify-between animate-fade-in-up">
         <div>
-          <h1 className="text-3xl font-bold text-navy mb-2">מעקב מטרות ויעדים</h1>
-          <p className="text-grey">הגדר ועקוב אחר יעדים עסקיים</p>
+          <h1 className="text-3xl font-extrabold text-navy tracking-tight mb-2">מעקב מטרות ויעדים</h1>
+          <div className="flex items-center gap-2">
+            <div className="h-1 w-12 bg-emerald rounded-full" />
+            <p className="text-grey font-medium">הגדר ועקוב אחר יעדים עסקיים</p>
+          </div>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="gap-2">
+        <Button onClick={() => handleOpenDialog()} className="gap-2 rounded-xl shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5">
           <Plus className="h-4 w-4" />
           הוסף יעד חדש
         </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {goals.map((goal) => {
+        {goals.map((goal, i) => {
           const progress = getProgressPercentage(goal)
           const isAchieved = goal.status === 'achieved'
-          const statusLabels = {
+          const statusLabels: Record<string, string> = {
             active: 'פעיל',
             achieved: 'הושג',
             failed: 'נכשל',
             cancelled: 'בוטל',
           }
+          const statusColors: Record<string, string> = {
+            active: 'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400',
+            achieved: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+            failed: 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400',
+            cancelled: 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400',
+          }
 
           return (
-            <Card key={goal.id} className="p-6">
+            <div key={goal.id} className={`glass-card hover-lift rounded-2xl p-6 animate-fade-in-up relative overflow-hidden ${i > 0 ? `delay-${Math.min(i, 5) * 100}` : ''}`}>
+              {/* Decorative accent */}
+              <div className={`absolute top-0 left-0 w-full h-1 ${isAchieved ? 'bg-gradient-to-r from-emerald to-emerald-300' : 'bg-gradient-to-r from-primary to-blue-300'}`} />
+
               <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Target className="h-5 w-5 text-emerald" />
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-xl ${isAchieved ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-blue-50 dark:bg-blue-500/10'}`}>
+                    <Target className={`h-4.5 w-4.5 ${isAchieved ? 'text-emerald' : 'text-primary'}`} />
+                  </div>
                   <div>
-                    <h3 className="font-semibold text-lg">{goal.title || goal.goal_type}</h3>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      isAchieved ? 'bg-emerald/10 text-emerald' :
-                      goal.status === 'failed' ? 'bg-red/10 text-red' :
-                      'bg-blue/10 text-blue'
-                    }`}>
+                    <h3 className="font-bold text-navy">{goal.title || goal.goal_type}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[goal.status] || statusColors.active}`}>
                       {statusLabels[goal.status]}
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(goal)}>
-                    <Edit className="h-4 w-4" />
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(goal)} className="h-8 w-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <Edit className="h-3.5 w-3.5 text-grey" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(goal.id)} className="text-red-600">
-                    <Trash2 className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(goal.id)} className="h-8 w-8 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-grey hover:text-red-500">
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
 
               {goal.description && (
-                <p className="text-sm text-grey mb-4">{goal.description}</p>
+                <p className="text-sm text-grey mb-4 leading-relaxed">{goal.description}</p>
               )}
 
+              {/* Progress bar */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-grey">התקדמות</span>
-                  <span className="text-sm font-semibold">{progress.toFixed(0)}%</span>
+                  <span className="text-xs font-medium text-grey">התקדמות</span>
+                  <span className="text-sm font-extrabold text-navy">{progress.toFixed(0)}%</span>
                 </div>
-                <div className="w-full bg-grey/20 rounded-full h-2">
+                <div className="w-full bg-slate-200/60 dark:bg-slate-700/50 rounded-full h-2.5 overflow-hidden">
                   <div
-                    className={`h-2 rounded-full transition-all ${
-                      isAchieved ? 'bg-emerald' : 'bg-blue'
-                    }`}
+                    className={`h-2.5 rounded-full transition-all duration-700 ease-out ${isAchieved ? 'bg-gradient-to-r from-emerald to-emerald-400' : 'bg-gradient-to-r from-primary to-blue-400'
+                      }`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>
               </div>
 
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-grey">נוכחי:</span>
-                  <span className="font-semibold">{goal.current_value.toLocaleString()}</span>
+                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-700/30">
+                  <span className="text-grey">נוכחי</span>
+                  <span className="font-bold text-navy">{goal.current_value.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-grey">יעד:</span>
-                  <span className="font-semibold">{goal.target_value.toLocaleString()}</span>
+                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-700/30">
+                  <span className="text-grey">יעד</span>
+                  <span className="font-bold text-navy">{goal.target_value.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-grey">תאריך יעד:</span>
-                  <span className="font-semibold">{new Date(goal.target_date).toLocaleDateString('he-IL')}</span>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-grey">תאריך יעד</span>
+                  <span className="font-bold text-navy">{new Date(goal.target_date).toLocaleDateString('he-IL')}</span>
                 </div>
               </div>
-            </Card>
+            </div>
           )
         })}
       </div>
 
       {goals.length === 0 && (
-        <Card className="p-12 text-center">
-          <Target className="h-12 w-12 text-grey mx-auto mb-4" />
-          <p className="text-grey mb-4">אין יעדים מוגדרים</p>
-          <Button onClick={() => handleOpenDialog()} className="gap-2">
+        <div className="glass-card rounded-2xl p-16 text-center animate-fade-in-up">
+          <Target className="h-16 w-16 text-grey/20 mx-auto mb-4" />
+          <p className="text-grey font-medium mb-5">אין יעדים מוגדרים</p>
+          <Button onClick={() => handleOpenDialog()} className="gap-2 rounded-xl shadow-lg shadow-primary/20">
             <Plus className="h-4 w-4" />
             הוסף יעד ראשון
           </Button>
-        </Card>
+        </div>
       )}
 
       {/* Goal Dialog */}

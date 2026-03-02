@@ -10,13 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { 
-  Search, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Search,
+  Plus,
+  Edit,
+  Trash2,
+  CheckCircle2,
+  XCircle,
   AlertCircle,
   DollarSign,
   Calendar,
@@ -37,18 +37,18 @@ export default function AdminManagePage() {
   const [reminders, setReminders] = useState<(Reminder & { client?: Client })[]>([])
   const [notes, setNotes] = useState<(Note & { client?: Client })[]>([])
   const [loading, setLoading] = useState(true)
-  
+
   // Search and filters
   const [searchQuery, setSearchQuery] = useState('')
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('הכל')
   const [reminderFilter, setReminderFilter] = useState<string>('הכל') // כל/פעיל/הושלם
-  
+
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null)
-  
+
   // Payment form
   const [paymentClientId, setPaymentClientId] = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -56,7 +56,7 @@ export default function AdminManagePage() {
   const [paymentStatus, setPaymentStatus] = useState('ממתין')
   const [paymentMethod, setPaymentMethod] = useState('')
   const [paymentDescription, setPaymentDescription] = useState('')
-  
+
   // Reminder form
   const [reminderClientId, setReminderClientId] = useState('')
   const [reminderTitle, setReminderTitle] = useState('')
@@ -73,73 +73,48 @@ export default function AdminManagePage() {
   const loadAllData = async () => {
     setLoading(true)
     try {
-      // Load clients
-      const { data: clientsData } = await supabase
-        .from('clients')
-        .select('*')
-        .order('name', { ascending: true })
-      setClients(clientsData || [])
+      // ── Optimized: load ALL data in parallel ──
+      // Previous: 4 sequential queries + N individual client lookups per entity
+      // New: 4 parallel queries + client-side join via Map
+      const [clientsRes, paymentsRes, remindersRes, notesRes] = await Promise.all([
+        supabase.from('clients').select('*').order('name', { ascending: true }),
+        supabase.from('payments').select('*').order('payment_date', { ascending: false }),
+        supabase.from('reminders').select('*').order('due_date', { ascending: true }),
+        supabase.from('notes').select('*').order('updated_at', { ascending: false }),
+      ])
 
-      // Load payments with client info
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('*')
-        .order('payment_date', { ascending: false })
-      
-      if (paymentsData) {
-        const paymentsWithClients = await Promise.all(
-          paymentsData.map(async (payment) => {
-            const { data: client } = await supabase
-              .from('clients')
-              .select('*')
-              .eq('id', payment.client_id)
-              .single()
-            return { ...payment, client: client || undefined }
-          })
-        )
-        setPayments(paymentsWithClients)
+      const clientsList = clientsRes.data || []
+      setClients(clientsList)
+
+      // Build client lookup map for O(1) joins
+      const clientMap = new Map<string, Client>()
+      for (const c of clientsList) {
+        clientMap.set(c.id, c)
       }
 
-      // Load reminders with client info
-      const { data: remindersData } = await supabase
-        .from('reminders')
-        .select('*')
-        .order('due_date', { ascending: true })
-      
-      if (remindersData) {
-        const remindersWithClients = await Promise.all(
-          remindersData.map(async (reminder) => {
-            if (!reminder.client_id) return { ...reminder, client: undefined }
-            const { data: client } = await supabase
-              .from('clients')
-              .select('*')
-              .eq('id', reminder.client_id)
-              .single()
-            return { ...reminder, client: client || undefined }
-          })
-        )
-        setReminders(remindersWithClients)
-      }
+      // Join payments with clients (client-side, no extra DB calls)
+      setPayments(
+        (paymentsRes.data || []).map(p => ({
+          ...p,
+          client: clientMap.get(p.client_id) || undefined,
+        }))
+      )
 
-      // Load notes with client info
-      const { data: notesData } = await supabase
-        .from('notes')
-        .select('*')
-        .order('updated_at', { ascending: false })
-      
-      if (notesData) {
-        const notesWithClients = await Promise.all(
-          notesData.map(async (note) => {
-            const { data: client } = await supabase
-              .from('clients')
-              .select('*')
-              .eq('id', note.client_id)
-              .single()
-            return { ...note, client: client || undefined }
-          })
-        )
-        setNotes(notesWithClients)
-      }
+      // Join reminders with clients
+      setReminders(
+        (remindersRes.data || []).map(r => ({
+          ...r,
+          client: r.client_id ? clientMap.get(r.client_id) || undefined : undefined,
+        }))
+      )
+
+      // Join notes with clients
+      setNotes(
+        (notesRes.data || []).map(n => ({
+          ...n,
+          client: clientMap.get(n.client_id) || undefined,
+        }))
+      )
     } catch (error) {
       console.error('Error loading data:', error)
       showToast('error', 'שגיאה בטעינת הנתונים')
@@ -379,7 +354,7 @@ export default function AdminManagePage() {
 
   // Filter functions
   const filteredPayments = payments.filter(payment => {
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       payment.client?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.amount.toString().includes(searchQuery)
@@ -492,11 +467,10 @@ export default function AdminManagePage() {
                       <Link href={`/clients/${payment.client_id}`} className="font-semibold text-blue-600 hover:underline">
                         {payment.client?.name || 'לקוח לא ידוע'}
                       </Link>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        payment.payment_status === 'שולם' ? 'bg-emerald-100 text-emerald-700' :
-                        payment.payment_status === 'ממתין' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs ${payment.payment_status === 'שולם' ? 'bg-emerald-100 text-emerald-700' :
+                          payment.payment_status === 'ממתין' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                        }`}>
                         {payment.payment_status}
                       </span>
                     </div>
@@ -613,11 +587,10 @@ export default function AdminManagePage() {
                         ) : (
                           <span className="font-semibold">תזכורת כללית</span>
                         )}
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          reminder.priority === 'דחוף' ? 'bg-red-100 text-red-700' :
-                          reminder.priority === 'רגיל' ? 'bg-blue-100 text-blue-700' :
-                          'bg-grey-100 text-grey-700'
-                        }`}>
+                        <span className={`px-2 py-1 rounded text-xs ${reminder.priority === 'דחוף' ? 'bg-red-100 text-red-700' :
+                            reminder.priority === 'רגיל' ? 'bg-blue-100 text-blue-700' :
+                              'bg-grey-100 text-grey-700'
+                          }`}>
                           {reminder.priority}
                         </span>
                         {reminder.reminder_type && (
