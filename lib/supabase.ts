@@ -1,9 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 
 export interface Client {
   id: string
@@ -11,6 +11,7 @@ export interface Client {
   email?: string | null
   phone?: string | null
   status?: string | null // 'פעיל', 'ליד', 'ארכיון'
+  advisor_status?: string | null // 'onboarding', 'active', etc.
   internal_notes?: string | null
   share_token?: string | null
   parent_id?: string | null
@@ -35,6 +36,8 @@ export interface ClientCredential {
   username?: string | null
   password?: string | null
   website_url?: string | null
+  identity_number?: string | null
+  additional_info?: string | null
   created_at: string
 }
 
@@ -68,6 +71,9 @@ export interface Reminder {
   priority: string // 'דחוף', 'רגיל', 'נמוך'
   is_completed: boolean
   reminder_type?: string | null // 'משימה', 'פירעון צ'ק', 'דוח רבעוני'
+  category?: string | null // 'phone_call', 'meeting', 'review', etc.
+  recurrence_rule?: string | null // 'weekly', 'monthly', etc.
+  last_generated_date?: string | null
   created_at: string
 }
 
@@ -78,6 +84,17 @@ export interface Note {
   color?: string | null // 'yellow', etc.
   created_at: string
   updated_at: string
+}
+
+export interface MeetingLog {
+  id: string
+  client_id: string
+  meeting_date: string
+  meeting_type?: string | null
+  subject: string
+  summary?: string | null
+  action_items?: string | null
+  created_at: string
 }
 
 export interface AuditLogEntry {

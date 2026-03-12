@@ -28,7 +28,9 @@ export interface DashboardAlerts {
 
 export interface DashboardData {
     clients: ClientWithData[]
-    alerts: DashboardAlerts
+    alerts: DashboardAlerts & {
+        recentMeetings: any[]
+    }
     availableTags: ClientTag[]
 }
 
@@ -81,6 +83,7 @@ export async function loadDashboardData(): Promise<{
             allTagsResult,
             pendingPaymentsResult,
             upcomingRemindersResult,
+            recentMeetingsResult,
         ] = await Promise.all([
             // 1. All parent clients
             supabase
@@ -160,6 +163,13 @@ export async function loadDashboardData(): Promise<{
                     .order('due_date', { ascending: true })
                     .limit(10)
             })(),
+
+            // 12. Recent meeting logs
+            supabase
+                .from('meeting_logs')
+                .select('*, clients(*)')
+                .order('meeting_date', { ascending: false })
+                .limit(5),
         ])
 
         if (clientsResult.error) throw clientsResult.error
@@ -170,7 +180,7 @@ export async function loadDashboardData(): Promise<{
                 success: true,
                 data: {
                     clients: [],
-                    alerts: { pendingPayments: [], upcomingReminders: [] },
+                    alerts: { pendingPayments: [], upcomingReminders: [], recentMeetings: [] },
                     availableTags: (allTagsResult.data || []) as ClientTag[],
                 },
             }
@@ -335,9 +345,10 @@ export async function loadDashboardData(): Promise<{
         })
 
         // ── Step 4: Assemble alerts ──────────────────────────────────────
-        const alerts: DashboardAlerts = {
+        const alerts: DashboardAlerts & { recentMeetings: any[] } = {
             pendingPayments: (pendingPaymentsResult.data || []) as Array<Payment & { client: Client }>,
             upcomingReminders: (upcomingRemindersResult.data || []) as Array<Reminder & { client: Client | null }>,
+            recentMeetings: recentMeetingsResult.data || [],
         }
 
         return {

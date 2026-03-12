@@ -4,44 +4,54 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════
-   LIGHT THEME (default)
+   LIGHT THEME (Modern SaaS)
    ═══════════════════════════════════════════════════════════ */
 :root {
-  --navy: #1e293b;
+  --navy: #0f172a;
   --grey: #64748b;
   --emerald: #10b981;
 
-  /* Modern HSL palette */
-  --background: 210 40% 98%;
+  /* Clean minimal background */
+  --background: 210 20% 98%;
   --foreground: 222 47% 11%;
+  
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
+  
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-  --primary: 221 83% 53%;
+  
+  --primary: 221 83% 53%; /* Blue-600 */
   --primary-foreground: 210 40% 98%;
+  
   --secondary: 210 40% 96.1%;
   --secondary-foreground: 222 47% 11.2%;
+  
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
+  
   --accent: 210 40% 96.1%;
   --accent-foreground: 222 47% 11.2%;
+  
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
+  
   --border: 214.3 31.8% 91.4%;
   --input: 214.3 31.8% 91.4%;
   --ring: 221 83% 53%;
-  --radius: 0.75rem;
+  
+  --radius: 0.6rem; /* Crisper corners */
 
-  /* Glossy / Glassmorphism effects */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.3);
-  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  /* Flat / Clean aesthetics (Replaced Glass) */
+  --glass-bg: #ffffff;
+  --glass-border: hsl(214.3 31.8% 91.4%);
+  --glass-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 
   /* Sidebar */
-  --sidebar-bg: #1e293b;
-  --sidebar-text: #94a3b8;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #64748b;
   --sidebar-active: #2563eb;
+  --sidebar-border: hsl(214.3 31.8% 91.4%);
 
   /* Surface layers */
   --surface-1: #ffffff;
@@ -50,8 +60,8 @@
   --surface-hover: #f1f5f9;
 
   /* Text hierarchy */
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
   --text-tertiary: #94a3b8;
   --text-inverse: #ffffff;
 
@@ -63,49 +73,59 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   DARK THEME
+   DARK THEME (Sleek Dark Mode)
    ═══════════════════════════════════════════════════════════ */
 .dark {
-  --navy: #e2e8f0;
+  --navy: #f8fafc;
   --grey: #94a3b8;
   --emerald: #34d399;
 
-  --background: 222 47% 8%;
+  --background: 222 47% 6%; /* Deep dark */
   --foreground: 210 40% 96%;
-  --card: 222 47% 11%;
+  
+  --card: 222 47% 9%;
   --card-foreground: 210 40% 96%;
-  --popover: 222 47% 11%;
+  
+  --popover: 222 47% 9%;
   --popover-foreground: 210 40% 96%;
+  
   --primary: 217 91% 60%;
   --primary-foreground: 222 47% 8%;
-  --secondary: 217 33% 17%;
+  
+  --secondary: 217 33% 15%;
   --secondary-foreground: 210 40% 96%;
-  --muted: 217 33% 17%;
+  
+  --muted: 217 33% 15%;
   --muted-foreground: 215 20% 65%;
-  --accent: 217 33% 17%;
+  
+  --accent: 217 33% 15%;
   --accent-foreground: 210 40% 96%;
+  
   --destructive: 0 63% 51%;
   --destructive-foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
+  
+  --border: 217 33% 15%;
+  --input: 217 33% 15%;
   --ring: 224 76% 48%;
 
-  --glass-bg: rgba(15, 23, 42, 0.75);
-  --glass-border: rgba(51, 65, 85, 0.4);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  /* Flat / Clean aesthetics */
+  --glass-bg: hsl(222 47% 9%);
+  --glass-border: hsl(217 33% 15%);
+  --glass-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
 
-  --sidebar-bg: #0f172a;
+  --sidebar-bg: hsl(222 47% 6%);
   --sidebar-text: #94a3b8;
   --sidebar-active: #3b82f6;
+  --sidebar-border: hsl(217 33% 15%);
 
-  --surface-1: #1e293b;
-  --surface-2: #0f172a;
-  --surface-3: #334155;
-  --surface-hover: #334155;
+  --surface-1: hsl(222 47% 9%);
+  --surface-2: hsl(222 47% 6%);
+  --surface-3: hsl(217 33% 15%);
+  --surface-hover: hsl(217 33% 15%);
 
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
   --text-inverse: #0f172a;
 
   --success: #34d399;
@@ -117,41 +137,42 @@
 /* Auto dark mode based on system preference */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --navy: #e2e8f0;
+    --navy: #f8fafc;
     --grey: #94a3b8;
     --emerald: #34d399;
-    --background: 222 47% 8%;
+    --background: 222 47% 6%;
     --foreground: 210 40% 96%;
-    --card: 222 47% 11%;
+    --card: 222 47% 9%;
     --card-foreground: 210 40% 96%;
-    --popover: 222 47% 11%;
+    --popover: 222 47% 9%;
     --popover-foreground: 210 40% 96%;
     --primary: 217 91% 60%;
     --primary-foreground: 222 47% 8%;
-    --secondary: 217 33% 17%;
+    --secondary: 217 33% 15%;
     --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 17%;
+    --muted: 217 33% 15%;
     --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
+    --accent: 217 33% 15%;
     --accent-foreground: 210 40% 96%;
     --destructive: 0 63% 51%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 217 33% 15%;
+    --input: 217 33% 15%;
     --ring: 224 76% 48%;
-    --glass-bg: rgba(15, 23, 42, 0.75);
-    --glass-border: rgba(51, 65, 85, 0.4);
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    --sidebar-bg: #0f172a;
+    --glass-bg: hsl(222 47% 9%);
+    --glass-border: hsl(217 33% 15%);
+    --glass-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+    --sidebar-bg: hsl(222 47% 6%);
     --sidebar-text: #94a3b8;
     --sidebar-active: #3b82f6;
-    --surface-1: #1e293b;
-    --surface-2: #0f172a;
-    --surface-3: #334155;
-    --surface-hover: #334155;
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --text-tertiary: #64748b;
+    --sidebar-border: hsl(217 33% 15%);
+    --surface-1: hsl(222 47% 9%);
+    --surface-2: hsl(222 47% 6%);
+    --surface-3: hsl(217 33% 15%);
+    --surface-hover: hsl(217 33% 15%);
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-tertiary: #94a3b8;
     --text-inverse: #0f172a;
     --success: #34d399;
     --warning: #fbbf24;

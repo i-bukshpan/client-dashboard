@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Users, TrendingUp, TrendingDown, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ClientCard } from './client-card'
+import { Trash2, Phone, Mail, ExternalLink, ArrowLeft } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { supabase, type Client, type Payment } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
+import { Card } from '@/components/ui/card'
 import {
     Dialog,
     DialogContent,
@@ -170,7 +172,7 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                                 <div className="p-2 rounded-xl bg-white/20">
                                     <Users className="h-5 w-5 text-white" />
                                 </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest opacity-70">לקוחות משנה</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest opacity-70">תחומי ניהול</span>
                             </div>
                             <div className="text-4xl font-black">{subClients.length}</div>
                         </div>
@@ -213,9 +215,9 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
             <div className="flex items-center justify-between flex-wrap gap-4 bg-white/40 backdrop-blur-md p-6 rounded-[2rem] border border-border/50 shadow-sm">
                 <div>
                     <h3 className="text-xl font-black text-navy tracking-tight">
-                        לקוחות משנה של <span className="text-primary">{parentClientName}</span>
+                        תחומי ניהול וישויות של <span className="text-primary">{parentClientName}</span>
                     </h3>
-                    <p className="text-xs font-medium text-grey mt-1">ניהול ומעקב אחר סניפים או לקוחות תחת {parentClientName}</p>
+                    <p className="text-xs font-medium text-grey mt-1">ניהול וחלוקה פנימית של מידע הלקוח לתחומים שונים (תיקי השקעות, נדל"ן, חברות וכו')</p>
                 </div>
                 {!readOnly && (
                     <Button
@@ -223,7 +225,7 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                         onClick={() => setAddOpen(true)}
                     >
                         <Plus className="h-5 w-5" />
-                        הוסף לקוח משנה
+                        הוסף תחום ניהול
                     </Button>
                 )}
             </div>
@@ -239,7 +241,7 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                     <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
                         <Users className="h-10 w-10 text-slate-300" />
                     </div>
-                    <p className="text-navy font-black text-xl mb-6">אין עדיין לקוחות משנה</p>
+                    <p className="text-navy font-black text-xl mb-6">אין עדיין תחומי ניהול מוגדרים</p>
                     {!readOnly && (
                         <Button
                             variant="outline"
@@ -247,30 +249,21 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                             onClick={() => setAddOpen(true)}
                         >
                             <Plus className="h-5 w-5" />
-                            הוסף לקוח משנה ראשון
+                            הוסף תחום ניהול ראשון
                         </Button>
                     )}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {subClients.map(client => (
-                        <ClientCard
+                        <SubClientCard
                             key={client.id}
-                            id={client.id}
-                            name={client.name}
-                            currentBalance={client.currentBalance}
-                            monthlyIncome={client.monthlyIncome}
-                            monthlyExpense={client.monthlyExpense}
-                            status={client.status}
-                            phone={client.phone}
-                            email={client.email}
-                            onDelete={readOnly ? undefined : handleDelete}
-                            readOnly={readOnly}
-                            isPublicView={isPublicView}
-                            onCardClick={isPublicView ? async (id, name) => {
+                            client={client}
+                            onDelete={readOnly ? undefined : () => handleDelete(client.id, client.name)}
+                            onCardClick={isPublicView ? async () => {
                                 try {
-                                    showToast('success', `טוען קישור צפייה עבור ${name}...`)
-                                    const res = await getClientShareToken(id)
+                                    showToast('success', `טוען קישור צפייה עבור ${client.name}...`)
+                                    const res = await getClientShareToken(client.id)
                                     if (res.success && res.token) {
                                         router.push(`/view/${res.token}`)
                                     } else {
@@ -279,7 +272,7 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                                 } catch (e) {
                                     showToast('error', 'שגיאה במעבר לפרופיל לקוח משנה')
                                 }
-                            } : undefined}
+                            } : () => router.push(`/clients/${client.id}`)}
                         />
                     ))}
                 </div>
@@ -300,12 +293,12 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                     <form onSubmit={handleAdd} className="space-y-6 relative z-10 mt-4">
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="sub-name" className="text-xs font-black uppercase tracking-widest text-grey mr-1">שם הלקוח / סניף</Label>
+                                <Label htmlFor="sub-name" className="text-xs font-black uppercase tracking-widest text-grey mr-1">שם התחום / ישות</Label>
                                 <Input
                                     id="sub-name"
                                     value={newName}
                                     onChange={e => setNewName(e.target.value)}
-                                    placeholder="לדוגמה: סניף תל אביב"
+                                    placeholder="לדוגמה: תיק השקעות, נדלן חו'ל, עסק משפחתי"
                                     required
                                     className="rounded-2xl border-border/40 bg-slate-50/50 h-12 px-4 focus:bg-white transition-all font-bold"
                                 />
@@ -347,12 +340,85 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                                 disabled={addLoading}
                                 className="flex-2 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black h-12 px-8 shadow-lg shadow-primary/20"
                             >
-                                {addLoading ? 'מוסיף...' : 'צור לקוח'}
+                                {addLoading ? 'יוצר...' : 'צור תחום ניהול'}
                             </Button>
                         </div>
                     </form>
                 </DialogContent>
             </Dialog>
         </div>
+    )
+}
+
+function SubClientCard({ client, onDelete, onCardClick }: { 
+    client: SubClientWithData; 
+    onDelete?: () => void;
+    onCardClick: () => void;
+}) {
+    return (
+        <Card 
+            className="group relative overflow-hidden rounded-[2rem] border border-border/50 bg-white/70 backdrop-blur-md transition-all hover:shadow-xl hover:shadow-navy/5 cursor-pointer"
+            onClick={onCardClick}
+        >
+            <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center text-navy font-black text-xl group-hover:bg-primary group-hover:text-white transition-colors">
+                            {client.name.charAt(0)}
+                        </div>
+                        <div>
+                            <h4 className="font-black text-navy group-hover:text-primary transition-colors">{client.name}</h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className={cn(
+                                    "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider",
+                                    client.status === 'פעיל' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                                )}>
+                                    {client.status}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {onDelete && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-lg text-rose-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onDelete()
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100">
+                        <p className="text-[9px] font-black text-grey uppercase tracking-widest mb-1">יתרה</p>
+                        <p className={cn("text-sm font-black", client.currentBalance >= 0 ? 'text-navy' : 'text-rose-600')} dir="ltr">
+                            ₪{client.currentBalance.toLocaleString()}
+                        </p>
+                    </div>
+                    <div className="p-3 rounded-2xl bg-emerald-50/30 border border-emerald-100/50">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">הכנסה חודשית</p>
+                        <p className="text-sm font-black text-emerald-700" dir="ltr">
+                            ₪{client.monthlyIncome.toLocaleString()}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] font-bold text-grey/60 px-1">
+                    <div className="flex items-center gap-3">
+                        {client.phone && <Phone className="h-3 w-3" />}
+                        {client.email && <Mail className="h-3 w-3" />}
+                    </div>
+                    <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                        צפה בפרטים
+                        <ArrowLeft className="h-3 w-3" />
+                    </div>
+                </div>
+            </div>
+        </Card>
     )
 }

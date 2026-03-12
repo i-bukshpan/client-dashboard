@@ -34,6 +34,8 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
   const [priority, setPriority] = useState('רגיל')
   const [description, setDescription] = useState('')
   const [reminderType, setReminderType] = useState('משימה')
+  const [category, setCategory] = useState('task')
+  const [recurrenceRule, setRecurrenceRule] = useState('')
 
   const loadReminders = async () => {
     try {
@@ -44,7 +46,9 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
         .order('due_date', { ascending: true })
 
       if (error) throw error
-      setReminders(data || [])
+      // Filter out templates (those with recurrence_rule) from the general list
+      // templates are managed in the Advisor Internal Tab
+      setReminders((data || []).filter(r => !r.recurrence_rule))
     } catch (error) {
       console.error('Error loading reminders:', error)
     } finally {
@@ -75,6 +79,8 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
           description: description || null,
           is_completed: false,
           reminder_type: reminderType || null,
+          category: category || 'task',
+          recurrence_rule: recurrenceRule || null,
         }])
         .select()
         .single()
@@ -93,6 +99,8 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
       setPriority('רגיל')
       setDescription('')
       setReminderType('משימה')
+      setCategory('task')
+      setRecurrenceRule('')
       setOpen(false)
     } catch (error) {
       console.error('Error adding reminder:', error)
@@ -119,7 +127,9 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
     }
   }
 
-  const handleToggleComplete = async (reminder: Reminder) => {
+  const handleToggleComplete = async (e: React.MouseEvent, reminder: Reminder) => {
+    e.preventDefault()
+    e.stopPropagation()
     try {
       const { error } = await supabase
         .from('reminders')
@@ -245,6 +255,36 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
                   </select>
                 </div>
                 <div className="grid gap-2">
+                  <Label htmlFor="category">קטגוריה (ליועץ)</Label>
+                  <select
+                    id="category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="task">משימה כללית</option>
+                    <option value="phone_call">שיחת טלפון</option>
+                    <option value="meeting">פגישה / הכנה לפגישה</option>
+                    <option value="document_review">בדיקת מסמכים</option>
+                    <option value="payment_followup">מעקב תשלומים</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="recurrence">חזרה מחזורית</Label>
+                  <select
+                    id="recurrence"
+                    value={recurrenceRule}
+                    onChange={(e) => setRecurrenceRule(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">ללא חזרה</option>
+                    <option value="daily">יומי</option>
+                    <option value="weekly">שבועי</option>
+                    <option value="monthly">חודשי</option>
+                    <option value="yearly">שנתי</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
                   <Label htmlFor="description">תיאור (אופציונלי)</Label>
                   <Textarea
                     id="description"
@@ -266,80 +306,95 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
         )}
       </div>
 
-      {reminders.length === 0 ? (
-        <div className="text-center py-8 text-grey">
-          אין תזכורות. הוסף תזכורת חדשה להתחיל.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {reminders.map((reminder) => {
-            const overdue = isOverdue(reminder.due_date, reminder.is_completed)
-            return (
-              <div
-                key={reminder.id}
-                className={`border rounded-lg p-4 bg-white hover:shadow-md transition-shadow ${overdue ? 'border-red-300 bg-red-50' : ''
-                  } ${reminder.is_completed ? 'opacity-60' : ''}`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1">
-                    <button
-                      onClick={() => !readOnly && handleToggleComplete(reminder)}
-                      className={`mt-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
-                      disabled={readOnly}
-                    >
-                      {reminder.is_completed ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <Circle className="h-5 w-5 text-grey" />
-                      )}
-                    </button>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className={`font-semibold ${reminder.is_completed ? 'line-through' : ''}`}>
-                          {reminder.title}
-                        </h4>
-                        <span className={`px-2 py-0.5 rounded text-xs border ${getPriorityColor(reminder.priority)}`}>
-                          {reminder.priority}
-                        </span>
-                        {reminder.reminder_type && (
-                          <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                            {reminder.reminder_type}
-                          </span>
+      {
+        reminders.length === 0 ? (
+          <div className="text-center py-8 text-grey">
+            אין תזכורות. הוסף תזכורת חדשה להתחיל.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reminders.map((reminder) => {
+              const overdue = isOverdue(reminder.due_date, reminder.is_completed)
+              return (
+                <div
+                  key={reminder.id}
+                  className={`border rounded-lg p-4 bg-white hover:shadow-md transition-shadow ${overdue ? 'border-red-300 bg-red-50' : ''
+                    } ${reminder.is_completed ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1">
+                      <button
+                        onClick={(e) => !readOnly && handleToggleComplete(e, reminder)}
+                        className={`mt-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                        disabled={readOnly}
+                      >
+                        {reminder.is_completed ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-grey" />
                         )}
-                        {overdue && (
-                          <span className="flex items-center gap-1 text-red-600 text-xs">
-                            <AlertCircle className="h-4 w-4" />
-                            מאוחר
+                      </button>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className={`font-semibold ${reminder.is_completed ? 'line-through' : ''}`}>
+                            {reminder.title}
+                          </h4>
+                          <span className={`px-2 py-0.5 rounded text-xs border ${getPriorityColor(reminder.priority)}`}>
+                            {reminder.priority}
                           </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-grey space-y-1">
-                        <div>
-                          תאריך יעד: {new Date(reminder.due_date).toLocaleDateString('he-IL')}
+                          {reminder.reminder_type && (
+                            <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                              {reminder.reminder_type}
+                            </span>
+                          )}
+                          {reminder.category && (
+                            <span className="px-2 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 font-bold">
+                              {reminder.category === 'phone_call' ? '📞 שיחה' :
+                                reminder.category === 'meeting' ? '👥 פגישה' :
+                                  reminder.category === 'document_review' ? '📄 מסמכים' :
+                                    reminder.category === 'payment_followup' ? '💰 תשלום' : '📌 משימה'}
+                            </span>
+                          )}
+                          {reminder.recurrence_rule && (
+                            <span className="px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                              מחזורית ({reminder.recurrence_rule})
+                            </span>
+                          )}
+                          {overdue && (
+                            <span className="flex items-center gap-1 text-red-600 text-xs">
+                              <AlertCircle className="h-4 w-4" />
+                              מאוחר
+                            </span>
+                          )}
                         </div>
-                        {reminder.description && (
-                          <div>{reminder.description}</div>
-                        )}
+                        <div className="text-sm text-grey space-y-1">
+                          <div>
+                            תאריך יעד: {new Date(reminder.due_date).toLocaleDateString('he-IL')}
+                          </div>
+                          {reminder.description && (
+                            <div>{reminder.description}</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
+                  {!readOnly && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(reminder.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
-                {!readOnly && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(reminder.id)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
+              )
+            })}
+          </div>
+        )
+      }
+    </div >
   )
 }
 

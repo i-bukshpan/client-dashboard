@@ -3,34 +3,24 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Shield, BarChart3, Settings, Target, Calendar, MessageSquare, HelpCircle, Activity, FileText } from 'lucide-react'
+import { 
+  LayoutDashboard, Users, CheckSquare, Calendar, 
+  Wallet, BarChart3, Settings 
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navigation = [
-  { name: 'לוח בקרה', href: '/', icon: LayoutDashboard },
-  { name: 'ניהול מרכזי', href: '/admin/manage', icon: Settings },
-  { name: 'יעדים', href: '/goals', icon: Target },
-  { name: 'לוח זמנים', href: '/calendar', icon: Calendar },
-  { name: 'תקשורת', href: '/communication', icon: MessageSquare },
-  { name: 'סטטיסטיקות', href: '/statistics', icon: BarChart3 },
-  { name: 'דוחות', href: '/reports/financial', icon: FileText },
-  { name: 'פעילות', href: '/activity', icon: Activity },
-  { name: 'עזרה', href: '/help', icon: HelpCircle },
+  { name: 'היום שלי', href: '/', icon: LayoutDashboard },
+  { name: 'לקוחות', href: '/clients', icon: Users },
+  { name: 'משימות', href: '/tasks', icon: CheckSquare },
+  { name: 'יומן', href: '/calendar', icon: Calendar },
+  { name: 'כספים', href: '/cashflow', icon: Wallet },
+  { name: 'דוחות', href: '/reports', icon: BarChart3 },
+  { name: 'הגדרות', href: '/admin/manage', icon: Settings },
 ]
 
 export function Sidebar({ onClose, isCollapsed = false }: { onClose?: () => void, isCollapsed?: boolean }) {
   const pathname = usePathname()
-  const [unreadChatCount, setUnreadChatCount] = useState(0)
-
-  useEffect(() => {
-    const handleUnreadCount = (e: any) => {
-      setUnreadChatCount(e.detail || 0)
-    }
-    // @ts-ignore
-    window.addEventListener('chat-unread-count', handleUnreadCount)
-    // @ts-ignore
-    return () => window.removeEventListener('chat-unread-count', handleUnreadCount)
-  }, [])
 
   return (
     <div className="flex h-screen w-full flex-col bg-slate-900 dark:bg-[#0a0f1a] relative overflow-hidden transition-colors duration-300">
@@ -49,8 +39,9 @@ export function Sidebar({ onClose, isCollapsed = false }: { onClose?: () => void
 
       <div className="flex flex-1 flex-col gap-1.5 p-4 relative z-10 overflow-y-auto no-scrollbar">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
-          const showBadge = item.name === 'תקשורת' && unreadChatCount > 0
+          const isActive = item.href === '/' 
+            ? pathname === '/' 
+            : pathname?.startsWith(item.href)
 
           return (
             <Link
@@ -81,14 +72,6 @@ export function Sidebar({ onClose, isCollapsed = false }: { onClose?: () => void
               {/* Active indicator dot */}
               {isActive && !isCollapsed && (
                 <div className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
-              )}
-
-              {showBadge && (
-                <span className={cn("flex items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shrink-0",
-                  isCollapsed ? "absolute top-2 right-2 h-3 w-3" : "h-5 min-w-[20px] px-1.5"
-                )}>
-                  {!isCollapsed && unreadChatCount}
-                </span>
               )}
             </Link>
           )

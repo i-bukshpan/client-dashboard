@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { AppShell } from '@/components/app-shell'
 import { ToastProvider } from '@/components/ui/toast'
+import { Toaster } from 'sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -14,9 +15,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <body>
         <ToastProvider>
+          <Toaster richColors position="top-center" dir="rtl" />
           <AppShell>{children}</AppShell>
         </ToastProvider>
       </body>

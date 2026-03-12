@@ -8,6 +8,17 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
 
+  // Redirect logic
+  async redirects() {
+    return [
+      {
+        source: '/reports',
+        destination: '/reports/financial',
+        permanent: true,
+      },
+    ]
+  },
+
   // ── Performance: static asset caching ──
   async headers() {
     if (process.env.NODE_ENV !== 'production') {

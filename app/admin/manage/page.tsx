@@ -15,6 +15,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  Users,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -32,6 +33,7 @@ import { exportPaymentsToCSV } from '@/lib/export'
 import { exportRemindersToCSV } from '@/lib/export-reminders'
 
 export default function AdminManagePage() {
+  const { showToast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [payments, setPayments] = useState<(Payment & { client?: Client })[]>([])
   const [reminders, setReminders] = useState<(Reminder & { client?: Client })[]>([])
@@ -58,12 +60,14 @@ export default function AdminManagePage() {
   const [paymentDescription, setPaymentDescription] = useState('')
 
   // Reminder form
-  const [reminderClientId, setReminderClientId] = useState('')
+  const [reminderClientId, setReminderClientId] = useState('none')
   const [reminderTitle, setReminderTitle] = useState('')
   const [reminderDescription, setReminderDescription] = useState('')
   const [reminderDueDate, setReminderDueDate] = useState('')
   const [reminderPriority, setReminderPriority] = useState('רגיל')
   const [reminderType, setReminderType] = useState('משימה')
+  const [reminderCategory, setReminderCategory] = useState('task')
+  const [reminderRecurrence, setReminderRecurrence] = useState('none')
 
 
   useEffect(() => {
@@ -77,7 +81,7 @@ export default function AdminManagePage() {
       // Previous: 4 sequential queries + N individual client lookups per entity
       // New: 4 parallel queries + client-side join via Map
       const [clientsRes, paymentsRes, remindersRes, notesRes] = await Promise.all([
-        supabase.from('clients').select('*').order('name', { ascending: true }),
+        supabase.from('clients').select('*').is('parent_id', null).order('name', { ascending: true }),
         supabase.from('payments').select('*').order('payment_date', { ascending: false }),
         supabase.from('reminders').select('*').order('due_date', { ascending: true }),
         supabase.from('notes').select('*').order('updated_at', { ascending: false }),
@@ -214,12 +218,14 @@ export default function AdminManagePage() {
       const { error } = await supabase
         .from('reminders')
         .insert({
-          client_id: reminderClientId || null,
+          client_id: reminderClientId === 'none' ? null : reminderClientId,
           title: reminderTitle,
           description: reminderDescription || null,
           due_date: reminderDueDate,
           priority: reminderPriority,
           reminder_type: reminderType,
+          category: reminderCategory || 'task',
+          recurrence_rule: reminderRecurrence === 'none' ? null : reminderRecurrence,
           is_completed: false,
         })
 
@@ -243,12 +249,14 @@ export default function AdminManagePage() {
       const { error } = await supabase
         .from('reminders')
         .update({
-          client_id: reminderClientId || null,
+          client_id: reminderClientId === 'none' ? null : reminderClientId,
           title: reminderTitle,
           description: reminderDescription || null,
           due_date: reminderDueDate,
           priority: reminderPriority,
           reminder_type: reminderType,
+          category: reminderCategory || 'task',
+          recurrence_rule: reminderRecurrence === 'none' ? null : reminderRecurrence,
         })
         .eq('id', selectedReminder.id)
 
@@ -319,6 +327,8 @@ export default function AdminManagePage() {
     setReminderDueDate('')
     setReminderPriority('רגיל')
     setReminderType('משימה')
+    setReminderCategory('task')
+    setReminderRecurrence('')
     setSelectedReminder(null)
   }
 
@@ -346,6 +356,8 @@ export default function AdminManagePage() {
       setReminderDueDate(reminder.due_date.split('T')[0])
       setReminderPriority(reminder.priority)
       setReminderType(reminder.reminder_type || 'משימה')
+      setReminderCategory(reminder.category || 'task')
+      setReminderRecurrence(reminder.recurrence_rule || '')
     } else {
       resetReminderForm()
     }
@@ -409,8 +421,12 @@ export default function AdminManagePage() {
         </div>
       </Card>
 
-      <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="clients" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="clients" className="gap-2">
+            <Users className="h-4 w-4" />
+            לקוחות ({clients.length})
+          </TabsTrigger>
           <TabsTrigger value="payments" className="gap-2">
             <DollarSign className="h-4 w-4" />
             תשלומים ({filteredPayments.length})
@@ -424,6 +440,92 @@ export default function AdminManagePage() {
             הערות ({filteredNotes.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Clients Tab */}
+        <TabsContent value="clients" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold">כל הלקוחות</h2>
+            <Button asChild className="gap-2">
+              <Link href="/onboarding">
+                <Plus className="h-4 w-4" />
+                הוסף לקוח חדש
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-4">
+            {clients
+              .filter(client =>
+                !searchQuery ||
+                client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                client.phone?.includes(searchQuery) ||
+                client.email?.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+              .map((client) => (
+                <Card key={client.id} className="p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-lg">
+                        {client.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-lg">{client.name}</h3>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${client.advisor_status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                            client.advisor_status === 'onboarding' ? 'bg-blue-100 text-blue-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                            {client.advisor_status === 'active' ? 'פעיל' :
+                              client.advisor_status === 'onboarding' ? 'בתהליך הצטרפות' : 'לא מוגדר'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-grey">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            נוסף ב: {new Date(client.created_at).toLocaleDateString('he-IL')}
+                          </div>
+                          {client.phone && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono">{client.phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {client.phone && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const formatted = formatPhoneForWhatsApp(client.phone!)
+                            window.open(`https://wa.me/${formatted}`, '_blank')
+                          }}
+                          className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        >
+                          WhatsApp
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/clients/${client.id}`}>
+                          צפה בפרופיל
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-rose-600 hover:bg-rose-50">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+          </div>
+
+          {clients.length === 0 && (
+            <Card className="p-8 text-center text-grey">
+              לא נמצאו לקוחות במערכת
+            </Card>
+          )}
+        </TabsContent>
 
         {/* Payments Tab */}
         <TabsContent value="payments" className="space-y-4">
@@ -468,8 +570,8 @@ export default function AdminManagePage() {
                         {payment.client?.name || 'לקוח לא ידוע'}
                       </Link>
                       <span className={`px-2 py-1 rounded text-xs ${payment.payment_status === 'שולם' ? 'bg-emerald-100 text-emerald-700' :
-                          payment.payment_status === 'ממתין' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
+                        payment.payment_status === 'ממתין' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
                         }`}>
                         {payment.payment_status}
                       </span>
@@ -588,14 +690,27 @@ export default function AdminManagePage() {
                           <span className="font-semibold">תזכורת כללית</span>
                         )}
                         <span className={`px-2 py-1 rounded text-xs ${reminder.priority === 'דחוף' ? 'bg-red-100 text-red-700' :
-                            reminder.priority === 'רגיל' ? 'bg-blue-100 text-blue-700' :
-                              'bg-grey-100 text-grey-700'
+                          reminder.priority === 'רגיל' ? 'bg-blue-100 text-blue-700' :
+                            'bg-grey-100 text-grey-700'
                           }`}>
                           {reminder.priority}
                         </span>
                         {reminder.reminder_type && (
                           <span className="px-2 py-1 rounded text-xs bg-grey-100 text-grey-700">
                             {reminder.reminder_type}
+                          </span>
+                        )}
+                        {reminder.category && (
+                          <span className="px-2 py-1 rounded text-xs bg-indigo-100 text-indigo-700 font-bold">
+                            {reminder.category === 'phone_call' ? '📞 שיחה' :
+                              reminder.category === 'meeting' ? '👥 פגישה' :
+                                reminder.category === 'document_review' ? '📄 מסמכים' :
+                                  reminder.category === 'payment_followup' ? '💰 תשלום' : '📌 משימה'}
+                          </span>
+                        )}
+                        {reminder.recurrence_rule && (
+                          <span className="px-2 py-1 rounded text-xs bg-emerald-100 text-emerald-700">
+                            🔄 {reminder.recurrence_rule}
                           </span>
                         )}
                       </div>
@@ -778,7 +893,7 @@ export default function AdminManagePage() {
                   <SelectValue placeholder="בחר לקוח (אופציונלי)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">תזכורת כללית</SelectItem>
+                  <SelectItem value="none">תזכורת כללית</SelectItem>
                   {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
                   ))}
@@ -796,14 +911,34 @@ export default function AdminManagePage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="reminder-description">תיאור</Label>
-              <Textarea
-                id="reminder-description"
-                value={reminderDescription}
-                onChange={(e) => setReminderDescription(e.target.value)}
-                placeholder="פרטים נוספים"
-                rows={3}
-              />
+              <Label htmlFor="reminder-category">קטגוריה *</Label>
+              <Select value={reminderCategory} onValueChange={setReminderCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="בחר קטגוריה" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="task">משימה כללית</SelectItem>
+                  <SelectItem value="phone_call">שיחת טלפון</SelectItem>
+                  <SelectItem value="meeting">פגישה / הכנה לפגישה</SelectItem>
+                  <SelectItem value="document_review">בדיקת מסמכים</SelectItem>
+                  <SelectItem value="payment_followup">מעקב תשלומים</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reminder-recurrence">חזרה מחזורית (אופציונלי)</Label>
+              <Select value={reminderRecurrence} onValueChange={(val) => setReminderRecurrence(val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="ללא חזרה" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">ללא חזרה</SelectItem>
+                  <SelectItem value="daily">יומי</SelectItem>
+                  <SelectItem value="weekly">שבועי</SelectItem>
+                  <SelectItem value="monthly">חודשי</SelectItem>
+                  <SelectItem value="yearly">שנתי</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="reminder-due-date">תאריך יעד *</Label>

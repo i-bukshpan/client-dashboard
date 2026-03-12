@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Menu, X, Search } from 'lucide-react'
+import Link from 'next/link'
+import { Menu, X, Search, LayoutDashboard, Calendar, Users, CheckSquare, Wallet } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
 import { Button } from '@/components/ui/button'
 import { GlobalChatListener } from '@/components/chat/global-chat-listener'
@@ -16,6 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const pathname = usePathname()
   const isPublicView = pathname?.startsWith('/view')
+  const isLoginPage = pathname === '/login'
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)')
@@ -25,12 +27,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => mediaQuery.removeEventListener('change', applyMatch)
   }, [])
 
-  if (isPublicView) {
+  if (isPublicView || isLoginPage) {
     return <>{children}</>
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-[hsl(222,47%,8%)] transition-colors duration-300">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
       <GlobalChatListener />
 
       {/* Mobile Sidebar Overlay */}
@@ -57,14 +59,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Glass Header */}
-        <header className="sticky top-0 z-30 flex h-20 items-center justify-between px-6 md:px-10 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-700/30 transition-colors duration-300">
+        {/* Clean Header */}
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between px-6 md:px-8 bg-card border-b border-border transition-colors duration-300">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
-              className="md:hidden h-11 w-11 rounded-2xl bg-slate-100 dark:bg-slate-800 text-navy hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+              className="md:hidden h-10 w-10 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-all active:scale-95 flex items-center justify-center border border-border"
               aria-label={isSidebarOpen ? "סגור תפריט" : "פתח תפריט"}
             >
               {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -74,35 +76,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="icon"
               onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-              className="hidden md:flex h-11 w-11 rounded-2xl bg-slate-100 dark:bg-slate-800 text-navy hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
+              className="hidden md:flex h-10 w-10 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-all active:scale-95 items-center justify-center border border-border"
               aria-label={isSidebarCollapsed ? "הרחב תפריט" : "צמצם תפריט"}
             >
               <Menu className="h-5 w-5" />
             </Button>
 
             <div className="hidden md:flex flex-col">
-              <h2 className="text-sm font-black text-navy tracking-tight">מערכת ניהול לקוחות</h2>
-              <p className="text-[10px] font-bold text-grey uppercase tracking-widest">נחמיה דרוק - פתרונות פיננסיים</p>
+              <h2 className="text-sm font-bold text-foreground tracking-tight">מערכת ניהול לקוחות</h2>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">נחמיה דרוק - פתרונות פיננסיים</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Search trigger */}
-            <button
+              <button
               onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-              className="h-10 px-3 rounded-xl flex items-center gap-2 bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-700/50 text-grey hover:text-navy dark:hover:text-white transition-all"
+              className="h-10 px-3 rounded-lg flex items-center gap-2 bg-secondary/50 hover:bg-secondary border border-border text-muted-foreground hover:text-foreground transition-all"
             >
-              <Search className="h-3.5 w-3.5" />
+              <Search className="h-4 w-4" />
               <span className="text-xs font-medium hidden sm:inline">חיפוש...</span>
-              <kbd className="hidden sm:flex px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-700/80 text-[10px] font-bold">⌘K</kbd>
+              <kbd className="hidden sm:flex px-1.5 py-0.5 rounded-md bg-background border border-border text-[10px] font-bold">⌘K</kbd>
             </button>
 
             <NotificationCenter />
             <ThemeToggle />
 
-            <div className="hidden sm:flex h-10 px-4 rounded-xl bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 items-center gap-2 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-emerald animate-pulse" />
-              <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">מחובר</span>
+            <div className="hidden sm:flex h-10 px-4 rounded-lg bg-secondary border border-border items-center gap-2 transition-colors">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-medium text-secondary-foreground">מחובר</span>
             </div>
           </div>
         </header>
@@ -122,22 +124,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 // ── Mobile Bottom Navigation ──
-import Link from 'next/link'
-import { LayoutDashboard, Target, Calendar, BarChart3, Settings } from 'lucide-react'
 
 function MobileBottomNav() {
   const pathname = usePathname()
 
   const items = [
-    { href: '/', icon: LayoutDashboard, label: 'בקרה' },
-    { href: '/admin/manage', icon: Settings, label: 'ניהול' },
-    { href: '/calendar', icon: Calendar, label: 'לוח' },
-    { href: '/goals', icon: Target, label: 'יעדים' },
-    { href: '/statistics', icon: BarChart3, label: 'דוחות' },
+    { href: '/', icon: LayoutDashboard, label: 'היום שלי' },
+    { href: '/clients', icon: Users, label: 'לקוחות' },
+    { href: '/tasks', icon: CheckSquare, label: 'משימות' },
+    { href: '/calendar', icon: Calendar, label: 'יומן' },
+    { href: '/cashflow', icon: Wallet, label: 'כספים' },
   ]
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/50 dark:border-slate-700/30 bottom-nav transition-colors duration-300">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-card border-t border-border bottom-nav transition-colors duration-300">
       <div className="flex items-center justify-around h-16">
         {items.map((item) => {
           const isActive = pathname === item.href

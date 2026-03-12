@@ -47,3 +47,43 @@ export async function deleteClient(clientId: string): Promise<{ success: boolean
   }
 }
 
+/**
+ * Server Action: Update client basic information
+ */
+export async function updateClient(clientId: string, data: Partial<import('@/lib/supabase').Client>): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('clients')
+      .update(data)
+      .eq('id', clientId)
+
+    if (error) {
+      console.error('Error updating client:', error)
+      return { success: false, error: error.message }
+    }
+
+    // Log action (selective fields for security)
+    const logData = { ...data }
+    delete logData.internal_notes // Don't log internal notes content
+
+    await logAction(
+      'client.updated',
+      'client',
+      clientId,
+      `נתוני לקוח עודכנו`,
+      logData
+    )
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Unexpected error updating client:', error)
+    return { success: false, error: error.message || 'Unknown error' }
+  }
+}
+
+/**
+ * Server Action: Specifically update advisor fields
+ */
+export async function updateAdvisorFields(clientId: string, advisor_status: string, internal_notes?: string): Promise<{ success: boolean; error?: string }> {
+  return updateClient(clientId, { advisor_status, internal_notes })
+}

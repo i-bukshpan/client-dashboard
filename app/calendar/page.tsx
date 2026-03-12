@@ -2,115 +2,156 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { supabase, type Reminder, type Client } from '@/lib/supabase'
+import { supabase, type Reminder, type Client, type MeetingLog } from '@/lib/supabase'
 import Link from 'next/link'
-import { Calendar, ChevronRight, ChevronLeft, Clock, CheckCircle2 } from 'lucide-react'
+import { Calendar, ChevronRight, ChevronLeft, Clock, CheckCircle2, MessageSquare, Plus, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { format, startOfWeek, addDays, isSameDay } from 'date-fns'
+import { he } from 'date-fns/locale'
+import { CreateMeetingDialog } from '@/components/create-meeting-dialog'
+
+type CalendarEvent = {
+  id: string
+  title: string
+  due_date: string
+  client_id: string | null
+  client?: Client | null
+  eventType: 'reminder' | 'meeting'
+  is_completed?: boolean
+  priority?: string
+}
+
+type ViewMode = 'month' | 'week' | 'day'
 
 export default function CalendarPage() {
-  const [reminders, setReminders] = useState<Array<Reminder & { client?: Client }>>([])
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [viewMode, setViewMode] = useState<ViewMode>('month')
 
-  useEffect(() => {
-    loadReminders()
-  }, [currentDate])
-
-  const loadReminders = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      let startDate: Date
+      let endDate: Date
 
-      const { data: remindersData, error } = await supabase
-        .from('reminders')
-        .select('*, clients(*)')
-        .gte('due_date', startOfMonth.toISOString().split('T')[0])
-        .lte('due_date', endOfMonth.toISOString().split('T')[0])
-        .order('due_date', { ascending: true })
+      if (viewMode === 'month') {
+        startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      } else if (viewMode === 'week') {
+        startDate = startOfWeek(currentDate, { weekStartsOn: 0 })
+        endDate = addDays(startDate, 6)
+      } else {
+        startDate = new Date(currentDate)
+        startDate.setHours(0, 0, 0, 0)
+        endDate = new Date(currentDate)
+        endDate.setHours(23, 59, 59, 999)
+      }
 
-      if (error) throw error
+      const startStr = startDate.toISOString().split('T')[0]
+      const endStr = endDate.toISOString().split('T')[0]
 
-      setReminders((remindersData || []) as Array<Reminder & { client?: Client }>)
+      const [remindersResult, meetingsResult] = await Promise.all([
+        supabase.from('reminders').select('*, clients(*)').gte('due_date', startStr).lte('due_date', endStr),
+        supabase.from('meeting_logs').select('*, clients(*)').gte('meeting_date', startStr).lte('meeting_date', endStr)
+      ])
+
+      const reminders: CalendarEvent[] = (remindersResult.data || []).map(r => ({
+        id: r.id, title: r.title, due_date: r.due_date, client_id: r.client_id,
+        client: (r as any).clients, eventType: 'reminder', is_completed: r.is_completed, priority: r.priority
+      }))
+
+      const meetings: CalendarEvent[] = (meetingsResult.data || []).map(m => ({
+        id: m.id, title: m.subject, due_date: m.meeting_date, client_id: m.client_id,
+        client: (m as any).clients, eventType: 'meeting'
+      }))
+
+      setEvents([...reminders, ...meetings].sort((a, b) => 
+        new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      ))
     } catch (error) {
-      console.error('Error loading reminders:', error)
+      console.error('Error loading calendar data:', error)
     } finally {
       setLoading(false)
     }
+  }, [currentDate, viewMode])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const navigate = useCallback((direction: 'prev' | 'next') => {
+    setCurrentDate(prev => {
+      const d = new Date(prev)
+      if (viewMode === 'month') {
+        d.setMonth(d.getMonth() + (direction === 'next' ? 1 : -1))
+      } else if (viewMode === 'week') {
+        d.setDate(d.getDate() + (direction === 'next' ? 7 : -7))
+      } else {
+        d.setDate(d.getDate() + (direction === 'next' ? 1 : -1))
+      }
+      return d
+    })
+  }, [viewMode])
+
+  const monthNames = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
+  const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
+
+  const getHeaderLabel = () => {
+    if (viewMode === 'month') return `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+    if (viewMode === 'week') {
+      const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 })
+      const weekEnd = addDays(weekStart, 6)
+      return `${format(weekStart, 'd/M')} – ${format(weekEnd, 'd/M yyyy')}`
+    }
+    return format(currentDate, 'EEEE, d בMMMM yyyy', { locale: he })
   }
 
-  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev)
-      if (direction === 'prev') {
-        newDate.setMonth(newDate.getMonth() - 1)
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1)
-      }
-      return newDate
-    })
-  }, [])
-
+  // Month view grid
   const daysInMonth = useMemo(() => {
     const year = currentDate.getFullYear()
     const month = currentDate.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
-    const numDays = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
-
     const days: (Date | null)[] = []
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
-    }
-    for (let i = 1; i <= numDays; i++) {
-      days.push(new Date(year, month, i))
-    }
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null)
+    for (let i = 1; i <= lastDay.getDate(); i++) days.push(new Date(year, month, i))
     return days
   }, [currentDate])
 
-  const remindersByDate = useMemo(() => {
-    const map: Record<string, Array<Reminder & { client?: Client }>> = {}
-    for (const r of reminders) {
-      const dateStr = r.due_date.split('T')[0]
+  // Group events by date
+  const eventsByDate = useMemo(() => {
+    const map: Record<string, CalendarEvent[]> = {}
+    for (const e of events) {
+      const dateStr = e.due_date.split('T')[0]
       if (!map[dateStr]) map[dateStr] = []
-      map[dateStr].push(r)
+      map[dateStr].push(e)
     }
     return map
-  }, [reminders])
+  }, [events])
 
-  const getRemindersForDate = useCallback((date: Date | null) => {
+  const getEventsForDate = (date: Date | null) => {
     if (!date) return []
-    const dateStr = date.toISOString().split('T')[0]
-    return remindersByDate[dateStr] || []
-  }, [remindersByDate])
+    return eventsByDate[date.toISOString().split('T')[0]] || []
+  }
 
-  const monthNames = [
-    'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-    'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
-  ]
-  const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
+  // Week view - 7 days
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 0 })
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  }, [currentDate])
+
+  const hours = Array.from({ length: 13 }, (_, i) => i + 7) // 07:00 - 19:00
 
   const priorityStyles: Record<string, string> = {
-    'דחוף': 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20',
-    'רגיל': 'bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20',
-    'נמוך': 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600/30',
+    'דחוף': 'bg-red-100 text-red-700 border-red-200',
+    'רגיל': 'bg-blue-100 text-blue-700 border-blue-200',
+    'נמוך': 'bg-slate-100 text-slate-600 border-slate-200',
   }
 
   if (loading) {
     return (
-      <div className="p-6 sm:p-8">
-        <div className="mb-8 animate-pulse">
-          <div className="h-8 w-48 bg-slate-200 dark:bg-slate-700 rounded-lg mb-2" />
-          <div className="h-4 w-64 bg-slate-200 dark:bg-slate-700 rounded" />
-        </div>
-        <div className="glass-card rounded-2xl p-6">
-          <div className="grid grid-cols-7 gap-2">
-            {[...Array(35)].map((_, i) => (
-              <div key={i} className="h-24 shimmer rounded-xl" />
-            ))}
-          </div>
-        </div>
+      <div className="p-6 sm:p-8 animate-pulse" dir="rtl">
+        <div className="h-8 w-48 bg-slate-200 rounded-lg mb-8" />
+        <div className="h-[500px] bg-slate-100 rounded-2xl" />
       </div>
     )
   }
@@ -120,172 +161,321 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in-up">
         <div>
-          <h1 className="text-3xl font-extrabold text-navy tracking-tight mb-2">לוח זמנים</h1>
+          <h1 className="text-3xl font-black text-navy tracking-tight mb-2">יומן</h1>
           <div className="flex items-center gap-2">
             <div className="h-1 w-12 bg-primary rounded-full" />
-            <p className="text-grey font-medium">תצוגה מרכזית של כל המשימות והתזכורות</p>
+            <p className="text-grey font-medium">פגישות, משימות ואירועים</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigateMonth('prev')}
-            className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <span className="text-base font-bold min-w-[160px] text-center text-navy">
-            {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigateMonth('next')}
-            className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentDate(new Date())}
-            className="rounded-xl text-xs font-bold"
-          >
-            היום
-          </Button>
-        </div>
-      </div>
-
-      {/* Calendar Grid */}
-      <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up delay-100">
-        <div className="grid grid-cols-7 gap-1 sm:gap-2">
-          {/* Day headers */}
-          {dayNames.map((day) => (
-            <div key={day} className="text-center font-bold text-grey text-xs uppercase tracking-wider py-3">
-              {day}
-            </div>
-          ))}
-
-          {/* Calendar days */}
-          {daysInMonth.map((date, index) => {
-            const dayReminders = getRemindersForDate(date)
-            const isToday = date && date.toDateString() === new Date().toDateString()
-            const isPast = date && date < new Date() && !isToday
-            const hasReminders = dayReminders.length > 0
-            const hasUrgent = dayReminders.some(r => r.priority === 'דחוף' && !r.is_completed)
-
-            return (
-              <div
-                key={index}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* View mode toggle */}
+          <div className="bg-white/60 border border-border/50 rounded-xl p-1 flex gap-1">
+            {(['day', 'week', 'month'] as ViewMode[]).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
                 className={cn(
-                  "min-h-[90px] sm:min-h-[110px] rounded-xl p-2 transition-all duration-200 border",
-                  !date && "bg-transparent border-transparent",
-                  date && isToday && "bg-primary/5 dark:bg-primary/10 border-primary/30 ring-1 ring-primary/20",
-                  date && isPast && !isToday && "bg-slate-50/50 dark:bg-slate-800/30 border-slate-200/30 dark:border-slate-700/20",
-                  date && !isPast && !isToday && "bg-white dark:bg-slate-800/50 border-slate-200/50 dark:border-slate-700/30 hover:border-primary/30 hover:bg-primary/[0.02]",
-                  hasUrgent && !isToday && "border-red-200 dark:border-red-500/20"
+                  "px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                  viewMode === mode
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-grey hover:text-navy hover:bg-slate-50"
                 )}
               >
-                {date && (
-                  <>
-                    <div className={cn(
-                      "text-sm font-bold mb-1.5 flex items-center gap-1",
-                      isToday && "text-primary",
-                      isPast && !isToday && "text-grey",
-                      !isPast && !isToday && "text-navy"
-                    )}>
-                      {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
-                      {date.getDate()}
-                    </div>
-                    <div className="space-y-1">
-                      {dayReminders.slice(0, 2).map((reminder) => (
-                        <Link
-                          key={reminder.id}
-                          href={reminder.client_id ? `/clients/${reminder.client_id}` : '#'}
-                          className={cn(
-                            "block text-[10px] sm:text-xs p-1 px-1.5 rounded-lg truncate font-medium transition-all hover:opacity-80 border",
-                            reminder.is_completed
-                              ? 'bg-slate-100 dark:bg-slate-700/30 text-grey line-through border-transparent'
-                              : priorityStyles[reminder.priority] || priorityStyles['רגיל']
-                          )}
-                          title={reminder.title}
-                        >
-                          {reminder.title}
-                        </Link>
-                      ))}
-                      {dayReminders.length > 2 && (
-                        <div className="text-[10px] text-grey font-medium px-1">
-                          +{dayReminders.length - 2} נוספות
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            )
-          })}
+                {mode === 'day' ? 'יום' : mode === 'week' ? 'שבוע' : 'חודש'}
+              </button>
+            ))}
+          </div>
+
+          {/* Navigation */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => navigate('prev')} className="h-10 w-10 rounded-xl bg-white border border-slate-200/50">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="text-base font-bold min-w-[160px] text-center text-navy">
+              {getHeaderLabel()}
+            </span>
+            <Button variant="ghost" size="icon" onClick={() => navigate('next')} className="h-10 w-10 rounded-xl bg-white border border-slate-200/50">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())} className="rounded-xl text-xs font-bold">
+              היום
+            </Button>
+          </div>
+
+          {/* Create meeting */}
+          <CreateMeetingDialog
+            defaultDate={format(currentDate, 'yyyy-MM-dd')}
+            onCreated={loadData}
+          />
         </div>
       </div>
 
-      {/* List View */}
-      <div className="glass-card rounded-2xl p-4 sm:p-6 mt-6 animate-fade-in-up delay-200">
-        <div className="flex items-center gap-2 mb-5">
-          <Clock className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-bold text-navy">רשימת תזכורות לחודש זה</h2>
-          <span className="text-xs font-bold text-grey bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{reminders.length}</span>
-        </div>
-        <div className="space-y-2">
-          {reminders.length === 0 ? (
-            <div className="text-center py-12">
-              <Calendar className="h-12 w-12 text-grey/30 mx-auto mb-3" />
-              <p className="text-grey font-medium">אין תזכורות לחודש זה</p>
-            </div>
-          ) : (
-            reminders.map((reminder) => {
-              const isOverdue = !reminder.is_completed && new Date(reminder.due_date) < new Date()
+      {/* ═══ MONTH VIEW ═══ */}
+      {viewMode === 'month' && (
+        <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up delay-100">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {dayNames.map(day => (
+              <div key={day} className="text-center font-bold text-grey text-xs uppercase tracking-wider py-3">{day}</div>
+            ))}
+
+            {daysInMonth.map((date, index) => {
+              const dayEvents = getEventsForDate(date)
+              const isToday = date && isSameDay(date, new Date())
+              const isPast = date && date < new Date() && !isToday
+
               return (
-                <Link
-                  key={reminder.id}
-                  href={reminder.client_id ? `/clients/${reminder.client_id}` : '#'}
+                <div
+                  key={index}
+                  onClick={() => { if (date) { setCurrentDate(date); setViewMode('day') } }}
                   className={cn(
-                    "flex items-center justify-between p-3.5 rounded-xl border transition-all duration-200 group",
-                    "hover:shadow-sm hover:-translate-y-0.5",
-                    reminder.is_completed
-                      ? "bg-slate-50/50 dark:bg-slate-800/20 border-slate-200/30 dark:border-slate-700/20"
-                      : isOverdue
-                        ? "bg-red-50/50 dark:bg-red-500/5 border-red-200/50 dark:border-red-500/15"
-                        : "bg-white dark:bg-slate-800/40 border-slate-200/50 dark:border-slate-700/30"
+                    "min-h-[100px] sm:min-h-[120px] rounded-xl p-2 transition-all duration-200 border bg-white/40 cursor-pointer hover:shadow-md",
+                    !date && "bg-transparent border-transparent cursor-default",
+                    date && isToday && "bg-blue-50/50 border-blue-200 ring-1 ring-blue-100",
+                    date && isPast && !isToday && "opacity-60",
+                    date && !isPast && !isToday && "hover:border-primary/30 hover:bg-white/60",
                   )}
                 >
-                  <div className="flex items-center gap-3">
-                    {reminder.is_completed ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald shrink-0" />
-                    ) : (
-                      <div className={cn(
-                        "w-2 h-2 rounded-full shrink-0",
-                        reminder.priority === 'דחוף' ? "bg-red-500" : "bg-blue-500"
-                      )} />
-                    )}
-                    <div>
-                      <div className={cn(
-                        "font-semibold text-sm",
-                        reminder.is_completed && "line-through text-grey"
-                      )}>
-                        {reminder.title}
+                  {date && (
+                    <>
+                      <div className={cn("text-xs font-black mb-2 flex items-center justify-between", isToday ? "text-blue-600" : "text-grey")}>
+                        <span>{date.getDate()}</span>
+                        {isToday && <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />}
                       </div>
-                      <div className="text-xs text-grey mt-0.5">
-                        {reminder.client ? (reminder.client as Client).name : 'כללי'} • {new Date(reminder.due_date).toLocaleDateString('he-IL')}
-                        {isOverdue && <span className="text-red-500 font-bold mr-1"> (איחור)</span>}
+                      <div className="space-y-1">
+                        {dayEvents.slice(0, 3).map(event => (
+                          <div
+                            key={`${event.eventType}-${event.id}`}
+                            className={cn(
+                              "text-[10px] p-1 px-1.5 rounded-lg truncate font-bold border shadow-sm",
+                              event.eventType === 'meeting'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                                : event.is_completed
+                                  ? 'bg-slate-50 text-grey line-through border-transparent opacity-50'
+                                  : priorityStyles[event.priority || 'רגיל']
+                            )}
+                          >
+                            <div className="flex items-center gap-1">
+                              {event.eventType === 'meeting' ? <Users className="h-2.5 w-2.5 shrink-0" /> : <Clock className="h-2.5 w-2.5 shrink-0" />}
+                              <span className="truncate">{event.title}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {dayEvents.length > 3 && (
+                          <div className="text-[9px] text-grey font-bold text-center">+{dayEvents.length - 3} נוספים</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ WEEK VIEW ═══ */}
+      {viewMode === 'week' && (
+        <div className="glass-card rounded-2xl p-4 sm:p-6 animate-fade-in-up delay-100 overflow-x-auto">
+          <div className="min-w-[700px]">
+            {/* Day headers */}
+            <div className="grid grid-cols-8 gap-2 mb-4">
+              <div className="text-[10px] font-bold text-grey uppercase tracking-widest py-2">שעה</div>
+              {weekDays.map(day => {
+                const isToday = isSameDay(day, new Date())
+                return (
+                  <div 
+                    key={day.toISOString()} 
+                    onClick={() => { setCurrentDate(day); setViewMode('day') }}
+                    className={cn(
+                      "text-center py-2 rounded-xl cursor-pointer transition-all",
+                      isToday ? "bg-blue-600 text-white" : "hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="text-[10px] font-bold uppercase tracking-widest">{format(day, 'EEE', { locale: he })}</div>
+                    <div className={cn("text-lg font-black", isToday ? "text-white" : "text-navy")}>{format(day, 'd')}</div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Time slots */}
+            {hours.map(hour => (
+              <div key={hour} className="grid grid-cols-8 gap-2 border-t border-border/20">
+                <div className="text-[10px] font-bold text-grey py-3 text-center">{`${hour.toString().padStart(2, '0')}:00`}</div>
+                {weekDays.map(day => {
+                  const dateStr = day.toISOString().split('T')[0]
+                  const dayEvents = eventsByDate[dateStr] || []
+                  const hourEvents = dayEvents.filter(e => {
+                    const eventHour = new Date(e.due_date).getHours()
+                    return eventHour === hour
+                  })
+
+                  return (
+                    <div key={`${dateStr}-${hour}`} className="min-h-[48px] py-1 space-y-1">
+                      {hourEvents.map(event => (
+                        <Link
+                          key={`${event.eventType}-${event.id}`}
+                          href={event.client_id ? `/clients/${event.client_id}` : '/tasks'}
+                          className={cn(
+                            "block text-[10px] px-2 py-1.5 rounded-lg font-bold truncate transition-all hover:scale-[1.02]",
+                            event.eventType === 'meeting'
+                              ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-100'
+                          )}
+                        >
+                          {event.title}
+                        </Link>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DAY VIEW ═══ */}
+      {viewMode === 'day' && (
+        <div className="glass-card rounded-2xl p-4 sm:p-8 animate-fade-in-up delay-100">
+          <div className="space-y-1">
+            {hours.map(hour => {
+              const dateStr = currentDate.toISOString().split('T')[0]
+              const dayEvents = eventsByDate[dateStr] || []
+              const hourEvents = dayEvents.filter(e => {
+                const eventHour = new Date(e.due_date).getHours()
+                return eventHour === hour
+              })
+
+              return (
+                <div key={hour} className="flex gap-4 border-t border-border/20 py-2">
+                  <div className="w-16 shrink-0 text-sm font-bold text-grey text-left pt-2">
+                    {`${hour.toString().padStart(2, '0')}:00`}
+                  </div>
+                  <div className="flex-1 min-h-[50px] space-y-2 py-1">
+                    {hourEvents.map(event => (
+                      <Link
+                        key={`${event.eventType}-${event.id}`}
+                        href={event.client_id ? `/clients/${event.client_id}` : '/tasks'}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-2xl transition-all hover:shadow-md group",
+                          event.eventType === 'meeting'
+                            ? 'bg-indigo-50 border border-indigo-100 hover:border-indigo-300'
+                            : 'bg-white border border-border/40 hover:border-primary/30'
+                        )}
+                      >
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                          event.eventType === 'meeting' ? "bg-indigo-100 text-indigo-600" : "bg-blue-100 text-blue-600"
+                        )}>
+                          {event.eventType === 'meeting' ? <Users className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-navy truncate group-hover:text-primary transition-colors">{event.title}</h4>
+                          <p className="text-xs font-bold text-grey">
+                            {format(new Date(event.due_date), 'HH:mm')} • {event.client?.name || '🔒 אישי'}
+                          </p>
+                        </div>
+                        {event.eventType === 'meeting' && (
+                          <span className="px-3 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-black">פגישה</span>
+                        )}
+                        {event.priority === 'דחוף' && (
+                          <span className="px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-[10px] font-black">דחוף</span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Unscheduled events (no specific hour) */}
+            {(() => {
+              const dateStr = currentDate.toISOString().split('T')[0]
+              const dayEvents = eventsByDate[dateStr] || []
+              const unscheduled = dayEvents.filter(e => {
+                const h = new Date(e.due_date).getHours()
+                return h < 7 || h > 19
+              })
+              if (unscheduled.length === 0) return null
+
+              return (
+                <div className="mt-6 pt-6 border-t border-border/40">
+                  <h3 className="text-sm font-black text-grey uppercase tracking-widest mb-4">ללא שעה מוגדרת</h3>
+                  <div className="space-y-2">
+                    {unscheduled.map(event => (
+                      <Link
+                        key={`${event.eventType}-${event.id}`}
+                        href={event.client_id ? `/clients/${event.client_id}` : '/tasks'}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-border/40 hover:border-primary/30 transition-all group"
+                      >
+                        <Clock className="h-4 w-4 text-grey shrink-0" />
+                        <span className="font-bold text-navy text-sm group-hover:text-primary transition-colors truncate">{event.title}</span>
+                        <span className="text-xs text-grey mr-auto">{event.client?.name || 'אישי'}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Events list below calendar */}
+      <div className="glass-card rounded-2xl p-4 sm:p-6 mt-6 animate-fade-in-up delay-200">
+        <div className="flex items-center gap-2 mb-5">
+          <Calendar className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-black text-navy">
+            {viewMode === 'day' ? 'אירועי היום' : viewMode === 'week' ? 'אירועי השבוע' : 'אירועי החודש'}
+          </h2>
+          <span className="text-xs font-black text-grey bg-slate-100 px-3 py-1 rounded-full">{events.length}</span>
+        </div>
+        <div className="space-y-2">
+          {events.length === 0 ? (
+            <div className="text-center py-12">
+              <Calendar className="h-12 w-12 text-grey/30 mx-auto mb-3" />
+              <p className="text-grey font-bold">אין אירועים בתקופה זו</p>
+            </div>
+          ) : (
+            events.slice(0, 20).map(event => {
+              const eventDate = new Date(event.due_date)
+              const isOverdue = event.eventType === 'reminder' && !event.is_completed && eventDate < new Date()
+
+              return (
+                <Link
+                  key={`list-${event.eventType}-${event.id}`}
+                  href={event.client_id ? `/clients/${event.client_id}` : '/tasks'}
+                  className={cn(
+                    "flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group hover:shadow-md",
+                    event.eventType === 'meeting' ? "bg-indigo-50/30 border-indigo-100/50" :
+                    event.is_completed ? "bg-slate-50 opacity-60 border-slate-100" :
+                    isOverdue ? "bg-rose-50/50 border-rose-100" : "bg-white border-border/40"
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
+                      event.eventType === 'meeting' ? "bg-indigo-100 text-indigo-600" : "bg-blue-100 text-blue-600"
+                    )}>
+                      {event.eventType === 'meeting' ? <Users className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                    </div>
+                    <div>
+                      <div className={cn("font-bold text-navy leading-tight mb-0.5", event.is_completed && "line-through text-grey")}>
+                        {event.title}
+                      </div>
+                      <div className="text-xs font-bold text-grey flex items-center gap-2">
+                        {event.client?.name || '🔒 אישי'} • {format(eventDate, 'd בMMMM HH:mm', { locale: he })}
+                        {isOverdue && <span className="text-rose-500 font-black text-[10px] bg-rose-50 px-2 py-0.5 rounded-full">איחור</span>}
                       </div>
                     </div>
                   </div>
                   <span className={cn(
-                    "px-2.5 py-1 rounded-lg text-[10px] font-bold border shrink-0",
-                    priorityStyles[reminder.priority] || priorityStyles['רגיל']
+                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm shrink-0",
+                    event.eventType === 'meeting' ? 'bg-indigo-600 text-white border-indigo-700' : priorityStyles[event.priority || 'רגיל']
                   )}>
-                    {reminder.priority}
+                    {event.eventType === 'meeting' ? 'פגישה' : event.priority}
                   </span>
                 </Link>
               )

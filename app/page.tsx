@@ -1,672 +1,309 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { DollarSign, Calendar, AlertCircle, Filter, ArrowUpDown, TrendingUp, TrendingDown, Users, Tag, CheckSquare, Square, CreditCard, Bell, UserPlus } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { 
+  Calendar, CheckCircle2, Clock, Users, 
+  ArrowRight, AlertCircle, Wallet,
+  CalendarPlus, ListTodo, UserPlus, Plus
+} from 'lucide-react'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ClientCard } from '@/components/client-card'
-import { AddClientDialog } from '@/components/add-client-dialog'
-import { GlobalSearch } from '@/components/global-search'
-import { BulkActionsToolbar } from '@/components/bulk-actions-toolbar'
-import { EmptyState } from '@/components/empty-state'
-import { supabase, type Client, type Payment, type Reminder } from '@/lib/supabase'
-import { getAllTags } from '@/lib/actions/tags'
-import type { ClientTag } from '@/lib/actions/tags'
+import { loadDashboardData, type DashboardData } from '@/lib/actions/dashboard'
 import Link from 'next/link'
+import { format, isBefore, startOfDay } from 'date-fns'
+import { he } from 'date-fns/locale'
+import { RecentlyViewed } from '@/components/recently-viewed'
+import { CreateMeetingDialog } from '@/components/create-meeting-dialog'
+import { CreateTaskDialog } from '@/components/create-task-dialog'
+import { CreatePaymentDialog } from '@/components/create-payment-dialog'
+import { AddClientDialog } from '@/components/add-client-dialog'
+import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit-log'
-import { deleteClient } from '@/lib/actions/clients'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { loadDashboardData, refreshClientCounts, type ClientWithData, type DashboardAlerts } from '@/lib/actions/dashboard'
 
-
-export default function Dashboard() {
-  const [clients, setClients] = useState<ClientWithData[]>([])
-  const [filteredClients, setFilteredClients] = useState<ClientWithData[]>([])
+export default function TodayDashboard() {
+  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>('הכל')
-  const [sortBy, setSortBy] = useState<'name' | 'balance' | 'created'>('created')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [pendingPayments, setPendingPayments] = useState<Array<Payment & { client: Client }>>([])
-  const [upcomingReminders, setUpcomingReminders] = useState<Array<Reminder & { client: Client | null }>>([])
-  const [alertsLoading, setAlertsLoading] = useState(true)
-  const [selectedClientIds, setSelectedClientIds] = useState<string[]>([])
-  const [bulkMode, setBulkMode] = useState(false)
-  const [availableTags, setAvailableTags] = useState<ClientTag[]>([])
-  const [selectedTagFilter, setSelectedTagFilter] = useState<string>('all')
 
-  // ── Optimized: Single batched server action for all dashboard data ──
-  const loadAllDashboardData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      setAlertsLoading(true)
-
       const result = await loadDashboardData()
-
-      if (!result.success || !result.data) {
-        console.error('Error loading dashboard:', result.error)
-        return
-      }
-
-      setClients(result.data.clients)
-      setFilteredClients(result.data.clients)
-      setPendingPayments(result.data.alerts.pendingPayments)
-      setUpcomingReminders(result.data.alerts.upcomingReminders)
-      setAvailableTags(result.data.availableTags)
+      if (result.success && result.data) setData(result.data)
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
+      console.error('Error loading dashboard:', error)
     } finally {
       setLoading(false)
-      setAlertsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadAllDashboardData()
-
-    // Realtime subscription — lightweight refresh instead of full reload
-    const channel = supabase
-      .channel('dashboard-unread-counts')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'messages'
-      }, async () => {
-        // Lightweight: only refresh counts, not full dashboard
-        const result = await refreshClientCounts()
-        if (result.success && result.counts) {
-          setClients(prev => prev.map(client => ({
-            ...client,
-            unreadMessagesCount: result.counts![client.id]?.unread ?? client.unreadMessagesCount,
-            pendingPaymentsCount: result.counts![client.id]?.pending ?? client.pendingPaymentsCount,
-            openRemindersCount: result.counts![client.id]?.reminders ?? client.openRemindersCount,
-          })))
-        }
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
     }
   }, [])
 
-  useEffect(() => {
-    let filtered = [...clients]
+  useEffect(() => { loadData() }, [loadData])
 
-    // Filter by status
-    if (statusFilter !== 'הכל') {
-      filtered = filtered.filter((client) => client.status === statusFilter)
-    }
+  const today = new Date()
+  const todayStr = format(today, 'yyyy-MM-dd')
 
-    // Filter by tag
-    if (selectedTagFilter !== 'all') {
-      filtered = filtered.filter((client) =>
-        client.tags?.some(tag => tag.id === selectedTagFilter)
-      )
-    }
+  const todaysMeetings = useMemo(() => {
+    if (!data?.alerts.recentMeetings) return []
+    return data.alerts.recentMeetings.filter(m => 
+      format(new Date(m.meeting_date), 'yyyy-MM-dd') === todayStr
+    ).sort((a, b) => new Date(a.meeting_date).getTime() - new Date(b.meeting_date).getTime())
+  }, [data, todayStr])
 
-    // Sort
-    filtered.sort((a, b) => {
-      let comparison = 0
-      switch (sortBy) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name, 'he')
-          break
-        case 'balance':
-          comparison = a.currentBalance - b.currentBalance
-          break
-        case 'created':
-          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          break
-      }
-      return sortOrder === 'asc' ? comparison : -comparison
+  const todaysTasks = useMemo(() => {
+    if (!data?.alerts.upcomingReminders) return []
+    return data.alerts.upcomingReminders.filter(r => 
+      format(new Date(r.due_date), 'yyyy-MM-dd') === todayStr && !r.is_completed
+    )
+  }, [data, todayStr])
+
+  const overdueTasks = useMemo(() => {
+    if (!data?.alerts.upcomingReminders) return []
+    return data.alerts.upcomingReminders.filter(r => {
+      const dueDate = startOfDay(new Date(r.due_date))
+      return isBefore(dueDate, startOfDay(new Date())) && !r.is_completed
     })
+  }, [data])
 
-    setFilteredClients(filtered)
-  }, [clients, statusFilter, selectedTagFilter, sortBy, sortOrder])
+  const upcomingThisWeek = useMemo(() => {
+    if (!data?.alerts.upcomingReminders) return []
+    const todayDate = startOfDay(new Date())
+    const weekFromNow = new Date(todayDate)
+    weekFromNow.setDate(weekFromNow.getDate() + 7)
+    return data.alerts.upcomingReminders.filter(r => {
+      const dueDate = startOfDay(new Date(r.due_date))
+      return dueDate > todayDate && dueDate <= weekFromNow && !r.is_completed
+    }).slice(0, 5)
+  }, [data])
 
-  const handleAddClient = async (
-    name: string,
-    email: string | null,
-    phone: string | null,
-    status: string
-  ) => {
-    try {
-      // Insert new client into Supabase
-      const { data, error } = await supabase
-        .from('clients')
-        .insert([{
-          name,
-          email,
-          phone,
-          status,
-        }])
-        .select()
-        .single()
+  const activeClientsCount = data?.clients.filter(c => c.status === 'פעיל').length || 0
+  const pendingPaymentsCount = data?.alerts.pendingPayments.length || 0
+  const pendingPaymentsTotal = data?.alerts.pendingPayments.reduce((sum, p) => sum + Math.abs(p.amount), 0) || 0
 
-      if (error) {
-        throw error
-      }
-
-      if (!data) {
-        throw new Error('Failed to create client')
-      }
-
-      // Log action
-      await logAction(
-        'client.created',
-        'client',
-        data.id,
-        `לקוח חדש נוצר: ${name}`,
-        { email, phone, status }
-      )
-
-      // Add client with zero values (no Google Sheets data)
-      const clientWithData: ClientWithData = {
-        ...data,
-        currentBalance: 0,
-        monthlyIncome: 0,
-        monthlyExpense: 0,
-        tags: [],
-        pendingPaymentsCount: 0,
-        openRemindersCount: 0,
-        unreadMessagesCount: 0,
-        childCount: 0,
-      }
-
-      setClients([clientWithData, ...clients])
-      setFilteredClients([clientWithData, ...filteredClients])
-    } catch (error) {
-      console.error('Error adding client:', error)
-      throw error // Re-throw to allow error handling in the dialog if needed
-    }
+  const handleAddClient = async (name: string, email: string | null, phone: string | null, status: string) => {
+    const { data: newClient, error } = await supabase
+      .from('clients').insert([{ name, email, phone, status }]).select().single()
+    if (error) throw error
+    if (newClient) await logAction('client.created', 'client', newClient.id, `לקוח חדש נוצר: ${name}`, { email, phone, status })
+    loadData()
   }
 
-  const handleDeleteClient = async (clientId: string, clientName: string) => {
-    if (!confirm(`האם אתה בטוח שברצונך למחוק את הלקוח "${clientName}"? פעולה זו תמחק את כל הנתונים הקשורים (טבלאות, רשומות, תשלומים, תזכורות וכו') ולא ניתן לבטל אותה.`)) {
-      return
-    }
-
-    try {
-      const result = await deleteClient(clientId)
-      if (result.success) {
-        // Remove client from state
-        setClients(clients.filter(c => c.id !== clientId))
-        setFilteredClients(filteredClients.filter(c => c.id !== clientId))
-        setSelectedClientIds(selectedClientIds.filter(id => id !== clientId))
-        // Reload alerts in case this client had pending items
-        loadAllDashboardData()
-      } else {
-        alert(`שגיאה במחיקת הלקוח: ${result.error}`)
-      }
-    } catch (error) {
-      console.error('Error deleting client:', error)
-      alert('שגיאה בלתי צפויה במחיקת הלקוח')
-    }
+  if (loading) {
+    return (
+      <div className="p-8 space-y-8 animate-pulse" dir="rtl">
+        <div className="h-20 bg-grey/10 rounded-3xl w-1/3" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-grey/10 rounded-2xl" />)}</div>
+        <div className="h-64 bg-grey/10 rounded-3xl" />
+      </div>
+    )
   }
 
-  const handleClientSelect = (clientId: string, selected: boolean) => {
-    if (selected) {
-      setSelectedClientIds([...selectedClientIds, clientId])
-    } else {
-      setSelectedClientIds(selectedClientIds.filter(id => id !== clientId))
-    }
-  }
-
-  const handleSelectAll = () => {
-    if (selectedClientIds.length === filteredClients.length) {
-      setSelectedClientIds([])
-    } else {
-      setSelectedClientIds(filteredClients.map(c => c.id))
-    }
-  }
-
-  const handleBulkActionComplete = () => {
-    loadAllDashboardData()
-  }
-
-  const handleClearSelection = () => {
-    setSelectedClientIds([])
-    setBulkMode(false)
-  }
-
-  // KPI summary computed from clients data
-  const dashboardKPIs = useMemo(() => {
-    const activeClients = clients.filter(c => c.status === 'פעיל' || !c.status)
-    const totalMonthlyIncome = clients.reduce((sum, c) => sum + c.monthlyIncome, 0)
-    const totalMonthlyExpense = clients.reduce((sum, c) => sum + c.monthlyExpense, 0)
-    const totalPendingPayments = clients.reduce((sum, c) => sum + c.pendingPaymentsCount, 0)
-    const totalOpenReminders = clients.reduce((sum, c) => sum + c.openRemindersCount, 0)
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const newClientsThisMonth = clients.filter(c => {
-      if (!c.created_at) return false
-      return new Date(c.created_at) >= startOfMonth
-    })
-    return {
-      activeCount: activeClients.length,
-      totalClients: clients.length,
-      totalMonthlyIncome,
-      totalMonthlyExpense,
-      totalPendingPayments,
-      totalOpenReminders,
-      newClientsCount: newClientsThisMonth.length,
-    }
-  }, [clients])
+  const hour = today.getHours()
+  const greeting = hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : 'ערב טוב'
 
   return (
-    <div className="p-8">
-      <div className="mb-10 animate-fade-in-up">
-        <h1 className="text-4xl font-extrabold text-navy mb-2 tracking-tight">לוח בקרה</h1>
-        <div className="flex items-center gap-2">
-          <div className="h-1 w-12 bg-primary rounded-full" />
-          <p className="text-grey font-medium">ניהול לקוחות - נחמיה דרוק</p>
-        </div>
-      </div>
-
-      {/* KPI Summary Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 mb-10 overflow-hidden">
-        {loading ? (
-          <>
-            {/* Skeleton Main Balance Card */}
-            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm overflow-hidden animate-pulse">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-slate-200/60" />
-                <div className="w-24 h-6 bg-slate-200/60 rounded-full" />
-              </div>
-              <div className="w-16 h-10 bg-slate-200/60 rounded-lg mb-2" />
-              <div className="w-32 h-4 bg-slate-200/60 rounded" />
-            </div>
-
-            {/* Skeleton Income Card */}
-            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm overflow-hidden animate-pulse">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-slate-200/60" />
-                <div className="w-24 h-6 bg-slate-200/60 rounded-full" />
-              </div>
-              <div className="w-32 h-10 bg-slate-200/60 rounded-lg mb-2" />
-              <div className="w-40 h-4 bg-slate-200/60 rounded" />
-            </div>
-
-            {/* Skeleton Smaller Cards Stack */}
-            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-amber-50/20 rounded-2xl border border-amber-100/50 p-5 shadow-sm animate-pulse">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-lg bg-amber-200/60" />
-                  <div className="w-16 h-4 bg-amber-200/60 rounded" />
-                </div>
-                <div className="w-12 h-8 bg-amber-200/60 rounded mb-2" />
-                <div className="w-20 h-3 bg-amber-200/60 rounded" />
-              </div>
-              <div className="bg-purple-50/20 rounded-2xl border border-purple-100/50 p-5 shadow-sm animate-pulse">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-lg bg-purple-200/60" />
-                  <div className="w-16 h-4 bg-purple-200/60 rounded" />
-                </div>
-                <div className="w-12 h-8 bg-purple-200/60 rounded mb-2" />
-                <div className="w-20 h-3 bg-purple-200/60 rounded" />
-              </div>
-            </div>
-          </>
-        ) : clients.length > 0 ? (
-          <>
-            {/* Main Balance Card - Spans 4 columns */}
-            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm glass-card hover-lift animate-fade-in-up delay-100 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-blue-50 text-primary">
-                    <Users className="h-6 w-6" />
-                  </div>
-                  <div className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded-full">סה"כ לקוחות</div>
-                </div>
-                <div className="text-4xl font-bold text-navy mb-1">{dashboardKPIs.activeCount}</div>
-                <div className="text-sm text-grey font-medium">מתוך {dashboardKPIs.totalClients} סה"כ במערכת</div>
-              </div>
-            </div>
-
-            {/* Income Card - Spans 4 columns */}
-            <div className="lg:col-span-4 bg-white rounded-2xl border border-border/50 p-6 shadow-sm glass-card hover-lift animate-fade-in-up delay-200 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110" />
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-green-50 text-emerald">
-                    <TrendingUp className="h-6 w-6" />
-                  </div>
-                  <div className="text-xs font-semibold px-2 py-1 bg-green-50 text-emerald rounded-full">הכנסות החודש</div>
-                </div>
-                <div className="text-4xl font-bold text-emerald mb-1">₪{dashboardKPIs.totalMonthlyIncome.toLocaleString()}</div>
-                <div className="flex items-center gap-2 text-sm text-grey font-medium">
-                  <span>הוצאות:</span>
-                  <span className="text-rose-500">₪{dashboardKPIs.totalMonthlyExpense.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Smaller Cards Stack - Spans 4 columns */}
-            <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-amber-50/50 rounded-2xl border border-amber-100 p-5 shadow-sm glass-card hover-lift animate-fade-in-up delay-300">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
-                    <CreditCard className="h-5 w-5" />
-                  </div>
-                  <span className="text-sm font-semibold text-amber-800">ממתינים</span>
-                </div>
-                <div className="text-2xl font-bold text-amber-600">{dashboardKPIs.totalPendingPayments}</div>
-                <div className="text-xs text-amber-700/70 mt-1">תשלומים לטיפול</div>
-              </div>
-
-              <div className="bg-purple-50/50 rounded-2xl border border-purple-100 p-5 shadow-sm glass-card hover-lift animate-fade-in-up delay-400">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 rounded-lg bg-purple-100 text-purple-600">
-                    <Bell className="h-5 w-5" />
-                  </div>
-                  <span className="text-sm font-semibold text-purple-800">משימות</span>
-                </div>
-                <div className="text-2xl font-bold text-purple-600">{dashboardKPIs.totalOpenReminders}</div>
-                <div className="text-xs text-purple-700/70 mt-1">פתוחות היום</div>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </div>
-
-      {/* Alerts Center - Enhanced Bento Layout */}
-      <div className="mb-10 animate-fade-in-up delay-500" dir="rtl">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-navy flex items-center gap-2">
-            <div className="h-8 w-1 bg-amber-500 rounded-full" />
-            התראות ומשימות קרובות
-          </h2>
-          <div className="text-xs font-semibold px-3 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-100 italic">
-            עדכון אחרון: {new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-          </div>
+    <div className="p-6 md:p-8 space-y-8 bg-background min-h-screen" dir="rtl">
+      {/* Header + Quick Actions */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 animate-fade-in-up">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight mb-2">{greeting}, נחמיה</h1>
+          <p className="text-muted-foreground font-medium flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-primary" />
+            {format(today, 'EEEE, d בMMMM yyyy', { locale: he })}
+          </p>
         </div>
 
-        {alertsLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-[200px] bg-grey/5 animate-pulse rounded-2xl border border-border/50" />
-            <div className="h-[200px] bg-grey/5 animate-pulse rounded-2xl border border-border/50" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Pending Payments */}
-            <div className="bg-white/50 backdrop-blur-sm rounded-2xl border border-border/50 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500/20" />
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-yellow-50 text-yellow-600">
-                    <DollarSign className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-bold text-lg">תשלומים ממתינים</h3>
-                </div>
-                <span className="text-xs font-bold text-yellow-700 bg-yellow-100/50 px-2 py-0.5 rounded-full">
-                  {pendingPayments.length} פריטים
-                </span>
-              </div>
-
-              {pendingPayments.length > 0 ? (
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                  {pendingPayments.map((payment) => (
-                    <Link
-                      key={payment.id}
-                      href={`/clients/${payment.client_id}`}
-                      className="group block p-4 bg-white/40 border border-transparent rounded-xl hover:border-yellow-200 hover:bg-yellow-50/50 transition-all duration-200"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 font-bold text-sm">
-                            {(payment.client as Client)?.name?.charAt(0) || '?'}
-                          </div>
-                          <div>
-                            <div className="font-bold text-navy group-hover:text-yellow-800 transition-colors">
-                              {(payment.client as Client)?.name || 'לקוח לא ידוע'}
-                            </div>
-                            <div className="text-xs text-grey flex items-center gap-1.5 mt-0.5">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(payment.payment_date).toLocaleDateString('he-IL')}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-extrabold text-navy">
-                            ₪{payment.amount.toLocaleString('he-IL')}
-                          </div>
-                          <div className="text-[10px] font-bold text-yellow-600 uppercase tracking-wider">ממתין</div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-50 mb-4 transform rotate-12 transition-transform hover:rotate-0">
-                    <DollarSign className="h-8 w-8 text-green-600" />
-                  </div>
-                  <p className="text-base font-bold text-navy">אין תשלומים ממתינים</p>
-                  <p className="text-sm text-grey mt-1">כל התשלומים עודכנו בהצלחה!</p>
-                </div>
-              )}
-            </div>
-
-            {/* Upcoming Reminders */}
-            <div className="bg-white/50 backdrop-blur-sm rounded-2xl border border-border/50 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500/20" />
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-                    <Calendar className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-bold text-lg">משימות קרובות</h3>
-                </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-100/50 px-2 py-0.5 rounded-full">
-                  7 ימים
-                </span>
-              </div>
-
-              {upcomingReminders.length > 0 ? (
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                  {upcomingReminders.map((reminder) => (
-                    <Link
-                      key={reminder.id}
-                      href={reminder.client_id ? `/clients/${reminder.client_id}` : '#'}
-                      className="group block p-4 bg-white/40 border border-transparent rounded-xl hover:border-blue-200 hover:bg-blue-50/50 transition-all duration-200"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-bold text-navy group-hover:text-blue-800 transition-colors">{reminder.title}</div>
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <div className="text-xs text-grey font-medium flex items-center gap-1.5">
-                              <Users className="h-3 w-3" />
-                              {reminder.client ? (reminder.client as Client).name : 'כללי'}
-                            </div>
-                            <div className="text-xs text-grey font-medium flex items-center gap-1.5">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(reminder.due_date).toLocaleDateString('he-IL')}
-                            </div>
-                          </div>
-                        </div>
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${reminder.priority === 'High' ? 'bg-rose-100 text-rose-700' :
-                          reminder.priority === 'Medium' ? 'bg-amber-100 text-amber-700' :
-                            'bg-sky-100 text-sky-700'
-                          }`}>
-                          {reminder.priority === 'High' ? 'גבוהה' :
-                            reminder.priority === 'Medium' ? 'בינונית' : 'נמוכה'}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 mb-4 transform -rotate-12 transition-transform hover:rotate-0">
-                    <Calendar className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <p className="text-base font-bold text-navy">אין משימות קרובות</p>
-                  <p className="text-sm text-grey mt-1">היומן שלך פנוי ל-7 הימים הקרובים</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-10 space-y-6 animate-fade-in-up delay-500">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4 flex-wrap flex-1">
-            <GlobalSearch />
-
-            <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
-              <Filter className="h-4 w-4 text-primary" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-transparent border-none text-sm font-bold text-navy focus:ring-0 cursor-pointer"
-              >
-                <option value="הכל">כל הסטטוסים</option>
-                <option value="פעיל">פעילים</option>
-                <option value="ליד">לידים</option>
-                <option value="ארכיון">ארכיון</option>
-              </select>
-            </div>
-
-            {availableTags.length > 0 && (
-              <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
-                <Tag className="h-4 w-4 text-purple-500" />
-                <Select value={selectedTagFilter} onValueChange={setSelectedTagFilter}>
-                  <SelectTrigger className="w-[140px] border-none bg-transparent h-auto p-0 focus:ring-0 font-bold text-navy">
-                    <SelectValue placeholder="תגיות" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-border/50 shadow-xl">
-                    <SelectItem value="all">כל התגיות</SelectItem>
-                    {availableTags.map(tag => (
-                      <SelectItem key={tag.id} value={tag.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
-                          {tag.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setBulkMode(!bulkMode)
-                if (bulkMode) {
-                  setSelectedClientIds([])
-                }
-              }}
-              className={`gap-2 rounded-2xl border-border/50 h-10 px-4 font-bold transition-all ${bulkMode ? 'bg-primary text-white border-primary shadow-md shadow-primary/20' : 'bg-white/50 backdrop-blur-sm hover:bg-white'}`}
-            >
-              {bulkMode ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-              {bulkMode ? 'ביטול בחירה' : 'בחירה מרובה'}
+        {/* All 4 Quick Actions – open dialogs right here */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <CreateMeetingDialog onCreated={loadData} trigger={
+            <Button className="rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-medium gap-2 h-10 px-4 shadow-sm text-xs">
+              <CalendarPlus className="h-3.5 w-3.5" />פגישה
             </Button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-border/50 rounded-2xl px-3 py-1.5 shadow-sm">
-              <ArrowUpDown className="h-4 w-4 text-grey" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'name' | 'balance' | 'created')}
-                className="bg-transparent border-none text-sm font-bold text-navy focus:ring-0 cursor-pointer"
-              >
-                <option value="created">תאריך</option>
-                <option value="name">שם</option>
-                <option value="balance">יתרה</option>
-              </select>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="h-7 w-7 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </Button>
-            </div>
-
-            <AddClientDialog onAddClient={handleAddClient} />
-          </div>
+          } />
+          <CreateTaskDialog onCreated={loadData} trigger={
+            <Button variant="outline" className="rounded-lg border-border bg-card font-medium gap-2 h-10 px-4 text-xs shadow-sm text-foreground hover:bg-secondary">
+              <ListTodo className="h-3.5 w-3.5" />משימה
+            </Button>
+          } />
+          <CreatePaymentDialog onCreated={loadData} trigger={
+            <Button variant="outline" className="rounded-lg border-border bg-card font-medium gap-2 h-10 px-4 text-xs shadow-sm text-foreground hover:bg-secondary">
+              <Wallet className="h-3.5 w-3.5" />תשלום
+            </Button>
+          } />
+          <AddClientDialog onAddClient={handleAddClient} />
         </div>
+      </div>
 
-        <div className="flex items-center justify-between px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10">
-          <div className="text-xs font-bold text-primary flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            מציג {filteredClients.length} מתוך {clients.length} לקוחות
-          </div>
-          {selectedClientIds.length > 0 && (
-            <div className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 animate-fade-in-up">
-              {selectedClientIds.length} לקוחות נבחרו
+      {/* KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-fade-in-up delay-100">
+        <MetricCard icon={Clock} label="פגישות היום" value={todaysMeetings.length.toString()} color="blue" />
+        <MetricCard icon={CheckCircle2} label="משימות היום" value={todaysTasks.length.toString()} color="amber" />
+        <MetricCard icon={AlertCircle} label="באיחור" value={overdueTasks.length.toString()} color="rose" />
+        <MetricCard icon={Users} label="לקוחות פעילים" value={activeClientsCount.toString()} color="emerald" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Main Column */}
+        <div className="lg:col-span-8 space-y-6 animate-fade-in-up delay-200">
+          
+          {/* Today's Agenda */}
+          <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-3">
+                <div className="w-1.5 h-6 bg-primary rounded-full" />
+                סדר יום להיום
+              </h2>
+              <span className="px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider">
+                {todaysMeetings.length + todaysTasks.length} אירועים
+              </span>
             </div>
+            <div className="p-4 sm:p-6">
+              {todaysMeetings.length === 0 && todaysTasks.length === 0 ? (
+                <div className="py-12 text-center space-y-3">
+                  <Calendar className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+                  <p className="text-foreground font-medium">יום פנוי</p>
+                  <p className="text-muted-foreground text-sm">אין אירועים מתוכננים להיום</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {todaysMeetings.map(meeting => (
+                    <AgendaItem key={`m-${meeting.id}`} type="meeting" time={format(new Date(meeting.meeting_date), 'HH:mm')} title={meeting.subject} subtitle={meeting.client?.name} link={`/clients/${meeting.client_id}`} />
+                  ))}
+                  {todaysTasks.map(task => (
+                    <AgendaItem key={`t-${task.id}`} type="task" time="היום" title={task.title} subtitle={task.client?.name || '🔒 אישי'} priority={task.priority} link={task.client_id ? `/clients/${task.client_id}` : '/tasks'} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Overdue */}
+          {overdueTasks.length > 0 && (
+            <Card className="rounded-xl border border-destructive/20 bg-destructive/5 shadow-sm overflow-hidden">
+              <div className="p-5 sm:p-6 border-b border-destructive/10 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-destructive flex items-center gap-3">
+                  <div className="w-1.5 h-6 bg-destructive rounded-full" />
+                  משימות באיחור
+                </h2>
+                <span className="px-2.5 py-1 rounded-md bg-destructive/10 text-destructive text-[10px] font-bold">
+                  {overdueTasks.length}
+                </span>
+              </div>
+              <div className="p-4 sm:p-6 space-y-2">
+                {overdueTasks.slice(0, 5).map(task => (
+                  <Link key={task.id} href={task.client_id ? `/clients/${task.client_id}` : '/tasks'} className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border hover:border-destructive/30 transition-all group">
+                    <div className="w-8 h-8 rounded-md bg-destructive/10 flex items-center justify-center text-destructive shrink-0">
+                      <AlertCircle className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm text-foreground truncate">{task.title}</h4>
+                      <p className="text-[11px] font-medium text-muted-foreground">{task.client?.name || 'אישי'} • מ-{format(new Date(task.due_date), 'd/M')}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </Link>
+                ))}
+                {overdueTasks.length > 5 && (
+                  <Button asChild variant="ghost" className="w-full text-destructive-foreground font-medium text-sm mt-2">
+                    <Link href="/tasks">עוד {overdueTasks.length - 5} →</Link>
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Upcoming This Week */}
+          {upcomingThisWeek.length > 0 && (
+            <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
+                <h2 className="text-lg font-bold text-foreground flex items-center gap-3">
+                  <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                  השבוע הקרוב
+                </h2>
+                <Button asChild variant="ghost" className="text-primary font-medium gap-1 text-xs px-2 h-8">
+                  <Link href="/calendar">ליומן <ArrowRight className="h-3.5 w-3.5" /></Link>
+                </Button>
+              </div>
+              <div className="p-4 sm:p-6 space-y-2">
+                {upcomingThisWeek.map(task => (
+                  <Link key={task.id} href={task.client_id ? `/clients/${task.client_id}` : '/tasks'} className="flex items-center gap-4 p-3 rounded-lg border border-transparent hover:border-border hover:bg-secondary/50 transition-all group">
+                    <div className="w-10 text-center shrink-0">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase">{format(new Date(task.due_date), 'EEE', { locale: he })}</div>
+                      <div className="text-lg font-bold text-foreground">{format(new Date(task.due_date), 'd')}</div>
+                    </div>
+                    <div className="w-px h-8 bg-border shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">{task.title}</h4>
+                      <p className="text-xs text-muted-foreground">{task.client?.name || '🔒 אישי'}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </Card>
           )}
         </div>
+
+        {/* Sidebar Column */}
+        <div className="lg:col-span-4 space-y-6 animate-fade-in-up delay-300">
+          {/* Quick Status */}
+          <Card className="p-5 sm:p-6 rounded-xl border border-border bg-card shadow-sm">
+            <h3 className="text-base font-bold text-foreground mb-4">סיכום מהיר</h3>
+            <div className="space-y-4">
+              <QuickStatRow label="תשלומים ממתינים" value={`₪${pendingPaymentsTotal.toLocaleString()}`} href="/cashflow" icon={<Wallet className="h-4 w-4 text-muted-foreground" />} />
+              <div className="h-px bg-border" />
+              <QuickStatRow label="משימות פתוחות" value={String(todaysTasks.length + overdueTasks.length)} href="/tasks" icon={<ListTodo className="h-4 w-4 text-muted-foreground" />} />
+              <div className="h-px bg-border" />
+              <QuickStatRow label="לקוחות פעילים" value={String(activeClientsCount)} href="/clients" icon={<Users className="h-4 w-4 text-muted-foreground" />} />
+            </div>
+          </Card>
+
+          <RecentlyViewed />
+        </div>
       </div>
-
-      {/* Bulk Actions Toolbar */}
-      {bulkMode && selectedClientIds.length > 0 && (
-        <BulkActionsToolbar
-          selectedClientIds={selectedClientIds}
-          onActionComplete={handleBulkActionComplete}
-          onClearSelection={handleClearSelection}
-        />
-      )}
-
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-grey/20 rounded w-32 mx-auto"></div>
-            <div className="h-2 bg-grey/20 rounded w-24 mx-auto"></div>
-          </div>
-        </div>
-      ) : filteredClients.length === 0 ? (
-        clients.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="אין לקוחות במערכת"
-            description="התחל לנהל את הלקוחות שלך על ידי הוספת הלקוח הראשון. תוכל לעקוב אחר תשלומים, משימות ועוד."
-            actionLabel="הוסף לקוח ראשון"
-            onAction={() => {
-              const addButton = document.querySelector('[data-add-client-trigger]') as HTMLElement
-              addButton?.click()
-            }}
-          />
-        ) : (
-          <EmptyState
-            icon={Filter}
-            title="לא נמצאו לקוחות"
-            description="נסה לשנות את הפילטרים או את מילות החיפוש כדי למצוא לקוחות."
-          />
-        )
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-          {filteredClients.map((client) => (
-            <ClientCard
-              key={client.id}
-              id={client.id}
-              name={client.name}
-              currentBalance={client.currentBalance}
-              monthlyIncome={client.monthlyIncome}
-              monthlyExpense={client.monthlyExpense}
-              tags={client.tags}
-              status={client.status}
-              selected={selectedClientIds.includes(client.id)}
-              onSelect={handleClientSelect}
-              bulkMode={bulkMode}
-              pendingPaymentsCount={client.pendingPaymentsCount}
-              openRemindersCount={client.openRemindersCount}
-              unreadMessagesCount={client.unreadMessagesCount}
-              phone={client.phone}
-              email={client.email}
-              monthlyTrends={client.monthlyTrends}
-              childCount={client.childCount}
-            />
-          ))}
-        </div>
-      )}
     </div>
+  )
+}
+
+function MetricCard({ icon: Icon, label, value, color }: any) {
+  const colors: any = {
+    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
+    amber: 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
+    rose: 'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400',
+    emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+  }
+  return (
+    <Card className="p-4 rounded-xl border border-border bg-card shadow-sm hover:border-primary/20 transition-all duration-200">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-md ${colors[color]}`}><Icon className="h-4 w-4" /></div>
+        <div>
+          <div className="text-2xl font-bold text-foreground">{value}</div>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{label}</div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function AgendaItem({ type, time, title, subtitle, link, priority }: any) {
+  return (
+    <Link href={link} className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/50 border border-transparent hover:border-border transition-all group">
+      <div className="w-12 text-center shrink-0"><div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">{time}</div></div>
+      <div className="w-px h-8 bg-border shrink-0" />
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${type === 'meeting' ? 'bg-primary' : 'bg-emerald-500'}`} />
+      <div className="flex-1 min-w-0">
+        <h4 className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">{title}</h4>
+        <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+          {type === 'meeting' ? <Users className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+          {subtitle}
+        </div>
+      </div>
+      {priority === 'דחוף' && <span className="px-2 py-0.5 rounded-md bg-destructive/10 text-destructive text-[10px] font-bold">דחוף</span>}
+    </Link>
+  )
+}
+
+function QuickStatRow({ label, value, href, icon }: any) {
+  return (
+    <Link href={href} className="flex items-center justify-between hover:opacity-80 transition-opacity group">
+      <span className="text-muted-foreground text-sm font-medium flex items-center gap-2">{icon}{label}</span>
+      <span className="text-foreground font-bold text-base group-hover:text-primary transition-colors">{value}</span>
+    </Link>
   )
 }
