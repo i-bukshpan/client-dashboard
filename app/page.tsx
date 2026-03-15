@@ -23,12 +23,14 @@ import { logAction } from '@/lib/audit-log'
 import { AIBriefing } from '@/components/ai-briefing'
 import { PublicLanding } from '@/components/public-landing'
 import { type User } from '@supabase/supabase-js'
+import { AIAgentSidebar } from '@/components/ai-agent-sidebar'
 
 export default function TodayDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<User | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
+  const [showAISidebar, setShowAISidebar] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -158,7 +160,17 @@ export default function TodayDashboard() {
         <MetricCard icon={Users} label="לקוחות פעילים" value={activeClientsCount.toString()} color="indigo" />
       </div>
 
-      <AIBriefing data={data} />
+      <AIBriefing data={data} onOpenAnalysis={() => setShowAISidebar(true)} />
+
+      {showAISidebar && (
+        <div className="fixed inset-y-0 left-0 w-96 z-50 animate-in slide-in-from-left duration-300 shadow-2xl">
+          <AIAgentSidebar 
+            clientId="dashboard" 
+            clientName="דשבורד כללי" 
+            onClose={() => setShowAISidebar(false)} 
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Column */}

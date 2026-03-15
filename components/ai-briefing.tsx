@@ -5,42 +5,27 @@ import { Card } from '@/components/ui/card'
 import { Sparkles, Loader2, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+import { getDashboardBriefing } from '@/lib/actions/dashboard'
+
 interface AIBriefingProps {
   data: any
+  onOpenAnalysis?: () => void
 }
 
-export function AIBriefing({ data }: AIBriefingProps) {
+export function AIBriefing({ data, onOpenAnalysis }: AIBriefingProps) {
   const [briefing, setBriefing] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // In a real scenario, this would call our /api/chat or a specialized briefing API
-    // For now, we simulate a smart summary based on dashboard data
     const generateBriefing = async () => {
       setLoading(true)
-      
-      // Simulate API call
-      setTimeout(() => {
-        const meetingsCount = data?.alerts?.recentMeetings?.filter((m: any) => 
-          new Date(m.meeting_date).toDateString() === new Date().toDateString()
-        ).length || 0
-        
-        const tasksCount = data?.alerts?.upcomingReminders?.filter((t: any) => 
-          new Date(t.due_date).toDateString() === new Date().toDateString() && !t.is_completed
-        ).length || 0
-
-        const overdueCount = data?.alerts?.upcomingReminders?.filter((t: any) => 
-          new Date(t.due_date) < new Date() && !t.is_completed
-        ).length || 0
-
-        const text = `בוקר טוב נחמיה! היום מחכים לך ${meetingsCount} פגישות ו-${tasksCount} משימות דחופות. 
-שימו לב שיש ${overdueCount} משימות בעיכוב שדורשות טיפול. 
-הלקוח "כהן אברהם" מחכה לעדכון לגבי תיק המשכנתא שלו. 
-שיהיה יום פרודוקטיבי!`
-
-        setBriefing(text)
-        setLoading(false)
-      }, 1500)
+      const res = await getDashboardBriefing(data)
+      if (res.success && res.text) {
+        setBriefing(res.text)
+      } else {
+        setBriefing('בוקר טוב נחמיה! מוכן להתחיל את היום?')
+      }
+      setLoading(false)
     }
 
     if (data) generateBriefing()
@@ -70,7 +55,10 @@ export function AIBriefing({ data }: AIBriefingProps) {
             <p className="text-base md:text-lg font-medium leading-relaxed text-navy max-w-3xl">
               {briefing}
             </p>
-            <button className="flex items-center gap-1 text-xs font-bold text-primary hover:underline group/btn">
+            <button 
+              onClick={onOpenAnalysis}
+              className="flex items-center gap-1 text-xs font-bold text-primary hover:underline group/btn"
+            >
               לניתוח המלא 
               <ChevronLeft className="h-3 w-3 transition-transform group-hover/btn:-translate-x-1" />
             </button>

@@ -415,3 +415,48 @@ export async function refreshClientCounts(): Promise<{
         return { success: false, error: error.message }
     }
 }
+/**
+ * Generates a personalized AI briefing for the dashboard based on real data.
+ */
+import { google } from '@ai-sdk/google'
+import { generateText } from 'ai'
+
+export async function getDashboardBriefing(data: DashboardData) {
+    try {
+        const meetingsCount = data.alerts.recentMeetings.filter((m: any) => 
+            new Date(m.meeting_date).toDateString() === new Date().toDateString()
+        ).length || 0
+        
+        const tasksCount = data.alerts.upcomingReminders.filter((t: any) => 
+            new Date(t.due_date).toDateString() === new Date().toDateString() && !t.is_completed
+        ).length || 0
+
+        const overdueCount = data.alerts.upcomingReminders.filter((t: any) => 
+            new Date(t.due_date) < new Date() && !t.is_completed
+        ).length || 0
+
+        const prompt = `
+אתה העוזר האישי של נחמיה, יועץ פיננסי בכיר.
+הנתונים להיום:
+- פגישות מתוכננות להיום: ${meetingsCount}
+- משימות לביצוע היום: ${tasksCount}
+- משימות בעיכוב (Overdue): ${overdueCount}
+
+משימה:
+כתוב משפט פתיחה בוקר קצר, אנרגטי ומקצועי (2-3 משפטים).
+אל תמציא שמות של לקוחות או אירועים.
+אם הכל אפס, עודד אותו למצוא הזדמנויות חדשות.
+ענה בעברית.
+`
+
+        const { text } = await generateText({
+            model: google('models/gemini-1.5-flash'),
+            prompt,
+        })
+
+        return { success: true, text }
+    } catch (error: any) {
+        console.error('Error generating dashboard briefing:', error)
+        return { success: false, error: error.message }
+    }
+}

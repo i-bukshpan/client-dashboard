@@ -151,20 +151,28 @@ export async function generateClientAIReport(clientId: string) {
     const { data: openTasks } = await supabase.from('reminders').select('*').eq('client_id', clientId).eq('is_completed', false).limit(10)
 
     const prompt = `
-אתה אנליסט פיננסי בכיר. ייצר דוח סיכום תקופתי עבור הלקוח ${client?.name}.
-התבסס על הנתונים הבאים:
+אתה אנליסט פיננסי בכיר ומדויק מאוד. תפקידך לייצר דוח סיכום תקופתי עבור הלקוח: ${client?.name || 'לא ידוע'}.
 
+חשוב מאוד:
+1. השתמש אך ורק בנתונים שסופקו להלן.
+2. אל תמציא שמות של אנשים, חברות או אירועים שלא מופיעים בנתונים.
+3. אם אין נתונים מספיקים (למשל אין פגישות או תשלומים), ציין זאת במפורש במקום להמציא מידע.
+4. אם שם הלקוח לא ידוע, התייחס אליו כ"לקוח הנכבד". אל תשתמש בשמות בדויים כמו "אברהם כהן".
+
+הנתונים הגולמיים:
+---
 פגישות אחרונות:
-${recentMeetings?.map(m => `- ${m.subject} (${m.meeting_date}): ${m.summary}`).join('\n')}
+${recentMeetings && recentMeetings.length > 0 ? recentMeetings.map(m => `- ${m.subject} (${m.meeting_date}): ${m.summary}`).join('\n') : 'אין פגישות מתועדות'}
 
 תנועות כספיות אחרונות:
-${recentPayments?.map(p => `- ${p.description}: ${p.amount} ₪ (${p.payment_status})`).join('\n')}
+${recentPayments && recentPayments.length > 0 ? recentPayments.map(p => `- ${p.description}: ${p.amount} ₪ (${p.payment_status})`).join('\n') : 'אין תנועות כספיות מתועדות'}
 
 משימות פתוחות:
-${openTasks?.map(t => `- ${t.title} (${t.priority})`).join('\n')}
+${openTasks && openTasks.length > 0 ? openTasks.map(t => `- ${t.title} (${t.priority})`).join('\n') : 'אין משימות פתוחות'}
+---
 
 משימה:
-כתוב סיכום מקצועי (3-4 פסקאות) שסוקר את ההתקדמות, מציין נקודות לשיפור, וממליץ על צעדים הבאים.
+כתוב סיכום מקצועי (3-4 פסקאות) שסוקר את ההתקדמות על בסיס הנתונים הללו בלבד.
 השתמש בשפה מכובדת, עסקית ומעודדת. ענה בעברית.
 `
 

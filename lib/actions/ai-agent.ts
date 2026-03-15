@@ -4,9 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
 
 export async function createAIChatSession(clientId: string, title: string = 'שיחה חדשה') {
+  const dbClientId = clientId === 'dashboard' ? null : clientId
   const { data, error } = await supabase
     .from('ai_chat_sessions')
-    .insert([{ client_id: clientId, title }])
+    .insert([{ client_id: dbClientId, title }])
     .select()
     .single()
 
@@ -19,11 +20,15 @@ export async function createAIChatSession(clientId: string, title: string = 'ש�
 }
 
 export async function getAIChatSessions(clientId: string) {
-  const { data, error } = await supabase
-    .from('ai_chat_sessions')
-    .select('*')
-    .eq('client_id', clientId)
-    .order('updated_at', { ascending: false })
+  const query = supabase.from('ai_chat_sessions').select('*')
+  
+  if (clientId === 'dashboard') {
+    query.is('client_id', null)
+  } else {
+    query.eq('client_id', clientId)
+  }
+
+  const { data, error } = await query.order('updated_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching AI sessions:', error)

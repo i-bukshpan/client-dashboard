@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
   LayoutDashboard, Users, CheckSquare, Calendar, 
-  Wallet, BarChart3, Settings, HelpCircle 
+  Wallet, BarChart3, Settings, HelpCircle, Shield 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,7 @@ const navigation = [
   { name: 'יומן', href: '/calendar', icon: Calendar },
   { name: 'כספים', href: '/cashflow', icon: Wallet },
   { name: 'דוחות', href: '/reports', icon: BarChart3 },
+  { name: 'תקינות מערכת', href: '/admin/system-health', icon: Shield },
   { name: 'הגדרות', href: '/admin/manage', icon: Settings },
   { name: 'עזרה', href: '/help', icon: HelpCircle },
 ]

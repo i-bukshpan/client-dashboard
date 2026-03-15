@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 }
 
 import { CommandPalette } from '@/components/command-palette'
+import { GlobalAIAccess } from '@/components/global-ai-access'
 
 export default function RootLayout({
   children,
@@ -27,6 +28,7 @@ export default function RootLayout({
           <Toaster richColors position="top-center" dir="rtl" />
           <CommandPalette />
           <AppShell>{children}</AppShell>
+          <GlobalAIAccess />
         </ToastProvider>
       </body>
     </html>
