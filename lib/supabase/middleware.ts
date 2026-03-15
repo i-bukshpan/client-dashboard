@@ -61,6 +61,8 @@ export async function updateSession(request: NextRequest) {
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/view') &&
+    !request.nextUrl.pathname.startsWith('/privacy') &&
+    !request.nextUrl.pathname.startsWith('/help') &&
     !request.nextUrl.pathname.startsWith('/api') &&
     request.nextUrl.pathname !== '/favicon.ico'
   ) {

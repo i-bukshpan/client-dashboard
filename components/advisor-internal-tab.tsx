@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Save, UserCog } from 'lucide-react'
+import { updateAdvisorFields, updateClientDriveFolder } from '@/lib/actions/clients'
+import { HardDrive, Save, UserCog } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { type Client } from '@/lib/supabase'
-import { updateAdvisorFields } from '@/lib/actions/clients'
 
 interface AdvisorInternalTabProps {
     client: Client
@@ -18,12 +19,18 @@ interface AdvisorInternalTabProps {
 export function AdvisorInternalTab({ client, onUpdate }: AdvisorInternalTabProps) {
     const [advisorStatus, setAdvisorStatus] = useState(client.advisor_status || 'onboarding')
     const [internalNotes, setInternalNotes] = useState(client.internal_notes || '')
+    const [driveFolderId, setDriveFolderId] = useState(client.google_drive_folder_id || '')
     const [isSaving, setIsSaving] = useState(false)
 
     const handleSaveAdvisorFields = async () => {
         setIsSaving(true)
-        const result = await updateAdvisorFields(client.id, advisorStatus, internalNotes)
-        if (result.success) {
+        // Update standard fields
+        const res1 = await updateAdvisorFields(client.id, advisorStatus, internalNotes)
+        
+        // Update drive folder
+        const res2 = await updateClientDriveFolder(client.id, driveFolderId)
+        
+        if (res1.success && res2.success) {
             onUpdate()
         }
         setIsSaving(false)
@@ -54,6 +61,20 @@ export function AdvisorInternalTab({ client, onUpdate }: AdvisorInternalTabProps
                             <SelectItem value="on_hold">בהמתנה / הקפאה</SelectItem>
                         </SelectContent>
                     </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label className="font-bold text-grey flex items-center gap-2">
+                        <HardDrive className="h-3.5 w-3.5" />
+                        מזהה תיקיית Google Drive
+                    </Label>
+                    <Input 
+                        value={driveFolderId}
+                        onChange={(e) => setDriveFolderId(e.target.value)}
+                        placeholder="הכנס את ה-ID של התיקייה מה-URL ב-Drive"
+                        className="rounded-xl border-border/50 bg-slate-50/50 h-11 pr-4"
+                    />
+                    <p className="text-[10px] text-muted-foreground">הדבק כאן את הקוד שמופיע בסוף הכתובת כשאתה בתוך התיקייה ב-Drive.</p>
                 </div>
 
                 <div className="space-y-2 flex-1 flex flex-col">

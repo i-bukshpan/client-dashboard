@@ -9,6 +9,7 @@ import {
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { loadDashboardData, type DashboardData } from '@/lib/actions/dashboard'
+import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { format, isBefore, startOfDay } from 'date-fns'
 import { he } from 'date-fns/locale'
@@ -19,6 +20,7 @@ import { CreatePaymentDialog } from '@/components/create-payment-dialog'
 import { AddClientDialog } from '@/components/add-client-dialog'
 import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit-log'
+import { AIBriefing } from '@/components/ai-briefing'
 
 export default function TodayDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -134,11 +136,13 @@ export default function TodayDashboard() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-fade-in-up delay-100">
-        <MetricCard icon={Clock} label="פגישות היום" value={todaysMeetings.length.toString()} color="blue" />
-        <MetricCard icon={CheckCircle2} label="משימות היום" value={todaysTasks.length.toString()} color="amber" />
+        <MetricCard icon={Clock} label="פגישות היום" value={todaysMeetings.length.toString()} color="primary" />
+        <MetricCard icon={CheckCircle2} label="משימות היום" value={todaysTasks.length.toString()} color="emerald" />
         <MetricCard icon={AlertCircle} label="באיחור" value={overdueTasks.length.toString()} color="rose" />
-        <MetricCard icon={Users} label="לקוחות פעילים" value={activeClientsCount.toString()} color="emerald" />
+        <MetricCard icon={Users} label="לקוחות פעילים" value={activeClientsCount.toString()} color="indigo" />
       </div>
+
+      <AIBriefing data={data} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Column */}
@@ -263,18 +267,23 @@ export default function TodayDashboard() {
 
 function MetricCard({ icon: Icon, label, value, color }: any) {
   const colors: any = {
-    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-    amber: 'bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-    rose: 'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400',
-    emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+    primary: 'bg-primary/10 text-primary border-primary/20',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    rose: 'bg-rose-50 text-rose-600 border-rose-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100'
   }
   return (
-    <Card className="p-4 rounded-xl border border-border bg-card shadow-sm hover:border-primary/20 transition-all duration-200">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-md ${colors[color]}`}><Icon className="h-4 w-4" /></div>
+    <Card className={cn(
+      "p-5 rounded-2xl border bg-card shadow-sm hover:shadow-md transition-all duration-300 group",
+      colors[color].split(' ').pop() // Use the last class as marker if needed
+    )}>
+      <div className="flex flex-col gap-3">
+        <div className={cn("p-2.5 rounded-xl w-fit border transition-transform group-hover:scale-110 duration-300", colors[color])}>
+          <Icon className="h-5 w-5" />
+        </div>
         <div>
-          <div className="text-2xl font-bold text-foreground">{value}</div>
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{label}</div>
+          <div className="text-3xl font-black text-navy tracking-tight">{value}</div>
+          <div className="text-[11px] font-bold text-grey uppercase tracking-widest">{label}</div>
         </div>
       </div>
     </Card>

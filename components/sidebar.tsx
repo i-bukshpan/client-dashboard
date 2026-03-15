@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
   LayoutDashboard, Users, CheckSquare, Calendar, 
-  Wallet, BarChart3, Settings 
+  Wallet, BarChart3, Settings, HelpCircle 
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +17,7 @@ const navigation = [
   { name: 'כספים', href: '/cashflow', icon: Wallet },
   { name: 'דוחות', href: '/reports', icon: BarChart3 },
   { name: 'הגדרות', href: '/admin/manage', icon: Settings },
+  { name: 'עזרה', href: '/help', icon: HelpCircle },
 ]
 
 export function Sidebar({ onClose, isCollapsed = false }: { onClose?: () => void, isCollapsed?: boolean }) {

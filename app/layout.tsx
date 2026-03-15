@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: 'לוח בקרה לניהול לקוחות יועץ פיננסי',
 }
 
+import { CommandPalette } from '@/components/command-palette'
+
 export default function RootLayout({
   children,
 }: {
@@ -19,6 +21,7 @@ export default function RootLayout({
       <body>
         <ToastProvider>
           <Toaster richColors position="top-center" dir="rtl" />
+          <CommandPalette />
           <AppShell>{children}</AppShell>
         </ToastProvider>
       </body>

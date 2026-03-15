@@ -87,3 +87,48 @@ export async function updateClient(clientId: string, data: Partial<import('@/lib
 export async function updateAdvisorFields(clientId: string, advisor_status: string, internal_notes?: string): Promise<{ success: boolean; error?: string }> {
   return updateClient(clientId, { advisor_status, internal_notes })
 }
+
+/**
+ * Server Action: Update client's Google Drive folder ID
+ */
+export async function updateClientDriveFolder(clientId: string, folderId: string): Promise<{ success: boolean; error?: string }> {
+  return updateClient(clientId, { google_drive_folder_id: folderId })
+}
+
+/**
+ * Server Action: Fetch unified timeline for a client
+ */
+export async function getClientTimeline(clientId: string): Promise<{ success: boolean; data: any[] }> {
+  try {
+    // 1. Fetch Audit Logs
+    const { data: logs } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('entity_id', clientId)
+      .order('created_at', { ascending: false })
+
+    // 2. Fetch Meetings
+    const { data: meetings } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('client_id', clientId)
+
+    // 3. Fetch Reminders
+    const { data: reminders } = await supabase
+      .from('reminders')
+      .select('*')
+      .eq('client_id', clientId)
+
+    // Merge and format
+    const timeline = [
+      ...(logs || []).map(l => ({ ...l, type: 'log', date: l.created_at })),
+      ...(meetings || []).map(m => ({ ...m, type: 'meeting', date: m.meeting_date })),
+      ...(reminders || []).map(r => ({ ...r, type: 'task', date: r.due_date || r.created_at }))
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    return { success: true, data: timeline }
+  } catch (error) {
+    console.error('Error fetching timeline:', error)
+    return { success: false, data: [] }
+  }
+}

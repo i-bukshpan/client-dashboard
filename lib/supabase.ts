@@ -18,6 +18,8 @@ export interface Client {
   created_at: string
   updated_at: string
   share_permissions?: ClientSharePermissions | null
+  google_drive_folder_id?: string | null
+  last_ai_sync?: string | null
 }
 
 export interface ClientSharePermissions {
@@ -246,4 +248,30 @@ export interface Message {
   context_id?: string | null
   context_name?: string | null
   context_data?: any | null
+}
+ 
+export interface DocumentEmbedding {
+  id: string
+  client_id: string
+  drive_item_id: string
+  content: string
+  embedding: number[]
+  metadata: Record<string, any>
+  created_at: string
+}
+
+export interface AIChatSession {
+  id: string
+  client_id: string
+  title?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AIChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  created_at: string
 }

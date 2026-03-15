@@ -8,7 +8,6 @@ import { Sidebar } from '@/components/sidebar'
 import { Button } from '@/components/ui/button'
 import { GlobalChatListener } from '@/components/chat/global-chat-listener'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { GlobalSearch } from '@/components/global-search'
 import { NotificationCenter } from '@/components/notification-center'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const pathname = usePathname()
-  const isPublicView = pathname?.startsWith('/view')
+  const isPublicView = pathname?.startsWith('/view') || pathname?.startsWith('/privacy') || pathname?.startsWith('/help')
   const isLoginPage = pathname === '/login'
 
   useEffect(() => {
@@ -109,7 +108,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <GlobalSearch />
 
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar pb-20 md:pb-6">
