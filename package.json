@@ -10,6 +10,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.43",
+    "@google/generative-ai": "^0.24.1",
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-label": "^2.0.0",
     "@radix-ui/react-select": "^2.0.0",
@@ -19,9 +21,12 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.0",
     "@tanstack/react-table": "^8.21.3",
+    "ai": "^6.0.116",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "cmdk": "^1.1.1",
     "date-fns": "^2.30.0",
+    "googleapis": "^171.4.0",
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "react": "^18.2.0",
