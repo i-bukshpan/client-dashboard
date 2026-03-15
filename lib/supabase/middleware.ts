@@ -59,6 +59,7 @@ export async function updateSession(request: NextRequest) {
   // Protect all routes except /login and /view (public share links)
   if (
     !user &&
+    request.nextUrl.pathname !== '/' &&
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/view') &&
     !request.nextUrl.pathname.startsWith('/privacy') &&

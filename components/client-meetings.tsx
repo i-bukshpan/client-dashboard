@@ -7,10 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Trash2, FileText, CheckCircle2 } from 'lucide-react'
+import { Plus, Trash2, FileText, CheckCircle2, Sparkles, Loader2, ListChecks, X } from 'lucide-react'
 import { supabase, type Client, type MeetingLog } from '@/lib/supabase'
 import { createMeetingLog, getMeetingLogs, deleteMeetingLog } from '@/lib/actions/meeting-logs'
 import { format } from 'date-fns'
+import { generateMeetingPrep, extractTasksFromSummary } from '@/lib/actions/ai-advanced'
+import { toast } from 'sonner'
 
 interface ClientMeetingsProps {
     client: Client
@@ -27,6 +29,9 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
     const [meetingSummary, setMeetingSummary] = useState('')
     const [meetingActionItems, setMeetingActionItems] = useState('')
     const [meetingDialogOpen, setMeetingDialogOpen] = useState(false)
+    const [prepLoading, setPrepLoading] = useState(false)
+    const [prepBriefing, setPrepBriefing] = useState<string | null>(null)
+    const [extracting, setExtracting] = useState<string | null>(null)
 
     useEffect(() => {
         loadMeetingLogs()
@@ -39,6 +44,29 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
             setMeetingLogs(result.logs || [])
         }
         setLogsLoading(false)
+    }
+
+    const handleGeneratePrep = async () => {
+        setPrepLoading(true)
+        const res = await generateMeetingPrep(client.id)
+        if (res.success) {
+            setPrepBriefing(res.text || null)
+        } else {
+            toast.error('שגיאה ביצירת הכנה לפגישה')
+        }
+        setPrepLoading(false)
+    }
+
+    const handleExtractTasks = async (meetingId: string, summary: string) => {
+        if (!summary) return
+        setExtracting(meetingId)
+        const res = await extractTasksFromSummary(meetingId, summary)
+        if (res.success) {
+            toast.success(`חולצו ${res.count} משימות בהצלחה!`)
+        } else {
+            toast.error('שגיאה בחילוץ משימות')
+        }
+        setExtracting(null)
     }
 
     const handleCreateMeetingLog = async () => {
@@ -86,6 +114,14 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                 </div>
                 <Dialog open={meetingDialogOpen} onOpenChange={setMeetingDialogOpen}>
                     <DialogTrigger asChild>
+                        <Button 
+                            className="rounded-xl gap-2 h-10 px-5 font-bold shadow-md shadow-primary/10"
+                            onClick={handleGeneratePrep}
+                            disabled={prepLoading}
+                        >
+                            {prepLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                            הכנה לפגישה (AI)
+                        </Button>
                         <Button className="rounded-xl gap-2 h-10 px-5 font-bold shadow-md shadow-primary/10">
                             <Plus className="h-4 w-4" />
                             סיכום פגישה חדש
@@ -144,6 +180,23 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                 </Dialog>
             </div>
 
+            {prepBriefing && (
+                <Card className="p-6 bg-primary/5 border-primary/20 rounded-3xl mb-8 relative overflow-hidden animate-in fade-in slide-in-from-top-4">
+                    <div className="absolute top-0 right-0 p-2">
+                        <Button variant="ghost" size="icon" onClick={() => setPrepBriefing(null)} className="h-6 w-6 rounded-full">
+                            <X className="h-3 w-3" />
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3 text-primary">
+                        <Sparkles className="h-5 w-5" />
+                        <h4 className="font-bold">הכנה לפגישה (AI)</h4>
+                    </div>
+                    <div className="text-sm font-medium leading-relaxed text-navy whitespace-pre-wrap">
+                        {prepBriefing}
+                    </div>
+                </Card>
+            )}
+
             {logsLoading ? (
                 <div className="py-12 text-center text-grey animate-pulse">טוען סיכומי פגישות...</div>
             ) : meetingLogs.length === 0 ? (
@@ -168,14 +221,26 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                                     </div>
                                     <h4 className="text-xl font-black text-navy tracking-tight leading-tight">{log.subject}</h4>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteMeetingLog(log.id)}
-                                    className="h-8 w-8 text-grey hover:text-rose-500 rounded-lg hover:bg-rose-50 shrink-0"
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleExtractTasks(log.id, log.summary || '')}
+                                        disabled={extracting === log.id || !log.summary}
+                                        title="חלץ משימות מהסיכום"
+                                        className="h-8 w-8 text-grey hover:text-emerald-500 rounded-lg hover:bg-emerald-50 shrink-0"
+                                    >
+                                        {extracting === log.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteMeetingLog(log.id)}
+                                        className="h-8 w-8 text-grey hover:text-rose-500 rounded-lg hover:bg-rose-50 shrink-0"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="flex-1">

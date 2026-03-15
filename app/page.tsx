@@ -21,10 +21,14 @@ import { AddClientDialog } from '@/components/add-client-dialog'
 import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit-log'
 import { AIBriefing } from '@/components/ai-briefing'
+import { PublicLanding } from '@/components/public-landing'
+import { type User } from '@supabase/supabase-js'
 
 export default function TodayDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -38,7 +42,15 @@ export default function TodayDashboard() {
     }
   }, [])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      setAuthChecked(true)
+      if (user) loadData()
+    }
+    checkUser()
+  }, [loadData])
 
   const today = new Date()
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -88,7 +100,7 @@ export default function TodayDashboard() {
     loadData()
   }
 
-  if (loading) {
+  if (!authChecked || (loading && user)) {
     return (
       <div className="p-8 space-y-8 animate-pulse" dir="rtl">
         <div className="h-20 bg-grey/10 rounded-3xl w-1/3" />
@@ -96,6 +108,10 @@ export default function TodayDashboard() {
         <div className="h-64 bg-grey/10 rounded-3xl" />
       </div>
     )
+  }
+
+  if (!user) {
+    return <PublicLanding />
   }
 
   const hour = today.getHours()

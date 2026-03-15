@@ -15,8 +15,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Card } from '@/components/ui/card'
 import { supabase, type Reminder } from '@/lib/supabase'
 import { exportRemindersToCSV } from '@/lib/export-reminders'
+import { prioritizeTasks } from '@/lib/actions/ai-advanced'
+import { Sparkles, Loader2, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface RemindersProps {
   clientId: string
@@ -36,6 +40,8 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
   const [reminderType, setReminderType] = useState('משימה')
   const [category, setCategory] = useState('task')
   const [recurrenceRule, setRecurrenceRule] = useState('')
+  const [prioritizeLoading, setPrioritizeLoading] = useState(false)
+  const [prioritizeResult, setPrioritizeResult] = useState<string | null>(null)
 
   const loadReminders = async () => {
     try {
@@ -59,6 +65,17 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
   useEffect(() => {
     loadReminders()
   }, [clientId])
+
+  const handlePrioritize = async () => {
+    setPrioritizeLoading(true)
+    const res = await prioritizeTasks(clientId)
+    if (res.success) {
+      setPrioritizeResult(res.text || null)
+    } else {
+      toast.error('שגיאה בתעדוף משימות')
+    }
+    setPrioritizeLoading(false)
+  }
 
   const handleAdd = async () => {
     if (!title || !dueDate) return
@@ -190,6 +207,16 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
                 הוסף תזכורת
               </Button>
             </DialogTrigger>
+            <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary"
+                onClick={handlePrioritize}
+                disabled={prioritizeLoading || reminders.length === 0}
+            >
+                {prioritizeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                תעדוף AI
+            </Button>
             <DialogContent dir="rtl">
               <DialogHeader>
                 <DialogTitle>הוסף משימה חדשה</DialogTitle>
@@ -305,6 +332,23 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
           </Dialog>
         )}
       </div>
+
+      {prioritizeResult && (
+        <Card className="p-6 bg-primary/5 border-primary/20 rounded-2xl relative overflow-hidden animate-in fade-in slide-in-from-top-4 mb-4">
+          <div className="absolute top-0 right-0 p-2">
+            <Button variant="ghost" size="icon" onClick={() => setPrioritizeResult(null)} className="h-6 w-6 rounded-full font-bold">
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 mb-3 text-primary">
+            <Sparkles className="h-5 w-5" />
+            <h4 className="font-bold">תעדוף משימות חכם (AI)</h4>
+          </div>
+          <div className="text-sm font-medium leading-relaxed text-navy whitespace-pre-wrap">
+            {prioritizeResult}
+          </div>
+        </Card>
+      )}
 
       {
         reminders.length === 0 ? (

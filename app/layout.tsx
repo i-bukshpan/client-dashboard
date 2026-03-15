@@ -7,6 +7,10 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'ניהול לקוחות - נחמיה דרוק',
   description: 'לוח בקרה לניהול לקוחות יועץ פיננסי',
+
+  verification: {
+    google: 'btwQE_csWTYcxanIAlLhqnEmaUgJYIE90uZ7qls0MBU',
+  },
 }
 
 import { CommandPalette } from '@/components/command-palette'

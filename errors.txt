@@ -1,0 +1,57 @@
+components/ai-agent-sidebar.tsx(10,25): error TS2307: Cannot find module 'ai/react' or its corresponding type declarations.
+components/audit-log-viewer.tsx(98,29): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(value: string | number | Date): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | Date'.
+      Type 'undefined' is not assignable to type 'string | number | Date'.
+  Overload 2 of 4, '(value: string | number): Date', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+      Type 'undefined' is not assignable to type 'string | number'.
+components/filter-builder.tsx(39,43): error TS2339: Property 'data_type' does not exist on type 'ColumnDefinition'.
+components/filter-builder.tsx(112,24): error TS2339: Property 'data_type' does not exist on type 'ColumnDefinition'.
+components/pivot-builder.tsx(258,64): error TS2339: Property 'data_type' does not exist on type 'ColumnDefinition'.
+components/pivot-builder.tsx(258,92): error TS2339: Property 'data_type' does not exist on type 'ColumnDefinition'.
+components/relationship-manager.tsx(66,23): error TS2345: Argument of type '"שגיאה בטעינת קשרים"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(74,23): error TS2345: Argument of type '"יש למלא את כל השדות הנדרשים"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(86,27): error TS2345: Argument of type '"הקשר עודכן בהצלחה"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(96,27): error TS2345: Argument of type '"הקשר נוסף בהצלחה"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(112,23): error TS2345: Argument of type '"שגיאה בשמירת הקשר"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(122,23): error TS2345: Argument of type '"הקשר נמחק"' is not assignable to parameter of type 'ToastType'.
+components/relationship-manager.tsx(125,23): error TS2345: Argument of type '"שגיאה במחיקת הקשר"' is not assignable to parameter of type 'ToastType'.
+components/saved-views.tsx(40,19): error TS2345: Argument of type '`\u05E1\u05D9\u05E0\u05D5\u05DF \u05D4\u05D5\u05E4\u05E2\u05DC: ${string}`' is not assignable to parameter of type 'ToastType'.
+components/saved-views.tsx(48,23): error TS2345: Argument of type '"View נמחק"' is not assignable to parameter of type 'ToastType'.
+components/saved-views.tsx(54,23): error TS2345: Argument of type '"שגיאה במחיקת view"' is not assignable to parameter of type 'ToastType'.
+components/saved-views.tsx(61,19): error TS2345: Argument of type '"סינון נוקה"' is not assignable to parameter of type 'ToastType'.
+components/ui/tooltip.tsx(4,35): error TS2307: Cannot find module '@radix-ui/react-tooltip' or its corresponding type declarations.
+components/validation-manager.tsx(57,23): error TS2345: Argument of type '"יש למלא שם שדה והודעת שגיאה"' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(63,23): error TS2345: Argument of type '"כלל נוסף בהצלחה"' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(76,23): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(83,23): error TS2345: Argument of type '"סטטוס עודכן"' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(86,23): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(95,23): error TS2345: Argument of type '"כלל נמחק"' is not assignable to parameter of type 'ToastType'.
+components/validation-manager.tsx(98,23): error TS2345: Argument of type 'string' is not assignable to parameter of type 'ToastType'.
+lib/actions/backups.ts(48,7): error TS2345: Argument of type '"backup.created"' is not assignable to parameter of type 'ActionType'.
+lib/actions/backups.ts(90,21): error TS2345: Argument of type '"data.exported"' is not assignable to parameter of type 'ActionType'.
+lib/actions/backups.ts(181,7): error TS2345: Argument of type '"data.imported"' is not assignable to parameter of type 'ActionType'.
+lib/actions/client-share.ts(47,7): error TS2345: Argument of type '"client.share_token_generated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/client-share.ts(132,7): error TS2345: Argument of type '"client.share_token_regenerated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/client-share.ts(164,7): error TS2345: Argument of type '"client.share_permissions_updated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/goals.ts(52,7): error TS2345: Argument of type '"goal.created"' is not assignable to parameter of type 'ActionType'.
+lib/actions/goals.ts(87,7): error TS2345: Argument of type '"goal.updated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/goals.ts(116,21): error TS2345: Argument of type '"goal.deleted"' is not assignable to parameter of type 'ActionType'.
+lib/actions/recurring-payments.ts(69,7): error TS2345: Argument of type '"payment.recurring_generated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/templates.ts(53,7): error TS2345: Argument of type '"template.created"' is not assignable to parameter of type 'ActionType'.
+lib/actions/templates.ts(87,21): error TS2345: Argument of type '"template.updated"' is not assignable to parameter of type 'ActionType'.
+lib/actions/templates.ts(111,21): error TS2345: Argument of type '"template.deleted"' is not assignable to parameter of type 'ActionType'.
+lib/actions/templates.ts(165,21): error TS2345: Argument of type '"category.created"' is not assignable to parameter of type 'ActionType'.
+lib/actions/templates.ts(189,21): error TS2345: Argument of type '"category.deleted"' is not assignable to parameter of type 'ActionType'.
+lib/export.ts(5,32): error TS2307: Cannot find module '@/lib/google-sheets-client' or its corresponding type declarations.
+lib/export.ts(16,30): error TS7006: Parameter 'row' implicitly has an 'any' type.
+lib/export.ts(37,17): error TS7006: Parameter 'row' implicitly has an 'any' type.
+lib/export.ts(37,32): error TS7006: Parameter 'cell' implicitly has an 'any' type.
+lib/export.ts(114,28): error TS7006: Parameter 'row' implicitly has an 'any' type.
+lib/utils/calculations.ts(83,5): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+lib/utils/pivot-engine.ts(65,39): error TS2802: Type 'MapIterator<[string, any[]]>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+lib/utils/pivot-engine.ts(78,46): error TS7006: Parameter 'r' implicitly has an 'any' type.
+lib/utils/pivot-engine.ts(139,36): error TS2802: Type 'MapIterator<[string, Map<string, any[]>]>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+lib/utils/pivot-engine.ts(155,49): error TS7006: Parameter 'r' implicitly has an 'any' type.

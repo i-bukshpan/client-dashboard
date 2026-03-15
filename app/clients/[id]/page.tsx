@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowRight, Phone, Mail, Calendar, Clock,
-  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, HardDrive
+  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { AIAgentSidebar } from '@/components/ai-agent-sidebar'
 import { Sparkles, History } from 'lucide-react'
 import { UnifiedTimeline } from '@/components/unified-timeline'
+import { ClientAnalytics } from '@/components/client-analytics'
 
 const BillingPayments = dynamic(() => import('@/components/billing-payments').then(m => ({ default: m.BillingPayments })), {
   loading: () => <LoadingSkeleton />,
@@ -253,6 +254,7 @@ export default function ClientDetailPage() {
               <TabButton value="meetings" label="פגישות וסיכומים" icon={<FileText className="h-4 w-4" />} active={activeTab} />
               <TabButton value="data" label="נתונים שוטפים" icon={<Database className="h-4 w-4" />} active={activeTab} />
               <TabButton value="finance" label="כספים" icon={<PiggyBank className="h-4 w-4" />} active={activeTab} />
+              <TabButton value="analytics" label="אנליטיקה ותובנות" icon={<BarChart3 className="h-4 w-4" />} active={activeTab} />
               <TabButton value="credentials" label="אזור אישי וגישות" icon={<Key className="h-4 w-4" />} active={activeTab} />
               <TabButton value="settings" label="הגדרות" icon={<Settings className="h-4 w-4" />} active={activeTab} />
             </TabsList>
@@ -354,6 +356,13 @@ export default function ClientDetailPage() {
           <TabsContent value="finance" className="mt-0 outline-none animate-fade-in-up">
             <div className="bg-white/40 border border-border/50 rounded-3xl overflow-hidden shadow-sm">
                  <BillingPayments clientId={clientId} clientName={client.name} clientPhone={client.phone} />
+            </div>
+          </TabsContent>
+
+          {/* ══ Tab 5: Analytics & Insights ══ */}
+          <TabsContent value="analytics" className="mt-0 outline-none animate-fade-in-up">
+            <div className="max-w-5xl mx-auto">
+              <ClientAnalytics clientId={clientId} />
             </div>
           </TabsContent>
 

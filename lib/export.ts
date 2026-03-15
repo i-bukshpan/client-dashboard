@@ -2,7 +2,18 @@
  * Export utilities for data export functionality
  */
 
-import { type SheetData } from '@/lib/google-sheets-client'
+export interface SheetData {
+  rows: Array<{
+    date: string | Date;
+    description?: string;
+    income: number;
+    expense: number;
+    category?: string;
+    balance?: number;
+    additionalData?: Record<string, string | number>;
+  }>;
+}
+
 import { type Client, type Payment, type Reminder, type ClientCredential, type Note } from '@/lib/supabase'
 
 /**
