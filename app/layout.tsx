@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: 'לוח בקרה לניהול לקוחות יועץ פיננסי',
 
   verification: {
-    google: 'btwQE_csWTYcxanIAlLhqnEmaUgJYIE90uZ7qls0MBU',
+    google: 'ix99gT-pOHjTjglyj-iDjbFDBQkaXvLNAM7vpZ43DwQ',
   },
 }
 
