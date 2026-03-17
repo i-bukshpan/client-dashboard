@@ -9,7 +9,6 @@ import { getClientByShareToken, getClientShareToken } from '@/lib/actions/client
 import { supabase, type ClientSchema } from '@/lib/supabase'
 import { BillingPaymentsPublicView } from '@/components/billing-payments-public-view'
 import { RefreshCw, ArrowRight } from 'lucide-react'
-import { ChatWidget } from '@/components/chat/chat-widget'
 
 export default function ClientViewPage() {
   const params = useParams()
@@ -30,43 +29,6 @@ export default function ClientViewPage() {
   const [parentToken, setParentToken] = useState<string | null>(null)
   const [parentName, setParentName] = useState<string | null>(null)
 
-  useEffect(() => {
-    const handleChatNavigation = (e: CustomEvent) => {
-      if (e.detail) {
-        // e.detail = { tab, id, subTab }
-        if (e.detail.tab) setActiveTab(e.detail.tab)
-        // If there is a subTab (like module name), we need to handle it.
-        // For now, if tab is 'module', we expect 'subTab' to be the module name?
-        // Actually, the current tabs are keyed by 'branchName' (e.g. 'ראשי').
-        // The navData for module is { tab: 'module', subTab: 'ראשי', id: ... }?
-        // Let's assume the 'tab' property matches the Tab value directly for simplicity
-        // billing -> 'payments'
-        // module -> 'branchName'
-        // credentials -> 'credentials'
-
-        // Mapping logic:
-        let targetTab = e.detail.tab
-        if (targetTab === 'billing') targetTab = 'payments'
-        if (targetTab === 'module') targetTab = e.detail.subTab || 'ראשי'
-
-        if (e.detail.innerTab) {
-          setActiveModule(e.detail.innerTab)
-        }
-
-        setActiveTab(targetTab)
-
-        if (e.detail.id) {
-          setHighlightRecordId(e.detail.id)
-          // clear highlight after 3 seconds
-          setTimeout(() => setHighlightRecordId(null), 4000)
-        }
-      }
-    }
-    // @ts-ignore
-    window.addEventListener('chat-navigation', handleChatNavigation)
-    // @ts-ignore
-    return () => window.removeEventListener('chat-navigation', handleChatNavigation)
-  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -334,7 +296,6 @@ export default function ClientViewPage() {
         </Tabs>
       </div>
 
-      {client && <ChatWidget clientId={client.id} clientName={client.name} />}
     </div>
   )
 }

@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { BarChart3, Sparkles, TrendingUp, ShieldCheck, Loader2, Copy, Share2, AlertCircle } from 'lucide-react'
-import { generateClientAIReport, getCashflowInsights } from '@/lib/actions/ai-advanced'
+import { BarChart3, ShieldCheck, Loader2, AlertCircle } from 'lucide-react'
 import { getClientHealthIndex } from '@/lib/actions/analytics'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -14,12 +13,8 @@ interface ClientAnalyticsProps {
 }
 
 export function ClientAnalytics({ clientId }: ClientAnalyticsProps) {
-  const [report, setReport] = useState<string | null>(null)
-  const [insights, setInsights] = useState<string | null>(null)
   const [health, setHealth] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [generatingReport, setGeneratingReport] = useState(false)
-  const [generatingInsights, setGeneratingInsights] = useState(false)
 
   useEffect(() => {
     loadAnalytics()
@@ -32,35 +27,6 @@ export function ClientAnalytics({ clientId }: ClientAnalyticsProps) {
       setHealth(healthRes)
     }
     setLoading(false)
-  }
-
-  const handleGenerateReport = async () => {
-    setGeneratingReport(true)
-    const res = await generateClientAIReport(clientId)
-    if (res.success) {
-      setReport(res.report || null)
-      toast.success('דוח AI נוצר בהצלחה')
-    } else {
-      toast.error('שגיאה ביצירת דוח')
-    }
-    setGeneratingReport(false)
-  }
-
-  const handleGenerateInsights = async () => {
-    setGeneratingInsights(true)
-    const res = await getCashflowInsights(clientId)
-    if (res.success) {
-      setInsights(res.insights || null)
-      toast.success('תובנות תזרים עודכנו')
-    } else {
-      toast.error('שגיאה בהפקת תובנות')
-    }
-    setGeneratingInsights(false)
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('הועתק ללוח')
   }
 
   if (loading) {
@@ -113,78 +79,22 @@ export function ClientAnalytics({ clientId }: ClientAnalyticsProps) {
           </div>
         </Card>
 
-        {/* Action Button Card */}
+        {/* Info Card instead of AI actions */}
         <Card className="md:w-72 p-6 flex flex-col justify-center gap-3 bg-navy text-white rounded-3xl shadow-xl shadow-navy/20">
-          <p className="text-xs font-bold opacity-70 mb-2">פעולות AI מתקדמות</p>
-          <Button 
-            onClick={handleGenerateReport} 
-            disabled={generatingReport}
-            className="w-full rounded-xl bg-white/10 hover:bg-white/20 border-white/10 h-12 gap-2 font-black"
-          >
-            {generatingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            צור סיכום תקופתי
-          </Button>
-          <Button 
-            onClick={handleGenerateInsights} 
-            disabled={generatingInsights}
-            className="w-full rounded-xl bg-white/10 hover:bg-white/20 border-white/10 h-12 gap-2 font-black"
-          >
-            {generatingInsights ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
-            תובנות תזרים (AI)
-          </Button>
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart3 className="h-5 w-5 text-indigo-400" />
+            <p className="text-sm font-bold">ניתוח נתונים</p>
+          </div>
+          <p className="text-xs font-medium opacity-80 leading-relaxed">
+            כאן תוכל לצפות במדדי הבריאות של הלקוח המבוססים על משימות פתוחות, איחורים ותשלומים ממתינים.
+          </p>
         </Card>
       </div>
 
-      {/* Report Section */}
-      {report && (
-        <Card className="p-8 bg-white border-2 border-indigo-50 rounded-[2.5rem] shadow-2xl relative animate-in fade-in slide-in-from-bottom-4">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                <BarChart3 className="h-6 w-6" />
-              </div>
-              <h3 className="text-xl font-black text-navy tracking-tight">סיכום פעילות AI - {new Date().toLocaleDateString('he-IL')}</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => copyToClipboard(report)} className="h-9 w-9 rounded-xl hover:bg-slate-100">
-                <Copy className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-slate-100">
-                <Share2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="prose prose-slate max-w-none">
-            <p className="text-navy font-medium leading-relaxed whitespace-pre-wrap">{report}</p>
-          </div>
-          <div className="mt-8 pt-6 border-t border-slate-100 flex items-center gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-wider">
-            <AlertCircle className="h-3 w-3" />
-            שים לב: דוח זה הופק ע"י בינה מלאכותית ומוגש כהמלצה בלבד
-          </div>
-        </Card>
-      )}
-
-      {/* Insights Section */}
-      {insights && (
-        <Card className="p-8 bg-emerald-50/30 border-2 border-emerald-100/50 rounded-[2.5rem] shadow-lg animate-in fade-in slide-in-from-bottom-4">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-              <TrendingUp className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-black text-emerald-900 tracking-tight">תובנות תזרים וחיזוי</h3>
-          </div>
-          <div className="p-4 bg-white/50 backdrop-blur-sm rounded-2xl border border-emerald-100">
-            <p className="text-emerald-950 font-bold leading-relaxed whitespace-pre-wrap">{insights}</p>
-          </div>
-        </Card>
-      )}
-
-      {!report && !insights && (
-        <div className="py-20 text-center space-y-4 opacity-40">
-           <BarChart3 className="h-16 w-16 mx-auto text-slate-300" />
-           <p className="text-sm font-bold text-slate-500">לחץ על הכפתורים למעלה כדי להפיק תובנות וסיכומי AI</p>
-        </div>
-      )}
+      <div className="py-20 text-center space-y-4 opacity-40">
+         <BarChart3 className="h-16 w-16 mx-auto text-slate-300" />
+         <p className="text-sm font-bold text-slate-500">נתוני האנליטיקה מתעדכנים בזמן אמת על סמך פעילות הלקוח</p>
+      </div>
     </div>
   )
 }

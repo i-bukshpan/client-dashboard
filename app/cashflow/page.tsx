@@ -1,19 +1,23 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { 
-  Wallet, TrendingUp, TrendingDown, DollarSign, 
-  ArrowRight, Filter, Calendar, Users, AlertCircle,
-  CheckCircle2, Clock, BarChart3
+import {
+  Wallet, TrendingUp, TrendingDown, DollarSign,
+  ArrowRight, Users, AlertCircle, CheckCircle2
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase, type Payment, type Client } from '@/lib/supabase'
 import Link from 'next/link'
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
+import dynamic from 'next/dynamic'
+
+const CashflowChart = dynamic(() => import('./cashflow-chart'), {
+  ssr: false,
+  loading: () => <div className="h-[350px] animate-pulse bg-slate-100 rounded-2xl" />,
+})
 
 type PaymentWithClient = Payment & { clients: Client | null }
 
@@ -170,20 +174,7 @@ export default function CashflowPage() {
             <div className="w-2 h-8 bg-blue-600 rounded-full" />
             הכנסות מול הוצאות
           </h2>
-          <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={chartData} barGap={8}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `₪${(v/1000).toFixed(0)}K`} />
-              <Tooltip 
-                formatter={(value: number) => `₪${value.toLocaleString()}`}
-                contentStyle={{ borderRadius: 16, border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' }}
-              />
-              <Legend />
-              <Bar dataKey="income" name="הכנסות" fill="#10b981" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="expense" name="הוצאות" fill="#f43f5e" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <CashflowChart data={chartData} />
         </Card>
       )}
 

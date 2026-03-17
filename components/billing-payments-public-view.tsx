@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { CheckCircle2, Clock, Repeat } from 'lucide-react'
 import { supabase, type Payment } from '@/lib/supabase'
-import { ChatContextTrigger } from '@/components/chat/chat-context-trigger'
 
 interface BillingPaymentsPublicViewProps {
   clientId: string
@@ -132,16 +131,6 @@ export function BillingPaymentsPublicView({ clientId, readOnly = true, highlight
                     {payment.description && <div>תיאור: {payment.description}</div>}
                     {payment.notes && <div>הערות: {payment.notes}</div>}
                   </div>
-                </div>
-                <div>
-                  <ChatContextTrigger
-                    type="payment"
-                    id={payment.id}
-                    name={`תשלום בסך ₪${payment.amount} מ-${new Date(payment.payment_date).toLocaleDateString('he-IL')}`}
-                    data={payment}
-                    className="text-grey hover:text-blue-600"
-                    navData={{ tab: 'billing', id: payment.id }}
-                  />
                 </div>
               </div>
             </Card>

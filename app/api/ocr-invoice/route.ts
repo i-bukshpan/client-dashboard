@@ -64,16 +64,16 @@ export async function POST(request: NextRequest) {
     const base64 = Buffer.from(bytes).toString('base64')
     const mimeType = file.type
 
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'מפתח Gemini API לא מוגדר. יש להוסיף GEMINI_API_KEY לקובץ .env.local' },
+        { error: 'מפתח Google AI לא מוגדר. יש להוסיף GOOGLE_GENERATIVE_AI_API_KEY לקובץ .env.local' },
         { status: 500 }
       )
     }
 
-    // Try models in order - based on available models in the account
-    const models = ['gemini-2.0-flash', 'gemini-2.5-flash']
+    // Try models in order - using confirmed available models
+    const models = ['gemini-flash-latest', 'gemini-pro-latest']
     let lastError = ''
 
     for (const model of models) {

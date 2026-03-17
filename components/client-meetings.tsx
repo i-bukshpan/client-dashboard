@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Trash2, FileText, CheckCircle2, Sparkles, Loader2, ListChecks, X } from 'lucide-react'
+import { Plus, Trash2, FileText, CheckCircle2, Sparkles, Loader2, ListChecks, X, Download } from 'lucide-react'
 import { supabase, type Client, type MeetingLog } from '@/lib/supabase'
 import { createMeetingLog, getMeetingLogs, deleteMeetingLog } from '@/lib/actions/meeting-logs'
 import { format } from 'date-fns'
 import { generateMeetingPrep, extractTasksFromSummary } from '@/lib/actions/ai-advanced'
 import { toast } from 'sonner'
+import { downloadIcs } from '@/lib/utils/ics-export'
 
 interface ClientMeetingsProps {
     client: Client
@@ -112,16 +113,18 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                         תיעוד היסטוריית הפגישות וההחלטות עם הלקוח
                     </p>
                 </div>
-                <Dialog open={meetingDialogOpen} onOpenChange={setMeetingDialogOpen}>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        className="rounded-xl gap-2 h-10 px-5 font-bold"
+                        onClick={handleGeneratePrep}
+                        disabled={prepLoading}
+                    >
+                        {prepLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        הכנה לפגישה (AI)
+                    </Button>
+                    <Dialog open={meetingDialogOpen} onOpenChange={setMeetingDialogOpen}>
                     <DialogTrigger asChild>
-                        <Button 
-                            className="rounded-xl gap-2 h-10 px-5 font-bold shadow-md shadow-primary/10"
-                            onClick={handleGeneratePrep}
-                            disabled={prepLoading}
-                        >
-                            {prepLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                            הכנה לפגישה (AI)
-                        </Button>
                         <Button className="rounded-xl gap-2 h-10 px-5 font-bold shadow-md shadow-primary/10">
                             <Plus className="h-4 w-4" />
                             סיכום פגישה חדש
@@ -178,6 +181,7 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             {prepBriefing && (
@@ -222,6 +226,19 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                                     <h4 className="text-xl font-black text-navy tracking-tight leading-tight">{log.subject}</h4>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => downloadIcs([{
+                                            title: `פגישה: ${log.subject} — ${client.name}`,
+                                            description: log.summary || '',
+                                            startDate: new Date(log.meeting_date),
+                                        }], `פגישה-${client.name}.ics`)}
+                                        title="ייצא ליומן (.ics)"
+                                        className="h-8 w-8 text-grey hover:text-blue-500 rounded-lg hover:bg-blue-50 shrink-0"
+                                    >
+                                        <Download className="h-4 w-4" />
+                                    </Button>
                                     <Button
                                         variant="ghost"
                                         size="icon"

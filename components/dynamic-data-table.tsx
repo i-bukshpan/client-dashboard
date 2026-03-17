@@ -17,8 +17,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChatContextTrigger } from '@/components/chat/chat-context-trigger'
-import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, Upload, MessageSquarePlus } from 'lucide-react'
+import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { addRecord, updateRecordField, deleteRecord } from '@/lib/actions/data-records'
 import type { ClientDataRecord, ColumnDefinition } from '@/lib/supabase'
@@ -850,22 +849,6 @@ export function DynamicDataTable({
 
         return (
           <div className="flex items-center gap-1 justify-center">
-            <ChatContextTrigger
-              type="module"
-              id={row.original.id}
-              name={`${moduleType}: ${recordName}`}
-              data={{ ...(row.original.data || {}), id: row.original.id }}
-              navData={{
-                tab: 'module',
-                subTab: branchName || 'ראשי', // Top-level tab (Branch)
-                innerTab: moduleType, // Inner/Module tab
-                id: row.original.id
-              }}
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-              icon={<MessageSquarePlus className="h-4 w-4" />}
-            />
             {!readOnly && (
               <>
                 <Button

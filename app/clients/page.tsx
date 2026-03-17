@@ -32,6 +32,8 @@ export default function ClientsPage() {
   const [availableTags, setAvailableTags] = useState<ClientTag[]>([])
   const [selectedTagFilter, setSelectedTagFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 20
 
   useEffect(() => {
     loadAll()
@@ -104,6 +106,16 @@ export default function ClientsPage() {
 
     return list
   }, [clients, statusFilter, selectedTagFilter, sortBy, sortOrder, searchQuery])
+
+  // Reset page when filters change
+  useEffect(() => setCurrentPage(1), [statusFilter, selectedTagFilter, searchQuery, sortBy, sortOrder])
+
+  const paginatedClients = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredClients.slice(start, start + PAGE_SIZE)
+  }, [filteredClients, currentPage, PAGE_SIZE])
+
+  const totalPages = Math.ceil(filteredClients.length / PAGE_SIZE)
 
   const handleAddClient = async (name: string, email: string | null, phone: string | null, status: string) => {
     const { data, error } = await supabase
@@ -281,7 +293,7 @@ export default function ClientsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredClients.map(client => (
+                paginatedClients.map(client => (
                   <tr key={client.id} className="group hover:bg-slate-50/50 transition-colors">
                     {bulkMode && (
                       <td className="py-5 pr-8">
@@ -354,6 +366,56 @@ export default function ClientsPage() {
           </table>
         </div>
       </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="rounded-xl h-9 px-4 font-bold"
+          >
+            הקודם
+          </Button>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let page: number
+              if (totalPages <= 7) page = i + 1
+              else if (currentPage <= 4) page = i + 1
+              else if (currentPage >= totalPages - 3) page = totalPages - 6 + i
+              else page = currentPage - 3 + i
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={cn(
+                    'h-9 w-9 rounded-xl text-sm font-bold transition-all',
+                    currentPage === page
+                      ? 'bg-primary text-white shadow-md'
+                      : 'text-grey hover:text-navy hover:bg-slate-100'
+                  )}
+                >
+                  {page}
+                </button>
+              )
+            })}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="rounded-xl h-9 px-4 font-bold"
+          >
+            הבא
+          </Button>
+          <span className="text-sm text-grey font-medium mr-2">
+            {filteredClients.length} לקוחות • עמוד {currentPage} מתוך {totalPages}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

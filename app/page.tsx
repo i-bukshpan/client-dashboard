@@ -20,17 +20,14 @@ import { CreatePaymentDialog } from '@/components/create-payment-dialog'
 import { AddClientDialog } from '@/components/add-client-dialog'
 import { supabase } from '@/lib/supabase'
 import { logAction } from '@/lib/audit-log'
-import { AIBriefing } from '@/components/ai-briefing'
 import { PublicLanding } from '@/components/public-landing'
 import { type User } from '@supabase/supabase-js'
-import { AIAgentSidebar } from '@/components/ai-agent-sidebar'
 
 export default function TodayDashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<User | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
-  const [showAISidebar, setShowAISidebar] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -91,6 +88,22 @@ export default function TodayDashboard() {
   }, [data])
 
   const activeClientsCount = data?.clients.filter(c => c.status === 'פעיל').length || 0
+
+  const clientsNeedingAttention = useMemo(() => {
+    if (!data?.clients) return []
+    return data.clients
+      .filter(c => c.status === 'פעיל' && (
+        (c.pendingPaymentsCount ?? 0) > 0 ||
+        (c.openRemindersCount ?? 0) > 0 ||
+        (c.unreadMessagesCount ?? 0) > 0
+      ))
+      .sort((a, b) => {
+        const scoreA = ((a.pendingPaymentsCount ?? 0) * 3) + ((a.openRemindersCount ?? 0) * 2) + (a.unreadMessagesCount ?? 0)
+        const scoreB = ((b.pendingPaymentsCount ?? 0) * 3) + ((b.openRemindersCount ?? 0) * 2) + (b.unreadMessagesCount ?? 0)
+        return scoreB - scoreA
+      })
+      .slice(0, 4)
+  }, [data])
   const pendingPaymentsCount = data?.alerts.pendingPayments.length || 0
   const pendingPaymentsTotal = data?.alerts.pendingPayments.reduce((sum, p) => sum + Math.abs(p.amount), 0) || 0
 
@@ -159,18 +172,6 @@ export default function TodayDashboard() {
         <MetricCard icon={AlertCircle} label="באיחור" value={overdueTasks.length.toString()} color="rose" />
         <MetricCard icon={Users} label="לקוחות פעילים" value={activeClientsCount.toString()} color="indigo" />
       </div>
-
-      <AIBriefing data={data} onOpenAnalysis={() => setShowAISidebar(true)} />
-
-      {showAISidebar && (
-        <div className="fixed inset-y-0 left-0 w-96 z-50 animate-in slide-in-from-left duration-300 shadow-2xl">
-          <AIAgentSidebar 
-            clientId="dashboard" 
-            clientName="דשבורד כללי" 
-            onClose={() => setShowAISidebar(false)} 
-          />
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Main Column */}
@@ -287,6 +288,51 @@ export default function TodayDashboard() {
           </Card>
 
           <RecentlyViewed />
+
+          {/* Clients Needing Attention */}
+          {clientsNeedingAttention.length > 0 && (
+            <Card className="p-5 sm:p-6 rounded-xl border border-border bg-card shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                  דורשים תשומת לב
+                </h3>
+                <Button asChild variant="ghost" className="text-primary font-medium text-xs px-2 h-7">
+                  <Link href="/clients">כל הלקוחות</Link>
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {clientsNeedingAttention.map(client => (
+                  <Link
+                    key={client.id}
+                    href={`/clients/${client.id}`}
+                    className="flex items-center justify-between p-2.5 rounded-lg hover:bg-secondary/50 border border-transparent hover:border-border transition-all group"
+                  >
+                    <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                      {client.name}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {(client.pendingPaymentsCount ?? 0) > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
+                          ₪{client.pendingPaymentsCount}
+                        </span>
+                      )}
+                      {(client.openRemindersCount ?? 0) > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-600 border border-purple-100">
+                          {client.openRemindersCount} משימות
+                        </span>
+                      )}
+                      {(client.unreadMessagesCount ?? 0) > 0 && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-100 animate-pulse">
+                          {client.unreadMessagesCount} הודעות
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

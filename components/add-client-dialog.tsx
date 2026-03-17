@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, UserPlus } from 'lucide-react'
+import { UserPlus } from 'lucide-react'
 
 interface AddClientDialogProps {
   onAddClient: (
@@ -53,7 +53,6 @@ export function AddClientDialog({ onAddClient }: AddClientDialogProps) {
         phone.trim() || null,
         status || 'פעיל'
       )
-      // Reset form
       setName('')
       setEmail('')
       setPhone('')
@@ -91,7 +90,7 @@ export function AddClientDialog({ onAddClient }: AddClientDialogProps) {
               className="rounded-xl h-11"
             />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="phone" className="font-bold">טלפון (אופציונלי)</Label>
@@ -134,15 +133,12 @@ export function AddClientDialog({ onAddClient }: AddClientDialogProps) {
           {error && (
             <div className="text-red-500 text-xs font-bold mt-2 bg-red-50 p-3 rounded-lg border border-red-100">{error}</div>
           )}
-          
+
           <DialogFooter className="gap-3 pt-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setOpen(false)
-                setError(null)
-              }}
+              onClick={() => { setOpen(false); setError(null) }}
               disabled={loading}
               className="rounded-xl h-11 px-6"
             >

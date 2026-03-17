@@ -12,9 +12,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'לא נבחרה טבלת יעד' }, { status: 400 })
         }
 
-        const apiKey = process.env.GEMINI_API_KEY
+        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
         if (!apiKey) {
-            return NextResponse.json({ error: 'מפתח Gemini API לא מוגדר' }, { status: 500 })
+            return NextResponse.json({ error: 'מפתח Google AI לא מוגדר' }, { status: 500 })
         }
 
         // Build the target table schema description
@@ -72,7 +72,7 @@ RULES:
 - Do not add keys that don't exist in the target table columns
 - No markdown, no explanation, only the JSON array`
 
-        const models = ['gemini-2.0-flash', 'gemini-2.5-flash']
+        const models = ['gemini-flash-latest', 'gemini-pro-latest']
         let lastError = ''
 
         for (const model of models) {

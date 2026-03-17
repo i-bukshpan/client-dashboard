@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowRight, Phone, Mail, Calendar, Clock,
-  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive
+  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive, History
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -17,7 +17,6 @@ import { StickyNotes } from '@/components/sticky-notes'
 import { Reminders } from '@/components/reminders'
 import { getClientSchemas } from '@/lib/actions/schema'
 import type { ClientSchema } from '@/lib/supabase'
-import { ChatWidget } from '@/components/chat/chat-widget'
 import { AdvisorInternalTab } from '@/components/advisor-internal-tab'
 import { ClientMeetings } from '@/components/client-meetings'
 import { CreateMeetingDialog } from '@/components/create-meeting-dialog'
@@ -25,10 +24,10 @@ import { CreateTaskDialog } from '@/components/create-task-dialog'
 import { CreatePaymentDialog } from '@/components/create-payment-dialog'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
-import { AIAgentSidebar } from '@/components/ai-agent-sidebar'
-import { Sparkles, History } from 'lucide-react'
 import { UnifiedTimeline } from '@/components/unified-timeline'
 import { ClientAnalytics } from '@/components/client-analytics'
+import { GoogleDriveViewer } from '@/components/google-drive-viewer'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 const BillingPayments = dynamic(() => import('@/components/billing-payments').then(m => ({ default: m.BillingPayments })), {
   loading: () => <LoadingSkeleton />,
@@ -63,7 +62,6 @@ export default function ClientDetailPage() {
   const [childCount, setChildCount] = useState(0)
   const [parentClient, setParentClient] = useState<Client | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
-  const [showAISidebar, setShowAISidebar] = useState(false)
 
   const loadClient = useCallback(async () => {
     try {
@@ -139,26 +137,6 @@ export default function ClientDetailPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 flex overflow-hidden" dir="rtl">
-      {/* Sidebar Overlay for AI */}
-      <div 
-        className={cn(
-          "fixed inset-0 bg-navy/20 backdrop-blur-sm z-50 transition-opacity duration-300",
-          showAISidebar ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        onClick={() => setShowAISidebar(false)}
-      />
-      
-      <div className={cn(
-        "fixed top-0 left-0 h-full w-[400px] max-w-[90vw] z-[60] transition-transform duration-500 ease-out shadow-2xl",
-        showAISidebar ? "translate-x-0" : "-translate-x-full"
-      )}>
-        <AIAgentSidebar 
-          clientId={clientId} 
-          clientName={client.name} 
-          onClose={() => setShowAISidebar(false)} 
-        />
-      </div>
-
       <div className="flex-1 flex flex-col min-w-0 transition-all duration-500">
       {/* Compact Breadcrumbs */}
       <div className="px-6 sm:px-10 pt-6 pb-2 flex items-center gap-1.5 text-xs font-bold text-grey">
@@ -229,7 +207,6 @@ export default function ClientDetailPage() {
                   <Plus className="h-3.5 w-3.5" />תשלום
                 </Button>
               } />
-              <AddAIButton onClick={() => setShowAISidebar(true)} />
               <EditClientDialog client={client} onUpdate={handleClientUpdate} />
               {!client.parent_id && <ClientShareLink clientId={client.id} clientName={client.name} />}
             </div>
@@ -246,6 +223,7 @@ export default function ClientDetailPage() {
 
       {/* Tabs */}
       <div className="px-6 sm:px-10 pb-10">
+        <ErrorBoundary>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Detailed Tab Bar Navigation */}
           <div className="mb-8 p-1.5 bg-white border border-border/40 rounded-2xl shadow-sm inline-flex overflow-x-auto no-scrollbar max-w-full">
@@ -373,6 +351,7 @@ export default function ClientDetailPage() {
                 <TabsList className="bg-transparent h-auto p-0 gap-6 w-full justify-start overflow-x-auto no-scrollbar">
                   <SubTabButton value="vault" label="כספת סיסמאות" />
                   <SubTabButton value="links" label="קישורים מהירים" />
+                  <SubTabButton value="drive" label="Google Drive" />
                 </TabsList>
               </div>
               <TabsContent value="vault" className="mt-0 outline-none">
@@ -386,6 +365,13 @@ export default function ClientDetailPage() {
                 <div className="max-w-5xl mx-auto">
                   <SectionCard title="קישורים מהירים" color="blue" icon={<Link2 className="h-4 w-4" />}>
                     <ClientLinks clientId={clientId} />
+                  </SectionCard>
+                </div>
+              </TabsContent>
+              <TabsContent value="drive" className="mt-0 outline-none">
+                <div className="max-w-5xl mx-auto">
+                  <SectionCard title="Google Drive" color="indigo" icon={<HardDrive className="h-4 w-4" />}>
+                    <GoogleDriveViewer />
                   </SectionCard>
                 </div>
               </TabsContent>
@@ -403,30 +389,14 @@ export default function ClientDetailPage() {
           </TabsContent>
 
         </Tabs>
+        </ErrorBoundary>
       </div>
 
-      <ChatWidget
-        clientId={client.parent_id || client.id}
-        clientName={parentClient?.name || client.name}
-        senderRole='admin'
-      />
       </div>
     </div>
   )
 }
 
-function AddAIButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button 
-      size="sm" 
-      onClick={onClick}
-      className="rounded-xl bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-700 text-white h-9 px-3 gap-1.5 text-xs font-bold shadow-md shadow-primary/20 animate-pulse-subtle"
-    >
-      <Sparkles className="h-3.5 w-3.5" />
-      שאל את הסוכן AI
-    </Button>
-  )
-}
 
 /* ── Sub-components ── */
 

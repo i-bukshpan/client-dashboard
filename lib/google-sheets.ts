@@ -21,16 +21,22 @@ export async function fetchGoogleSheetData(url: string) {
         
         const csvText = await response.text()
 
-        // Return a condensed version for AI context (first 50 lines)
-        const lines = csvText.split('\n')
+        // Simple CSV parser for better data interpretation
+        const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+        if (lines.length === 0) throw new Error('הקובץ ריק')
+
         const header = lines[0]
-        const sample = lines.slice(1, 51).join('\n')
+        
+        // Return first 100 lines instead of 50 for more context if needed
+        const dataRows = lines.slice(1, 101)
+        const sample = dataRows.join('\n')
 
         return {
             success: true,
             raw: csvText,
-            condensed: `Header: ${header}\nSample Data:\n${sample}`,
-            rowCount: lines.length - 1
+            condensed: `קובץ גוגל שיטס. \nכותרות: ${header}\nנתונים (עד 100 שורות ראשונות):\n${sample}`,
+            rowCount: lines.length - 1,
+            columnCount: header.split(',').length
         }
     } catch (error: any) {
         console.error('Error fetching Google Sheet:', error)

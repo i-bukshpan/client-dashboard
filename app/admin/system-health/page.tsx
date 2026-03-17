@@ -1,22 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Shield, CheckCircle2, AlertCircle, Database, Sparkles, HardDrive, RefreshCw, ArrowRight } from 'lucide-react'
+import { Shield, CheckCircle2, AlertCircle, Database, HardDrive, RefreshCw } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
 
 export default function SystemHealthPage() {
     const [status, setStatus] = useState({
         supabase: 'checking',
-        gemini: 'checking',
         storage: 'checking'
     })
     const [errors, setErrors] = useState<Record<string, string>>({})
 
     const checkHealth = async () => {
-        setStatus({ supabase: 'checking', gemini: 'checking', storage: 'checking' })
+        setStatus({ supabase: 'checking', storage: 'checking' })
         setErrors({})
 
         // 1. Check Supabase
@@ -29,18 +27,6 @@ export default function SystemHealthPage() {
             setErrors(prev => ({ ...prev, supabase: err.message || 'שגיאת חיבור לבסיס הנתונים' }))
         }
 
-        // 2. Check Gemini
-        try {
-            const res = await fetch('/api/health/ai')
-            if (!res.ok) {
-                const msg = await res.text()
-                throw new Error(msg || 'שגיאה בחיבור ל-AI')
-            }
-            setStatus(prev => ({ ...prev, gemini: 'ok' }))
-        } catch (err: any) { 
-            setStatus(prev => ({ ...prev, gemini: 'error' }))
-            setErrors(prev => ({ ...prev, gemini: err.message }))
-        }
 
         // 3. Check Storage
         try {
@@ -59,8 +45,8 @@ export default function SystemHealthPage() {
         <div className="p-10 max-w-4xl mx-auto space-y-8" dir="rtl">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-4xl font-black text-navy tracking-tight">הגדרות ותקינות מערכת</h1>
-                    <p className="text-grey font-bold">ניטור חיבורי AI, בסיס נתונים ואחסון קבצים</p>
+                    <h1 className="text-4xl font-black text-navy tracking-tight">תקינות מערכת</h1>
+                    <p className="text-grey font-bold">ניטור חיבורי בסיס נתונים ואחסון קבצים</p>
                 </div>
                 <Button onClick={checkHealth} variant="outline" className="rounded-xl gap-2 font-bold">
                     <RefreshCw className="h-4 w-4" />
@@ -68,14 +54,7 @@ export default function SystemHealthPage() {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <HealthCard 
-                    title="Gemini AI" 
-                    icon={Sparkles} 
-                    status={status.gemini} 
-                    error={errors.gemini}
-                    description="מנוע הבינה המלאכותית לניתוח שוק ותובנות"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <HealthCard 
                     title="Supabase DB" 
                     icon={Database} 
@@ -93,7 +72,7 @@ export default function SystemHealthPage() {
             </div>
 
             <Card className="rounded-[2.5rem] p-8 space-y-6 border-border/50 bg-white/60">
-                <h2 className="text-xl font-black text-navy">קישוריות צד שלישי</h2>
+                <h2 className="text-xl font-black text-navy">קישוריות והגדרות</h2>
                 <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-border/40">
                         <div className="flex items-center gap-4">
@@ -107,21 +86,6 @@ export default function SystemHealthPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-border/40">
-                        <div className="flex items-center gap-4">
-                            <div className="p-2 bg-blue-500/10 rounded-xl text-blue-600">
-                                <Database className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="font-bold text-navy">Interactive Agent Tools</p>
-                                <p className="text-xs text-grey">כלי ניהול פגישות, משימות וניתוח Sheets פעילים</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                             <span className="text-[10px] font-black text-emerald-600">פעיל</span>
-                        </div>
-                    </div>
                 </div>
             </Card>
         </div>
@@ -148,9 +112,11 @@ function HealthCard({ title, icon: Icon, status, description, error }: any) {
                     {description}
                 </p>
                 {!isOk && !isChecking && error && (
-                    <p className="text-[10px] text-rose-500 mt-2 font-mono bg-rose-50 p-2 rounded-lg break-all">
-                        {error}
-                    </p>
+                    <div className="mt-2 p-3 bg-rose-50 rounded-xl border border-rose-100">
+                        <p className="text-[10px] text-rose-600 font-mono whitespace-pre-wrap break-words leading-tight">
+                            {error}
+                        </p>
+                    </div>
                 )}
             </div>
 

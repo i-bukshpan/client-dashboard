@@ -1,0 +1,86 @@
+
+> client-dashboard@0.1.0 dev
+> next dev -p 3001
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3001
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1387ms
+ ✓ Compiled /middleware in 149ms (168 modules)
+ ✓ Compiled /api/chat in 471ms (247 modules)
+--- AI CHAT REQUEST START ---
+1. Parsing JSON request...
+2. Received req parameters - clientId: 123, messages count: 1
+3. Validated Server Environment variables successfully.
+4. Calculated current local time: 16.3.2026, 16:16:08
+5. Using model: gemini-2.5-flash
+6. Processing messages with convertToCoreMessages...
+7. Core messages parsed successfully. Resulting core messages count: 1
+8. Attempting to start AI stream with Google Provider...
+9. AI Stream established. Generating Data Stream Response...
+ ⨯ Error: failed to pipe response
+    at pipeToNodeResponse (C:\client-dashboard\node_modules\next\dist\server\pipe-readable.js:126:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async sendResponse (C:\client-dashboard\node_modules\next\dist\server\send-response.js:44:13)
+    at async doRender (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1396:25)
+    at async cacheEntry.responseCache.get.routeKind (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1496:28)
+    at async DevServer.renderPageComponent (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\client-dashboard\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\client-dashboard\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\client-dashboard\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\client-dashboard\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\client-dashboard\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  [cause]: Error: Unhandled chunk type: stream-start
+      at Object.transform (webpack-internal:///(rsc)/./node_modules/ai/dist/index.mjs:4031:17)
+      at invokePromiseCallback (node:internal/webstreams/util:172:10)
+      at Object.<anonymous> (node:internal/webstreams/util:177:23)
+      at transformStreamDefaultControllerPerformTransform (node:internal/webstreams/transformstream:527:37)
+      at node:internal/webstreams/transformstream:568:16
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+}
+ POST /api/chat 500 in 1481ms
+ ⚠ ./app/api/chat/route.ts
+Attempted import error: 'convertToCoreMessages' is not exported from 'ai' (imported as 'convertToCoreMessages').
+
+Import trace for requested module:
+./app/api/chat/route.ts
+--- AI CHAT REQUEST START ---
+1. Parsing JSON request...
+2. Received req parameters - clientId: 123, messages count: 1
+3. Validated Server Environment variables successfully.
+4. Calculated current local time: 16.3.2026, 16:17:56
+5. Using model: gemini-2.5-flash
+6. Processing messages with convertToCoreMessages...
+CRITICAL UNHANDLED AI SERVER ERROR: (0 , ai__WEBPACK_IMPORTED_MODULE_3__.convertToCoreMessages) is not a function TypeError: (0 , ai__WEBPACK_IMPORTED_MODULE_3__.convertToCoreMessages) is not a function
+    at POST (webpack-internal:///(rsc)/./app/api/chat/route.ts:77:87)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async C:\client-dashboard\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:57228
+    at async eT.execute (C:\client-dashboard\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:46851)
+    at async eT.handle (C:\client-dashboard\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:58760)
+    at async doRender (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1588:28)
+    at async DevServer.renderToResponseWithComponentsImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1496:28)
+    at async DevServer.renderPageComponent (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\client-dashboard\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\client-dashboard\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\client-dashboard\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\client-dashboard\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\client-dashboard\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\client-dashboard\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\client-dashboard\node_modules\next\dist\server\lib\start-server.js:141:13)
+ POST /api/chat 500 in 71ms
+ ✓ Compiled in 28ms
+^C

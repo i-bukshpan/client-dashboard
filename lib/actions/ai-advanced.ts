@@ -1,226 +1,170 @@
 'use server'
 
-import { google } from '@ai-sdk/google'
-import { generateText, generateObject } from 'ai'
 import { supabase } from '@/lib/supabase'
-import { z } from 'zod'
+
+const MODELS = ['gemini-flash-latest', 'gemini-pro-latest']
+
+async function callGemini(prompt: string): Promise<string | null> {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) return null
+
+  for (const model of MODELS) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+          }),
+        }
+      )
+      if (res.status === 404) break
+      if (res.status === 429 || res.status === 503) {
+        await new Promise(r => setTimeout(r, attempt * 3000))
+        continue
+      }
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || null
+    }
+  }
+  return null
+}
 
 /**
- * 1. Meeting Prepper:
- * Generates a concise briefing for an upcoming meeting.
+ * מייצר תדריך הכנה לפגישה עם לקוח:
+ * סיכום מצב כספי, פגישות אחרונות, משימות פתוחות.
  */
-export async function generateMeetingPrep(clientId: string) {
+export async function generateMeetingPrep(clientId: string): Promise<{
+  success: boolean
+  text?: string
+  error?: string
+}> {
   try {
-    // Fetch Client Context
-    const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).single()
-    const { data: recentMeetings } = await supabase.from('meeting_logs').select('*').eq('client_id', clientId).order('meeting_date', { ascending: false }).limit(3)
-    const { data: openTasks } = await supabase.from('reminders').select('*').eq('client_id', clientId).eq('is_completed', false).order('due_date', { ascending: true }).limit(5)
+    const [clientRes, paymentsRes, meetingsRes, remindersRes] = await Promise.all([
+      supabase.from('clients').select('name, status, advisor_status, internal_notes').eq('id', clientId).single(),
+      supabase.from('payments').select('amount, payment_type, payment_status, description, payment_date')
+        .eq('client_id', clientId).order('payment_date', { ascending: false }).limit(5),
+      supabase.from('meeting_logs').select('meeting_date, subject, summary, action_items')
+        .eq('client_id', clientId).order('meeting_date', { ascending: false }).limit(3),
+      supabase.from('reminders').select('title, due_date, priority')
+        .eq('client_id', clientId).eq('is_completed', false).order('due_date', { ascending: true }).limit(5),
+    ])
 
-    const prompt = `
-אתה מתמחה בפיננסים ועוזר ליועץ להתכונן לפגישה.
-הלקוח: ${client?.name}
-סטטוס: ${client?.status}
+    const client = clientRes.data
+    const payments = paymentsRes.data || []
+    const meetings = meetingsRes.data || []
+    const reminders = remindersRes.data || []
 
-סיכומי פגישות אחרונים:
-${recentMeetings?.map(m => `- ${m.subject}: ${m.summary}`).join('\n')}
+    const prompt = `אתה יועץ פיננסי מנוסה. הכן תדריך קצר ומעשי לפגישה עם הלקוח הבא.
+
+שם הלקוח: ${client?.name}
+סטטוס: ${client?.status || 'לא מוגדר'}
+הערות פנימיות: ${client?.internal_notes || 'אין'}
+
+תשלומים אחרונים:
+${payments.map(p => `- ${p.description || p.payment_type}: ₪${p.amount} (${p.payment_status}) - ${p.payment_date}`).join('\n') || 'אין'}
+
+פגישות אחרונות:
+${meetings.map(m => `- ${m.meeting_date}: ${m.subject}\n  סיכום: ${m.summary || 'אין'}\n  משימות: ${m.action_items || 'אין'}`).join('\n') || 'אין'}
 
 משימות פתוחות:
-${openTasks?.map(t => `- ${t.title} (עד יום: ${t.due_date})`).join('\n')}
+${reminders.map(r => `- ${r.title} (${r.priority}) - עד ${r.due_date}`).join('\n') || 'אין'}
 
-תפקידך:
-ייצר "דף הכנה" קצרצר (עד 3 נקודות) לפגישה הבאה. 
-התמקד במה שחשוב ביותר: נושאים פתוחים, חובות של הלקוח, או הזדמנויות שעלו בשיחות קודמות.
-ענה בעברית מקצועית וממוקדת.
-`
+כתוב תדריך הכנה לפגישה הכולל:
+1. נקודות מרכזיות לדיון
+2. שאלות מומלצות לשאול
+3. נושאים דחופים שיש לטפל בהם
+4. המלצות לפעולה
 
-    const { text } = await generateText({
-      model: google('models/gemini-1.5-pro-latest'),
-      prompt,
-    })
+כתוב בעברית, קצר וממוקד (עד 300 מילים).`
+
+    const text = await callGemini(prompt)
+    if (!text) return { success: false, error: 'לא הצלחנו ליצור תדריך' }
 
     return { success: true, text }
   } catch (error: any) {
-    console.error('Error generating meeting prep:', error)
     return { success: false, error: error.message }
   }
 }
 
 /**
- * 2. Task Intelligence:
- * Extracts tasks from a meeting summary and inserts them into reminders.
+ * מחלץ משימות מסיכום פגישה ויוצר תזכורות אוטומטית.
  */
-export async function extractTasksFromSummary(meetingId: string, summary: string) {
+export async function extractTasksFromSummary(meetingId: string, summary: string): Promise<{
+  success: boolean
+  count?: number
+  error?: string
+}> {
   try {
-    const { data: meeting } = await supabase.from('meeting_logs').select('client_id').eq('id', meetingId).single()
-    if (!meeting) throw new Error('Meeting not found')
+    // Get meeting's client_id
+    const { data: meeting } = await supabase
+      .from('meeting_logs')
+      .select('client_id, meeting_date')
+      .eq('id', meetingId)
+      .single()
 
-    const prompt = `
-נתח את סיכום הפגישה הבא ושלוף ממנו משימות לביצוע (Action Items).
-החזר רשימה של משימות עם כותרת קצרה, תיאור קצר, ורמת עדיפות (דחוף/רגיל/נמוך).
+    if (!meeting) return { success: false, error: 'פגישה לא נמצאה' }
+
+    const prompt = `נתח את סיכום הפגישה הבא וחלץ את כל המשימות וההחלטות שמצריכות פעולה.
 
 סיכום הפגישה:
-"${summary}"
-`
+${summary}
 
-    const { object } = await generateObject({
-      model: google('models/gemini-1.5-pro-latest'),
-      schema: z.object({
-        tasks: z.array(z.object({
-          title: z.string(),
-          description: z.string(),
-          priority: z.enum(['דחוף', 'רגיל', 'נמוך']),
-          daysToComplete: z.number().optional().default(7)
-        }))
-      }),
-      prompt,
-    })
+החזר JSON בלבד (ללא טקסט נוסף) בפורמט:
+{
+  "tasks": [
+    {
+      "title": "כותרת המשימה בעברית",
+      "due_days": 7,
+      "priority": "דחוף" | "רגיל" | "נמוך"
+    }
+  ]
+}
 
-    // Insert tasks into Supabase
-    const tasksToInsert = object.tasks.map(t => {
-      const dueDate = new Date()
-      dueDate.setDate(dueDate.getDate() + (t.daysToComplete || 7))
-      
+כללים:
+- רק משימות ברורות ומעשיות
+- due_days = מספר ימים מהיום עד מועד היעד
+- אם אין משימות ברורות, החזר tasks: []`
+
+    const text = await callGemini(prompt)
+    if (!text) return { success: false, error: 'לא הצלחנו לחלץ משימות' }
+
+    let tasks: Array<{ title: string; due_days: number; priority: string }> = []
+    try {
+      const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+      const parsed = JSON.parse(clean)
+      tasks = parsed.tasks || []
+    } catch {
+      return { success: false, error: 'שגיאה בעיבוד תשובת ה-AI' }
+    }
+
+    if (tasks.length === 0) return { success: true, count: 0 }
+
+    // Create reminders for each extracted task
+    const today = new Date()
+    const remindersToInsert = tasks.map(task => {
+      const dueDate = new Date(today)
+      dueDate.setDate(today.getDate() + (task.due_days || 7))
       return {
         client_id: meeting.client_id,
-        title: t.title,
-        description: t.description,
-        priority: t.priority,
-        due_date: dueDate.toISOString(),
+        title: task.title,
+        due_date: dueDate.toISOString().split('T')[0],
+        priority: task.priority || 'רגיל',
         is_completed: false,
-        category: 'meeting_followup'
+        category: 'meeting',
+        description: `חולץ אוטומטית מפגישה מתאריך ${meeting.meeting_date}`,
       }
     })
 
-    const { error } = await supabase.from('reminders').insert(tasksToInsert)
-    if (error) throw error
+    const { error } = await supabase.from('reminders').insert(remindersToInsert)
+    if (error) return { success: false, error: error.message }
 
-    return { success: true, count: object.tasks.length }
+    return { success: true, count: remindersToInsert.length }
   } catch (error: any) {
-    console.error('Error extracting tasks:', error)
-    return { success: false, error: error.message }
-  }
-}
-
-/**
- * 3. Smart Prioritization:
- * Analyzes open tasks and suggests the best order for today.
- */
-export async function prioritizeTasks(clientId: string) {
-  try {
-    const { data: tasks } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('client_id', clientId)
-      .eq('is_completed', false)
-      .order('due_date', { ascending: true })
-
-    if (!tasks || tasks.length === 0) return { success: true, suggestions: [] }
-
-    const prompt = `
-אתה יועץ ארגוני. עזור לי לתעדף את המשימות הבאות עבור הלקוח.
-נתח את המשימות והצע סדר ביצוע הגיוני (מה קודם).
-עבור כל משימה, הסבר בקצרה למה היא בעדיפות הזו.
-
-רשימת משימות:
-${tasks.map((t, idx) => `${idx + 1}. ${t.title} (יעד: ${t.due_date}, עדיפות נוכחית: ${t.priority})`).join('\n')}
-
-החזר את התשובה בעברית.
-`
-
-    const { text } = await generateText({
-      model: google('models/gemini-1.5-pro-latest'),
-      prompt,
-    })
-
-    return { success: true, text }
-  } catch (error: any) {
-    console.error('Error prioritizing tasks:', error)
-    return { success: false, error: error.message }
-  }
-}
-
-/**
- * 4. Client AI Report:
- * Generates a comprehensive summary of recent client activity.
- */
-export async function generateClientAIReport(clientId: string) {
-  try {
-    const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).single()
-    const { data: recentMeetings } = await supabase.from('meeting_logs').select('*').eq('client_id', clientId).order('meeting_date', { ascending: false }).limit(5)
-    const { data: recentPayments } = await supabase.from('payments').select('*').eq('client_id', clientId).order('payment_date', { ascending: false }).limit(10)
-    const { data: openTasks } = await supabase.from('reminders').select('*').eq('client_id', clientId).eq('is_completed', false).limit(10)
-
-    const prompt = `
-אתה אנליסט פיננסי בכיר ומדויק מאוד. תפקידך לייצר דוח סיכום תקופתי עבור הלקוח: ${client?.name || 'לא ידוע'}.
-
-חשוב מאוד:
-1. השתמש אך ורק בנתונים שסופקו להלן.
-2. אל תמציא שמות של אנשים, חברות או אירועים שלא מופיעים בנתונים.
-3. אם אין נתונים מספיקים (למשל אין פגישות או תשלומים), ציין זאת במפורש במקום להמציא מידע.
-4. אם שם הלקוח לא ידוע, התייחס אליו כ"לקוח הנכבד". אל תשתמש בשמות בדויים כמו "אברהם כהן".
-
-הנתונים הגולמיים:
----
-פגישות אחרונות:
-${recentMeetings && recentMeetings.length > 0 ? recentMeetings.map(m => `- ${m.subject} (${m.meeting_date}): ${m.summary}`).join('\n') : 'אין פגישות מתועדות'}
-
-תנועות כספיות אחרונות:
-${recentPayments && recentPayments.length > 0 ? recentPayments.map(p => `- ${p.description}: ${p.amount} ₪ (${p.payment_status})`).join('\n') : 'אין תנועות כספיות מתועדות'}
-
-משימות פתוחות:
-${openTasks && openTasks.length > 0 ? openTasks.map(t => `- ${t.title} (${t.priority})`).join('\n') : 'אין משימות פתוחות'}
----
-
-משימה:
-כתוב סיכום מקצועי (3-4 פסקאות) שסוקר את ההתקדמות על בסיס הנתונים הללו בלבד.
-השתמש בשפה מכובדת, עסקית ומעודדת. ענה בעברית.
-`
-
-    const { text } = await generateText({
-      model: google('models/gemini-1.5-pro-latest'),
-      prompt,
-    })
-
-    return { success: true, report: text }
-  } catch (error: any) {
-    console.error('Error generating client report:', error)
-    return { success: false, error: error.message }
-  }
-}
-
-/**
- * 5. Cash Flow Forecaster:
- * Analyzes patterns and predicts next month's cashflow.
- */
-export async function getCashflowInsights(clientId: string) {
-  try {
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('payment_date', { ascending: false })
-
-    if (!payments || payments.length === 0) return { success: true, insights: "אין מספיק נתוני תשלומים לביצוע ניתוח." }
-
-    const prompt = `
-נתח את תזרים המזומנים של הלקוח על סמך רשימת התשלומים הבאה:
-${payments.map(p => `- ${p.amount} ₪, ${p.payment_type}, תאריך: ${p.payment_date}`).join('\n')}
-
-משימה:
-1. זהה דפוסים (הוצאות קבועות, הכנסות מחזוריות).
-2. הערך מה יהיה המצב הכספי בחודש הקרוב (תחזית).
-3. תן 2 טיפים לשיפור התזרים.
-ענה בקיצור ולעניין בעברית.
-`
-
-    const { text } = await generateText({
-      model: google('models/gemini-1.5-pro-latest'),
-      prompt,
-    })
-
-    return { success: true, insights: text }
-  } catch (error: any) {
-    console.error('Error getting cashflow insights:', error)
     return { success: false, error: error.message }
   }
 }

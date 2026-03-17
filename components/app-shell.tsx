@@ -6,10 +6,12 @@ import Link from 'next/link'
 import { Menu, X, Search, LayoutDashboard, Calendar, Users, CheckSquare, Wallet } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
 import { Button } from '@/components/ui/button'
-import { GlobalChatListener } from '@/components/chat/global-chat-listener'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { NotificationCenter } from '@/components/notification-center'
 import { cn } from '@/lib/utils'
+import { AgentProvider } from '@/components/ai-agent/agent-context'
+import { AgentButton } from '@/components/ai-agent/agent-button'
+import { AgentPanel } from '@/components/ai-agent/agent-panel'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -31,8 +33,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <AgentProvider>
     <div className="flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-300">
-      <GlobalChatListener />
 
       {/* Mobile Sidebar Overlay */}
       <div
@@ -101,27 +103,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NotificationCenter />
             <ThemeToggle />
 
-            <div className="hidden sm:flex h-10 px-4 rounded-lg bg-secondary border border-border items-center gap-2 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-medium text-secondary-foreground">מחובר</span>
-            </div>
           </div>
         </header>
 
 
-        {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar pb-20 md:pb-6">
           {children}
         </div>
 
-        {/* Mobile Bottom Navigation */}
         <MobileBottomNav />
+        <AgentButton />
+        <AgentPanel />
       </main>
     </div>
+    </AgentProvider>
   )
 }
-
-// ── Mobile Bottom Navigation ──
 
 function MobileBottomNav() {
   const pathname = usePathname()
