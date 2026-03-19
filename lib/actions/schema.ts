@@ -261,3 +261,48 @@ export async function updateSchemaFinancial(
     return { success: false, error: error.message || 'Unknown error' }
   }
 }
+
+/**
+ * Server Action: Rename a module (updates both schema and data records)
+ */
+export async function renameModule(
+  clientId: string,
+  oldName: string,
+  newName: string,
+  branchName?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const trimmed = newName.trim()
+    if (!trimmed) return { success: false, error: 'שם הטבלה לא יכול להיות ריק' }
+    if (trimmed === oldName) return { success: true }
+
+    // Update the schema name
+    let schemaQuery = supabase
+      .from('client_schemas')
+      .update({ module_name: trimmed, updated_at: new Date().toISOString() })
+      .eq('client_id', clientId)
+      .eq('module_name', oldName)
+
+    if (branchName === undefined || branchName === null) {
+      schemaQuery = schemaQuery.is('branch_name', null)
+    } else {
+      schemaQuery = schemaQuery.eq('branch_name', branchName)
+    }
+
+    const { error: schemaError } = await schemaQuery
+    if (schemaError) return { success: false, error: schemaError.message }
+
+    // Update all data records for this module
+    const { error: recordsError } = await supabase
+      .from('client_data_records')
+      .update({ module_type: trimmed })
+      .eq('client_id', clientId)
+      .eq('module_type', oldName)
+
+    if (recordsError) return { success: false, error: recordsError.message }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Unknown error' }
+  }
+}

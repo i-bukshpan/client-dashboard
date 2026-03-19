@@ -255,6 +255,37 @@ export const agentTools: GeminiTool[] = [
       },
 
       {
+        name: 'fill_table_data',
+        description: 'ממלא נתונים בטבלת מידע של לקוח. מקבל שם טבלה ורשימת שורות נתונים ומוסיף אותן לטבלה. השדות בכל שורה צריכים להתאים לעמודות הטבלה. ניתן לבקש מהמשתמש לאחזר את הסכמה תחילה עם get_table_schema.',
+        parameters: {
+          type: 'object',
+          properties: {
+            client_id: { type: 'string', description: 'מזהה הלקוח' },
+            module_name: { type: 'string', description: 'שם הטבלה (module_name) לדוגמה: ספקים, לקוחות, מלאי' },
+            rows: {
+              type: 'array',
+              description: 'רשימת שורות נתונים. כל שורה היא אובייקט עם שמות שדות כמפתחות. השתמש בשמות המפתח (name) של העמודות מהסכמה.',
+              items: { type: 'object', description: 'אובייקט עם זוגות מפתח-ערך לפי שמות עמודות הטבלה' },
+            },
+          },
+          required: ['module_name', 'rows'],
+        },
+      },
+
+      {
+        name: 'get_table_schema',
+        description: 'מחזיר את מבנה הטבלה (עמודות ושמות שדות) של טבלת לקוח. השתמש כדי לדעת אילו שדות קיימים לפני מילוי נתונים.',
+        parameters: {
+          type: 'object',
+          properties: {
+            client_id: { type: 'string', description: 'מזהה הלקוח' },
+            module_name: { type: 'string', description: 'שם הטבלה' },
+          },
+          required: ['module_name'],
+        },
+      },
+
+      {
         name: 'create_payment',
         description: 'מוסיף תשלום חדש (הכנסה או הוצאה) ללקוח.',
         parameters: {
@@ -646,6 +677,84 @@ ${args.meeting_notes}
 
       if (error) return { success: false, error: error.message }
       return { success: true }
+    }
+
+    // ── get_table_schema ──────────────────────────────────────────────
+    case 'get_table_schema': {
+      if (!clientId) return { error: 'נדרש מזהה לקוח' }
+
+      const { data: schemas, error } = await supabase
+        .from('client_schemas')
+        .select('module_name, columns, branch_name')
+        .eq('client_id', clientId)
+
+      if (error) return { error: error.message }
+
+      if (!schemas || schemas.length === 0) return { error: 'לא נמצאו טבלאות ללקוח זה' }
+
+      if (args.module_name) {
+        const schema = schemas.find((s: any) => s.module_name === args.module_name)
+        if (!schema) {
+          return {
+            error: `לא נמצאה טבלה בשם: ${args.module_name}`,
+            available_tables: schemas.map((s: any) => s.module_name),
+          }
+        }
+        return {
+          module_name: schema.module_name,
+          columns: (schema.columns as any[]).map((c: any) => ({
+            name: c.name,
+            label: c.label,
+            type: c.type,
+            required: c.required || false,
+            options: c.options || undefined,
+          })),
+        }
+      }
+
+      return { tables: schemas.map((s: any) => ({ module_name: s.module_name, column_count: (s.columns as any[]).length })) }
+    }
+
+    // ── fill_table_data ───────────────────────────────────────────────
+    case 'fill_table_data': {
+      if (!clientId) return { success: false, error: 'נדרש מזהה לקוח' }
+
+      const moduleName = args.module_name
+      const rows: Array<Record<string, any>> = args.rows
+
+      if (!moduleName) return { success: false, error: 'נדרש שם טבלה' }
+      if (!Array.isArray(rows) || rows.length === 0) return { success: false, error: 'לא סופקו נתונים' }
+
+      // Verify table exists
+      const { data: schema } = await supabase
+        .from('client_schemas')
+        .select('module_name, columns')
+        .eq('client_id', clientId)
+        .eq('module_name', moduleName)
+        .single()
+
+      if (!schema) return { success: false, error: `לא נמצאה טבלה בשם: ${moduleName}. אנא בדוק את שם הטבלה בעזרת get_table_schema.` }
+
+      const entryDate = new Date().toISOString()
+      const payload = rows.map((data: Record<string, any>) => ({
+        client_id: clientId,
+        module_type: moduleName,
+        entry_date: entryDate,
+        data,
+      }))
+
+      const { data: inserted, error } = await supabase
+        .from('client_data_records')
+        .insert(payload)
+        .select('id')
+
+      if (error) return { success: false, error: error.message }
+
+      return {
+        success: true,
+        inserted: inserted?.length || 0,
+        message: `נוספו ${inserted?.length || 0} שורות לטבלה "${moduleName}" בהצלחה`,
+      }
     }
 
     // ── create_payment ────────────────────────────────────────────────

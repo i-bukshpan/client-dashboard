@@ -6,9 +6,12 @@ import { getSchema } from '@/lib/actions/schema'
 import { getRecords } from '@/lib/actions/data-records'
 import type { ClientDataRecord, ColumnDefinition } from '@/lib/supabase'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { ViewManager } from './view-manager'
 import type { CustomView } from '@/lib/actions/views'
 import { RealtimeSubscriber } from './realtime-subscriber'
+import { SchemaBuilder } from './schema-builder'
+import { Settings2, ChevronDown, ChevronUp } from 'lucide-react'
 
 interface ModuleDataTabProps {
   clientId: string
@@ -22,6 +25,7 @@ export function ModuleDataTab({ clientId, moduleType, branchName, readOnly = fal
   const [records, setRecords] = useState<ClientDataRecord[]>([])
   const [columns, setColumns] = useState<ColumnDefinition[]>([])
   const [loading, setLoading] = useState(true)
+  const [showColumnEditor, setShowColumnEditor] = useState(false)
   const [currentView, setCurrentView] = useState<CustomView | null>(null)
   const [currentViewConfig, setCurrentViewConfig] = useState<{
     visible_columns: string[]
@@ -114,6 +118,32 @@ export function ModuleDataTab({ clientId, moduleType, branchName, readOnly = fal
         moduleType={moduleType}
         onRecordChange={handleRealtimeChange}
       />
+
+      {/* Column editor toggle */}
+      {!readOnly && (
+        <div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowColumnEditor(!showColumnEditor)}
+            className="gap-2 rounded-xl border-border/40 font-bold text-sm"
+          >
+            <Settings2 className="h-4 w-4" />
+            ערוך עמודות
+            {showColumnEditor ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+          {showColumnEditor && (
+            <div className="mt-3">
+              <SchemaBuilder
+                clientId={clientId}
+                moduleName={moduleType}
+                branchName={branchName}
+                onSave={() => { loadData(); setShowColumnEditor(false) }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       <ViewManager
         clientId={clientId}

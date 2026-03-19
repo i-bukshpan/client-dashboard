@@ -188,10 +188,11 @@ export interface ConditionalFormatting {
 
 export interface ColumnDefinition {
   name: string // Internal name (e.g., 'amount', 'description')
-  type: 'number' | 'text' | 'date' | 'currency' | 'formula' | 'reference' | 'calculated' | 'lookup' // Data type
+  type: 'number' | 'text' | 'date' | 'currency' | 'formula' | 'reference' | 'calculated' | 'lookup' | 'select' // Data type
   label: string // Display label in Hebrew (e.g., 'סכום', 'תיאור')
   required?: boolean // Whether this field is required
   default?: any // Default value
+  options?: string[] // Options for 'select' type fields
   formula?: FormulaMetadata // Formula metadata if type is 'formula', 'reference', or 'calculated'
   relationship?: RelationshipMetadata // Relationship metadata if type is 'lookup'
   conditionalFormatting?: ConditionalFormatting[] // Conditional formatting rules

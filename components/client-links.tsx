@@ -13,6 +13,9 @@ import {
     Cloud,
     Globe,
     Loader2,
+    Eye,
+    RefreshCw,
+    X as XIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,6 +37,31 @@ import {
     deleteClientLink,
     type ClientLink,
 } from '@/lib/actions/client-links'
+
+// ── Preview helpers (same logic as GoogleDriveViewer) ─────────────────────
+
+function parseGoogleUrl(url: string): { id: string; type: 'doc' | 'sheet' | 'slide' | 'file' } | null {
+    const docMatch = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
+    if (docMatch) return { id: docMatch[1], type: 'doc' }
+    const sheetMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+    if (sheetMatch) return { id: sheetMatch[1], type: 'sheet' }
+    const slideMatch = url.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/)
+    if (slideMatch) return { id: slideMatch[1], type: 'slide' }
+    const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+    if (fileMatch) return { id: fileMatch[1], type: 'file' }
+    return null
+}
+
+function getEmbedUrl(id: string, type: 'doc' | 'sheet' | 'slide' | 'file'): string {
+    switch (type) {
+        case 'doc': return `https://docs.google.com/document/d/${id}/preview`
+        case 'sheet': return `https://docs.google.com/spreadsheets/d/${id}/preview`
+        case 'slide': return `https://docs.google.com/presentation/d/${id}/preview`
+        case 'file': return `https://drive.google.com/file/d/${id}/preview`
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function detectLinkType(url: string): ClientLink['link_type'] {
     const lower = url.toLowerCase()
@@ -67,6 +95,8 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingLink, setEditingLink] = useState<ClientLink | null>(null)
     const [saving, setSaving] = useState(false)
+    const [previewLink, setPreviewLink] = useState<ClientLink | null>(null)
+    const [previewKey, setPreviewKey] = useState(0)
 
     // Form state
     const [title, setTitle] = useState('')
@@ -273,6 +303,15 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
+                                            onClick={() => { setPreviewLink(link); setPreviewKey(k => k + 1) }}
+                                            className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-blue-500 hover:text-white hover:bg-blue-500 transition-all"
+                                            title="תצוגה מקדימה"
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
                                             onClick={() => openEditDialog(link)}
                                             className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-grey hover:text-primary transition-colors"
                                             title="ערוך"
@@ -292,10 +331,13 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                                 </div>
 
                                 <div className="mt-4 pt-4 border-t border-border/10 flex items-center justify-between relative z-10">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                        <span className="text-[10px] font-bold text-grey/60 uppercase tracking-tighter">זמין לצפייה</span>
-                                    </div>
+                                    <button
+                                        onClick={() => { setPreviewLink(link); setPreviewKey(k => k + 1) }}
+                                        className="flex items-center gap-1.5 text-[10px] font-bold text-blue-500 hover:text-blue-600 transition-colors uppercase tracking-tighter"
+                                    >
+                                        <Eye className="h-3 w-3" />
+                                        תצוגה מקדימה
+                                    </button>
                                     <div className="text-[10px] font-mono text-grey/40">
                                         {new URL(link.url).hostname}
                                     </div>
@@ -305,6 +347,96 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                     })}
                 </div>
             )}
+
+            {/* Preview Dialog */}
+            <Dialog open={!!previewLink} onOpenChange={(open) => { if (!open) setPreviewLink(null) }}>
+                <DialogContent className="max-w-5xl w-full h-[90vh] flex flex-col p-0 gap-0 overflow-hidden" dir="rtl">
+                    {previewLink && (() => {
+                        const parsed = parseGoogleUrl(previewLink.url)
+                        const embedUrl = parsed ? getEmbedUrl(parsed.id, parsed.type) : null
+                        const config = linkTypeConfig[previewLink.link_type] || linkTypeConfig.other
+                        const Icon = config.icon
+
+                        return (
+                            <>
+                                {/* Header */}
+                                <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-border/30 bg-slate-50/80 flex-shrink-0">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className={`p-2 rounded-xl flex-shrink-0 ${config.color} ${config.bg}`}>
+                                            <Icon className="h-5 w-5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-black text-navy truncate">{previewLink.title}</p>
+                                            <p className="text-xs text-grey font-mono truncate" dir="ltr">{previewLink.url}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {embedUrl && (
+                                            <button
+                                                onClick={() => setPreviewKey(k => k + 1)}
+                                                className="h-8 w-8 rounded-xl bg-white border border-border shadow-sm flex items-center justify-center text-grey hover:text-navy transition-colors"
+                                                title="רענן"
+                                            >
+                                                <RefreshCw className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
+                                        <a
+                                            href={previewLink.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="h-8 px-3 rounded-xl bg-white border border-border shadow-sm flex items-center gap-1.5 text-xs font-bold text-grey hover:text-navy transition-colors"
+                                        >
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                            פתח
+                                        </a>
+                                        <button
+                                            onClick={() => setPreviewLink(null)}
+                                            className="h-8 w-8 rounded-xl bg-white border border-border shadow-sm flex items-center justify-center text-grey hover:text-navy transition-colors"
+                                        >
+                                            <XIcon className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 overflow-hidden bg-slate-100">
+                                    {embedUrl ? (
+                                        <iframe
+                                            key={previewKey}
+                                            src={embedUrl}
+                                            className="w-full h-full border-0"
+                                            title={previewLink.title}
+                                            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                                        />
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center gap-4 p-8">
+                                            <div className={`p-5 rounded-3xl ${config.bg}`}>
+                                                <Icon className={`h-12 w-12 ${config.color}`} />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="font-black text-navy text-lg mb-1">תצוגה מקדימה אינה זמינה</p>
+                                                <p className="text-sm text-grey font-medium mb-4">
+                                                    הקישור אינו קובץ Google Drive תואם.<br />
+                                                    תצוגה מקדימה זמינה עבור Google Docs, Sheets, Slides ו-Drive.
+                                                </p>
+                                                <a
+                                                    href={previewLink.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-2 bg-primary text-white font-bold px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors text-sm"
+                                                >
+                                                    <ExternalLink className="h-4 w-4" />
+                                                    פתח בחלון חדש
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )
+                    })()}
+                </DialogContent>
+            </Dialog>
 
             {/* Add/Edit Dialog */}
             <Dialog open={dialogOpen} onOpenChange={(open) => {

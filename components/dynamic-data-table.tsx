@@ -17,9 +17,10 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, Upload } from 'lucide-react'
+import { Plus, Trash2, Save, X, Search, Filter, Download, Copy, Edit3, CopyPlus, BarChart3, Upload, Pencil, Check, Settings2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { addRecord, updateRecordField, deleteRecord } from '@/lib/actions/data-records'
+import { renameModule } from '@/lib/actions/schema'
 import type { ClientDataRecord, ColumnDefinition } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
 import { getAggregatedValue } from '@/lib/actions/aggregations'
@@ -122,6 +123,10 @@ export function DynamicDataTable({
   const [chartYAxis, setChartYAxis] = useState<string>('')
   // CSV import dialog state
   const [csvImportDialogOpen, setCSVImportDialogOpen] = useState(false)
+  // Rename module state
+  const [isRenamingModule, setIsRenamingModule] = useState(false)
+  const [renameValue, setRenameValue] = useState(moduleType)
+  const [renameSaving, setRenameSaving] = useState(false)
 
   // Calculate formula values when columns or records change
   useEffect(() => {
@@ -718,20 +723,17 @@ export function DynamicDataTable({
           const numValue = typeof value === 'number' ? value : parseFloat(String(value))
           displayValue = isNaN(numValue) ? String(value) : `₪${numValue.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         } else if (colDef.type === 'calculated' && colDef.formula) {
-          // Calculated columns are handled above, but this ensures they don't fall through to String(value)
-          // If value is already calculated, use it directly.
           displayValue = value !== undefined && value !== null ? (typeof value === 'number' ? value.toLocaleString('he-IL') : String(value)) : '-'
+        } else if (colDef.type === 'select') {
+          displayValue = value !== null && value !== undefined && value !== '' ? String(value) : '-'
         } else {
           displayValue = String(value)
         }
 
         // Apply conditional formatting
         let cellStyle: React.CSSProperties = {}
-        let isEditable = !readOnly && !isFormula && !isCalculated
-        let cellClassName = `p-2 rounded min-h-[2rem] flex items-center justify-center text-center transition-colors ${isEditable
-          ? 'cursor-text hover:bg-slate-50 border border-transparent hover:border-slate-200 group relative'
-          : ''
-          }`
+        const isEditable = false // Editing only via batch edit mode
+        let cellClassName = `p-2 rounded min-h-[2rem] flex items-center justify-center text-center transition-colors`
 
         if (colDef.conditionalFormatting && colDef.conditionalFormatting.length > 0) {
           for (const rule of colDef.conditionalFormatting) {
@@ -776,35 +778,13 @@ export function DynamicDataTable({
         }
 
         return (
-          <div
-            className={cellClassName}
-            style={cellStyle}
-            tabIndex={isEditable ? 0 : undefined}
-            onClick={() => {
-              if (isEditable) {
-                setEditingCell({ recordId: record.id, fieldName: colDef.name, value })
-                const initialValue = colDef.type === 'date' && value ? formatDateForCSV(value) : (value ?? (colDef.type === 'number' ? 0 : ''))
-                setEditValue(initialValue)
-              }
-            }}
-            onKeyDown={(e) => {
-              if (isEditable && e.key === 'Enter') {
-                e.preventDefault()
-                setEditingCell({ recordId: record.id, fieldName: colDef.name, value })
-                const initialValue = colDef.type === 'date' && value ? formatDateForCSV(value) : (value ?? (colDef.type === 'number' ? 0 : ''))
-                setEditValue(initialValue)
-              }
-            }}
-          >
+          <div className={cellClassName} style={cellStyle}>
             <span
               className="line-clamp-2 break-words text-ellipsis overflow-hidden px-1"
               title={String(displayValue).length > 30 ? String(displayValue) : undefined}
             >
               {displayValue}
             </span>
-            {isEditable && (
-              <Edit3 className="absolute left-2 h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-            )}
           </div>
         )
       },
@@ -1056,7 +1036,55 @@ export function DynamicDataTable({
               <BarChart3 className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-xl font-black text-navy tracking-tight">רשומות נתונים</h3>
+              {isRenamingModule ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    className="text-xl font-black text-navy tracking-tight border-b-2 border-primary bg-transparent outline-none min-w-[120px]"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter') {
+                        setRenameSaving(true)
+                        const result = await renameModule(clientId, moduleType, renameValue, branchName || null)
+                        setRenameSaving(false)
+                        if (result.success) { setIsRenamingModule(false); onRecordUpdate?.() }
+                        else showToast('error', result.error || 'שגיאה בשינוי שם')
+                      }
+                      if (e.key === 'Escape') { setIsRenamingModule(false); setRenameValue(moduleType) }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    className="p-1 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                    disabled={renameSaving}
+                    onClick={async () => {
+                      setRenameSaving(true)
+                      const result = await renameModule(clientId, moduleType, renameValue, branchName || null)
+                      setRenameSaving(false)
+                      if (result.success) { setIsRenamingModule(false); onRecordUpdate?.() }
+                      else showToast('error', result.error || 'שגיאה בשינוי שם')
+                    }}
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button className="p-1 text-grey hover:text-navy" onClick={() => { setIsRenamingModule(false); setRenameValue(moduleType) }}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-black text-navy tracking-tight">{moduleType}</h3>
+                  {!readOnly && (
+                    <button
+                      className="p-1 text-grey hover:text-primary opacity-50 hover:opacity-100 transition-opacity"
+                      title="שנה שם טבלה"
+                      onClick={() => { setRenameValue(moduleType); setIsRenamingModule(true) }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="text-xs font-medium text-grey">נהל רשומות, ערוך שדות ובצע פעולות מרובות</p>
             </div>
           </div>
@@ -1332,7 +1360,19 @@ export function DynamicDataTable({
               return (
                 <div key={`${col.name}-${moduleType}`} className="space-y-1.5">
                   <label htmlFor={inputId} className="text-[10px] font-black uppercase tracking-widest text-grey mr-1">{col.label}</label>
-                  {col.type === 'date' ? (
+                  {col.type === 'select' && col.options && col.options.length > 0 ? (
+                    <select
+                      id={inputId}
+                      value={newRecordData[col.name] || ''}
+                      onChange={(e) => setNewRecordData({ ...newRecordData, [col.name]: e.target.value })}
+                      className="w-full h-11 rounded-xl border border-border/40 bg-white px-4 font-bold text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                    >
+                      <option value="">-- בחר --</option>
+                      {col.options.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : col.type === 'date' ? (
                     <Input
                       id={inputId}
                       type="date"
@@ -1494,6 +1534,27 @@ export function DynamicDataTable({
                           if (colDef && colDef.type !== 'formula' && colDef.type !== 'reference' && colDef.type !== 'calculated' && colDef.type !== 'lookup') {
                             const currentVal = batchEditData[recordId]?.[colDef.name] ?? row.original.data[colDef.name] ?? ''
                             const isChanged = batchEditData[recordId]?.[colDef.name] !== undefined
+
+                            if (colDef.type === 'select' && colDef.options && colDef.options.length > 0) {
+                              return (
+                                <td key={cell.id} className={`p-2 text-center ${stickyClasses}`}>
+                                  <select
+                                    value={String(currentVal)}
+                                    onChange={(e) => handleBatchEditChange(recordId, colDef.name, e.target.value)}
+                                    className={cn(
+                                      "w-full text-center text-sm h-10 rounded-xl font-bold transition-all px-2 border outline-none",
+                                      isChanged ? "border-amber-400 bg-amber-50" : "border-transparent bg-transparent hover:bg-white hover:border-slate-200"
+                                    )}
+                                  >
+                                    <option value="">-- בחר --</option>
+                                    {colDef.options.map((opt) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                              )
+                            }
+
                             return (
                               <td key={cell.id} className={`p-2 text-center ${stickyClasses}`}>
                                 <Input

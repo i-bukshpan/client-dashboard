@@ -18,6 +18,50 @@ import { CalculatedColumnEditor } from '@/components/calculated-column-editor'
 import { ConditionalFormattingEditor } from '@/components/conditional-formatting-editor'
 import { RelationshipEditor } from '@/components/relationship-editor'
 
+function SelectOptionsEditor({ options, onUpdate }: { options: string[]; onUpdate: (opts: string[]) => void }) {
+  const [newOption, setNewOption] = useState('')
+
+  const addOption = () => {
+    const trimmed = newOption.trim()
+    if (!trimmed || options.includes(trimmed)) return
+    onUpdate([...options, trimmed])
+    setNewOption('')
+  }
+
+  const removeOption = (idx: number) => {
+    onUpdate(options.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div className="mt-3 p-3 bg-blue-50/50 rounded-lg border border-blue-200 space-y-2">
+      <p className="text-xs font-bold text-blue-700">אפשרויות לרשימה נפתחת</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt, idx) => (
+          <span key={idx} className="flex items-center gap-1 bg-white border border-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-lg">
+            {opt}
+            <button type="button" onClick={() => removeOption(idx)} className="text-red-400 hover:text-red-600 font-black">×</button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={newOption}
+          onChange={(e) => setNewOption(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOption() } }}
+          placeholder="הוסף אפשרות..."
+          className="h-8 text-sm"
+        />
+        <Button type="button" size="sm" variant="outline" onClick={addOption} className="h-8 px-3">
+          <Plus className="h-3 w-3" />
+        </Button>
+      </div>
+      {options.length === 0 && (
+        <p className="text-xs text-grey">לא הוגדרו אפשרויות עדיין</p>
+      )}
+    </div>
+  )
+}
+
 interface SchemaBuilderProps {
   clientId: string
   moduleName: string
@@ -422,9 +466,7 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
                   <Label>סוג נתונים</Label>
                   <Select
                     value={column.type}
-                    onValueChange={(value: 'number' | 'text' | 'date' | 'currency' | 'formula' | 'reference') =>
-                      handleUpdateColumn(index, 'type', value)
-                    }
+                    onValueChange={(value: any) => handleUpdateColumn(index, 'type', value)}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -434,6 +476,7 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
                       <SelectItem value="number">מספר</SelectItem>
                       <SelectItem value="currency">מטבע ₪</SelectItem>
                       <SelectItem value="date">תאריך</SelectItem>
+                      <SelectItem value="select">רשימה נפתחת (בחירה)</SelectItem>
                       <SelectItem value="formula">נוסחה (חישוב מטבלה אחרת)</SelectItem>
                       <SelectItem value="reference">הפניה (קישור לטבלה אחרת)</SelectItem>
                       <SelectItem value="calculated">מחושב (נוסחה ברמת שורה)</SelectItem>
@@ -454,6 +497,17 @@ export function SchemaBuilder({ clientId, moduleName, branchName, defaultColumns
                   </Button>
                 </div>
               </div>
+              {/* Select options editor */}
+              {column.type === 'select' && (
+                <SelectOptionsEditor
+                  options={column.options || []}
+                  onUpdate={(opts) => {
+                    const updated = [...columns]
+                    updated[index] = { ...updated[index], options: opts }
+                    setColumns(updated)
+                  }}
+                />
+              )}
               {/* Formula editor for formula/reference columns */}
               {(column.type === 'formula' || column.type === 'reference') && (
                 <FormulaEditor
