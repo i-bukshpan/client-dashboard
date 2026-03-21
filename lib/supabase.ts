@@ -94,6 +94,7 @@ export interface MeetingLog {
   meeting_date: string
   meeting_type?: string | null
   subject: string
+  details?: string | null
   summary?: string | null
   action_items?: string | null
   created_at: string

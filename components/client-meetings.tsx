@@ -27,6 +27,7 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
     // Meeting Form
     const [meetingDate, setMeetingDate] = useState(format(new Date(), 'yyyy-MM-dd'))
     const [meetingSubject, setMeetingSubject] = useState('')
+    const [meetingDetails, setMeetingDetails] = useState('')
     const [meetingSummary, setMeetingSummary] = useState('')
     const [meetingActionItems, setMeetingActionItems] = useState('')
     const [meetingDialogOpen, setMeetingDialogOpen] = useState(false)
@@ -75,6 +76,7 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
             client_id: client.id,
             meeting_date: meetingDate,
             subject: meetingSubject,
+            details: meetingDetails || null,
             summary: meetingSummary,
             action_items: meetingActionItems,
             meeting_type: 'monthly_review'
@@ -85,6 +87,7 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
             loadMeetingLogs()
             // Reset form
             setMeetingSubject('')
+            setMeetingDetails('')
             setMeetingSummary('')
             setMeetingActionItems('')
             onUpdate()
@@ -157,6 +160,15 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                                 </div>
                             </div>
                             <div className="space-y-2">
+                                <Label className="font-bold text-slate-600">פרטים נוספים <span className="text-grey font-normal">(אופציונלי)</span></Label>
+                                <Input
+                                    value={meetingDetails}
+                                    onChange={(e) => setMeetingDetails(e.target.value)}
+                                    placeholder="למשל: מיקום, משתתפים, סוג פגישה..."
+                                    className="rounded-xl border-border/50"
+                                />
+                            </div>
+                            <div className="space-y-2">
                                 <Label className="font-bold">סיכום הפגישה</Label>
                                 <Textarea
                                     value={meetingSummary}
@@ -218,10 +230,15 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                             <div className="absolute top-0 right-0 w-1.5 h-full bg-slate-200 group-hover:bg-indigo-500 transition-colors" />
                             <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <div className="flex items-center gap-3 mb-1.5">
+                                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                         <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100/50">
                                             {format(new Date(log.meeting_date), 'dd/MM/yyyy')}
                                         </span>
+                                        {log.details && (
+                                            <span className="text-xs font-bold text-grey bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200/50">
+                                                {log.details}
+                                            </span>
+                                        )}
                                     </div>
                                     <h4 className="text-xl font-black text-navy tracking-tight leading-tight">{log.subject}</h4>
                                 </div>

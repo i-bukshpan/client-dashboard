@@ -9,6 +9,7 @@ import { InvoiceBranchBreakdown } from './invoice-branch-breakdown'
 import { addScannedInvoice } from '@/lib/actions/invoice-scan'
 import { useToast } from '@/components/ui/toast'
 import type { ClientSchema } from '@/lib/supabase'
+import { CalendarLinkButton } from './client-calendar'
 
 interface BranchTablesTabProps {
   clientId: string
@@ -124,6 +125,11 @@ export function BranchTablesTab({ clientId, schemas, branchName, readOnly = fals
       </TabsContent>
       {schemas.map((schema) => (
         <TabsContent key={schema.id} value={schema.module_name}>
+          {!readOnly && (
+            <div className="flex justify-end mb-3">
+              <CalendarLinkButton clientId={clientId} schema={schema} allSchemas={schemas} />
+            </div>
+          )}
           <ModuleDataTab
             clientId={clientId}
             moduleType={schema.module_name}

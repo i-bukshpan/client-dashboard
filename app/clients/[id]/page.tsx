@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { 
+import {
   ArrowRight, Phone, Mail, Calendar, Clock,
-  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive, History
+  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive, History, CalendarDays
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -28,6 +28,7 @@ import { UnifiedTimeline } from '@/components/unified-timeline'
 import { ClientAnalytics } from '@/components/client-analytics'
 import { GoogleDriveViewer } from '@/components/google-drive-viewer'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { ClientCalendar } from '@/components/client-calendar'
 
 const BillingPayments = dynamic(() => import('@/components/billing-payments').then(m => ({ default: m.BillingPayments })), {
   loading: () => <LoadingSkeleton />,
@@ -225,17 +226,25 @@ export default function ClientDetailPage() {
       <div className="px-6 sm:px-10 pb-10">
         <ErrorBoundary>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Detailed Tab Bar Navigation */}
-          <div className="mb-8 p-1.5 bg-white border border-border/40 rounded-2xl shadow-sm inline-flex overflow-x-auto no-scrollbar max-w-full">
-            <TabsList className="bg-transparent h-auto p-0 flex space-x-0 space-x-reverse rounded-xl">
-              <TabButton value="overview" label="סקירה כללית" icon={<LayoutDashboard className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="meetings" label="פגישות וסיכומים" icon={<FileText className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="data" label="נתונים שוטפים" icon={<Database className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="finance" label="כספים" icon={<PiggyBank className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="analytics" label="אנליטיקה ותובנות" icon={<BarChart3 className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="credentials" label="אזור אישי וגישות" icon={<Key className="h-4 w-4" />} active={activeTab} />
-              <TabButton value="settings" label="הגדרות" icon={<Settings className="h-4 w-4" />} active={activeTab} />
-            </TabsList>
+          {/* Tab Bar Navigation */}
+          <div className="mb-8 relative">
+            <div className="overflow-x-auto no-scrollbar">
+              <div className="p-1.5 bg-white border border-border/40 rounded-2xl shadow-sm w-max min-w-full">
+                <TabsList className="bg-transparent h-auto p-0 flex gap-0.5 rounded-xl w-max">
+                  <TabButton value="overview" label="סקירה" icon={<LayoutDashboard className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="meetings" label="פגישות" icon={<FileText className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="data" label="נתונים" icon={<Database className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="finance" label="כספים" icon={<PiggyBank className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="analytics" label="אנליטיקה" icon={<BarChart3 className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="calendar" label="יומן" icon={<CalendarDays className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="credentials" label="גישות" icon={<Key className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="settings" label="הגדרות" icon={<Settings className="h-4 w-4" />} active={activeTab} />
+                </TabsList>
+              </div>
+            </div>
+            {/* fade hints */}
+            <div className="pointer-events-none absolute top-0 left-0 h-full w-10 bg-gradient-to-r from-slate-50/50 to-transparent rounded-r-2xl" />
+            <div className="pointer-events-none absolute top-0 right-0 h-full w-10 bg-gradient-to-l from-slate-50/50 to-transparent rounded-l-2xl" />
           </div>
 
           {/* ══ Tab 1: Overview ══ */}
@@ -344,6 +353,20 @@ export default function ClientDetailPage() {
             </div>
           </TabsContent>
 
+          {/* ══ Tab: Calendar ══ */}
+          <TabsContent value="calendar" className="mt-0 outline-none animate-fade-in-up">
+            <div className="max-w-5xl mx-auto">
+              <SectionCard title="לוח שנה" color="blue" icon={<CalendarDays className="h-4 w-4" />}>
+                {!schemasLoading && (
+                  <ClientCalendar clientId={clientId} clientName={client.name} schemas={clientSchemas} />
+                )}
+                {schemasLoading && (
+                  <div className="h-64 animate-pulse bg-slate-100 rounded-2xl" />
+                )}
+              </SectionCard>
+            </div>
+          </TabsContent>
+
           {/* ══ Tab 5: Credentials & Links ══ */}
           <TabsContent value="credentials" className="mt-0 outline-none animate-fade-in-up">
             <Tabs defaultValue="vault" className="w-full">
@@ -406,15 +429,14 @@ function TabButton({ value, label, icon, active }: { value: string; label: strin
     <TabsTrigger
       value={value}
       className={cn(
-        "rounded-xl px-4 sm:px-6 py-3 font-bold text-sm transition-all focus:ring-0 focus:outline-none flex items-center justify-center gap-2",
+        "rounded-xl px-3 sm:px-5 py-2.5 font-bold text-xs sm:text-sm transition-all focus:ring-0 focus:outline-none flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0",
         isActive
           ? "bg-navy text-white shadow-md shadow-navy/20"
           : "text-grey hover:text-navy hover:bg-slate-50 data-[state=active]:bg-navy data-[state=active]:text-white"
       )}
     >
       {icon}
-      <span className="hidden sm:inline-block">{label}</span>
-      <span className="sm:hidden text-xs">{label.split(' ')[0]}</span>
+      {label}
     </TabsTrigger>
   )
 }
