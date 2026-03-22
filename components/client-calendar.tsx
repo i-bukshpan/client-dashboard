@@ -371,9 +371,10 @@ interface ClientCalendarProps {
   clientName: string
   schemas: ClientSchema[]
   initialLinkSchemaId?: string // pre-open link dialog for this schema
+  readOnly?: boolean
 }
 
-export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchemaId }: ClientCalendarProps) {
+export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchemaId, readOnly = false }: ClientCalendarProps) {
   const { showToast } = useToast()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -634,26 +635,28 @@ export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchem
         </div>
 
         {/* Quick actions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <CreateMeetingDialog clientId={clientId} clientName={clientName} onCreated={loadData} trigger={
-            <Button size="sm" className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white h-9 px-3 gap-1.5 text-xs font-bold">
-              <Users className="h-3.5 w-3.5" />פגישה
+        {!readOnly && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <CreateMeetingDialog clientId={clientId} clientName={clientName} onCreated={loadData} trigger={
+              <Button size="sm" className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white h-9 px-3 gap-1.5 text-xs font-bold">
+                <Users className="h-3.5 w-3.5" />פגישה
+              </Button>
+            } />
+            <CreateTaskDialog clientId={clientId} clientName={clientName} onCreated={loadData} trigger={
+              <Button size="sm" variant="outline" className="rounded-xl h-9 px-3 gap-1.5 text-xs font-bold">
+                <Clock className="h-3.5 w-3.5" />משימה
+              </Button>
+            } />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setLinkInitialSchema(undefined); setLinkDialogOpen(true) }}
+              className="rounded-xl h-9 px-3 gap-1.5 text-xs font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            >
+              <Table2 className="h-3.5 w-3.5" />קשר טבלה
             </Button>
-          } />
-          <CreateTaskDialog clientId={clientId} clientName={clientName} onCreated={loadData} trigger={
-            <Button size="sm" variant="outline" className="rounded-xl h-9 px-3 gap-1.5 text-xs font-bold">
-              <Clock className="h-3.5 w-3.5" />משימה
-            </Button>
-          } />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => { setLinkInitialSchema(undefined); setLinkDialogOpen(true) }}
-            className="rounded-xl h-9 px-3 gap-1.5 text-xs font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-          >
-            <Table2 className="h-3.5 w-3.5" />קשר טבלה
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── Linked tables chips ── */}
@@ -667,9 +670,11 @@ export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchem
                 <div className={cn("w-2 h-2 rounded-full", c.dot)} />
                 {link.label}
                 {link.branchName && <span className="opacity-60">({link.branchName})</span>}
-                <button onClick={() => handleRemoveLink(link.schemaId)} className="mr-1 opacity-60 hover:opacity-100 transition-opacity">
-                  <X className="h-3 w-3" />
-                </button>
+                {!readOnly && (
+                  <button onClick={() => handleRemoveLink(link.schemaId)} className="mr-1 opacity-60 hover:opacity-100 transition-opacity">
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </div>
             )
           })}

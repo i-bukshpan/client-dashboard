@@ -22,10 +22,6 @@ export default function ClientViewPage() {
   const [activeModule, setActiveModule] = useState<string | null>(null)
   const [highlightRecordId, setHighlightRecordId] = useState<string | null>(null)
 
-  // Define defaultTab state to handle initial load or calculation
-  const [defaultTab, setDefaultTab] = useState<string | null>(null)
-  const [schemasLoading, setSchemasLoading] = useState(false)
-
   const [parentToken, setParentToken] = useState<string | null>(null)
   const [parentName, setParentName] = useState<string | null>(null)
 
@@ -52,6 +48,20 @@ export default function ClientViewPage() {
 
         if (schemas) {
           setClientSchemas(schemas)
+        }
+
+        // Set initial active tab based on permissions (avoids flash)
+        const perms = result.client.share_permissions
+        if (perms && !perms.show_overview) {
+          const allowedSchemas = (schemas || []).filter((s: any) => perms.allowed_modules?.includes(s.module_name))
+          const uniqueBranches = Array.from(new Set(allowedSchemas.map((s: any) => s.branch_name || null))) as (string | null)[]
+          if (perms.show_billing) setActiveTab('payments')
+          else if (uniqueBranches.length > 0) setActiveTab(uniqueBranches[0] || 'ראשי')
+          else if (perms.show_sub_clients ?? true) setActiveTab('sub-clients')
+          else if (perms.show_credentials) setActiveTab('credentials')
+          else if (perms.show_notes) setActiveTab('notes')
+          else if (perms.show_calendar) setActiveTab('calendar')
+          else if (perms.show_links) setActiveTab('links')
         }
 
         // Fetch parent details if it's a sub-client
@@ -90,6 +100,9 @@ export default function ClientViewPage() {
     show_billing: true,
     show_credentials: false,
     show_notes: false,
+    show_sub_clients: true,
+    show_calendar: false,
+    show_links: false,
     allowed_modules: []
   }
 
@@ -116,26 +129,17 @@ export default function ClientViewPage() {
     return a.localeCompare(b, 'he')
   })
 
-  useEffect(() => {
-    if (!loading && client) {
-      let newDefaultTab = 'overview'
-      if (!permissions.show_overview) {
-        if (permissions.show_billing) newDefaultTab = 'payments'
-        else if (branches.length > 0) newDefaultTab = (branches[0] || 'ראשי')
-        else if (showSubClients) newDefaultTab = 'sub-clients'
-        else if (permissions.show_credentials) newDefaultTab = 'credentials'
-        else if (permissions.show_notes) newDefaultTab = 'notes'
-        else newDefaultTab = ''
-      }
-      setDefaultTab(newDefaultTab)
-      // Only set active tab if it's the first load (overview) or if current active is invalid?
-      // Actually, if we are loading, activeTab is overview.
-      // If we switch from loading to loaded, we should set activeTab to default if needed.
-      if (activeTab === 'overview' && newDefaultTab !== 'overview') {
-        setActiveTab(newDefaultTab)
-      }
-    }
-  }, [loading, client, JSON.stringify(permissions), branches.length])
+  // Compute first available tab synchronously (no flash)
+  const firstAvailableTab: string = !permissions.show_overview
+    ? permissions.show_billing ? 'payments'
+      : branches.length > 0 ? (branches[0] || 'ראשי')
+      : showSubClients ? 'sub-clients'
+      : permissions.show_credentials ? 'credentials'
+      : permissions.show_notes ? 'notes'
+      : permissions.show_calendar ? 'calendar'
+      : permissions.show_links ? 'links'
+      : ''
+    : 'overview'
 
   if (loading) {
     return (
@@ -163,7 +167,7 @@ export default function ClientViewPage() {
   }
 
 
-  if (!defaultTab) {
+  if (!firstAvailableTab) {
     return (
       <div className="min-h-screen bg-gray-50" dir="rtl">
         <div className="bg-white border-b shadow-sm">
@@ -219,6 +223,8 @@ export default function ClientViewPage() {
             {showSubClients && <TabsTrigger value="sub-clients">לקוחות משנה</TabsTrigger>}
             {permissions.show_credentials && <TabsTrigger value="credentials">סיסמאות</TabsTrigger>}
             {permissions.show_notes && <TabsTrigger value="notes">פתקים</TabsTrigger>}
+            {permissions.show_calendar && <TabsTrigger value="calendar">יומן</TabsTrigger>}
+            {permissions.show_links && <TabsTrigger value="links">קישורים</TabsTrigger>}
           </TabsList>
 
           {permissions.show_overview && (
@@ -293,6 +299,18 @@ export default function ClientViewPage() {
             </TabsContent>
           )}
 
+          {permissions.show_calendar && (
+            <TabsContent value="calendar">
+              <PublicCalendar clientId={client.id} clientName={client.name} schemas={clientSchemas} readOnly={isReadOnly} />
+            </TabsContent>
+          )}
+
+          {permissions.show_links && (
+            <TabsContent value="links">
+              <PublicLinks clientId={client.id} readOnly={isReadOnly} />
+            </TabsContent>
+          )}
+
         </Tabs>
       </div>
 
@@ -308,6 +326,9 @@ import { CredentialsVault } from '@/components/credentials-vault'
 import { StickyNotes } from '@/components/sticky-notes'
 import { Reminders } from '@/components/reminders'
 import { SubClientsTab } from '@/components/sub-clients-tab'
+import { ClientCalendar } from '@/components/client-calendar'
+import { ClientLinks } from '@/components/client-links'
+import { GoogleDriveViewer } from '@/components/google-drive-viewer'
 
 // Wrapper components to adapt props or logic
 function PublicBranchTables({ clientId, schemas, branchName, readOnly, activeModule, highlightId }: any) {
@@ -328,6 +349,21 @@ function PublicNotes({ clientId, readOnly }: any) {
       <StickyNotes clientId={clientId} readOnly={readOnly} />
       <div className="border-t pt-6">
         <Reminders clientId={clientId} clientName="" readOnly={readOnly} />
+      </div>
+    </div>
+  )
+}
+
+function PublicCalendar({ clientId, clientName, schemas, readOnly }: any) {
+  return <ClientCalendar clientId={clientId} clientName={clientName} schemas={schemas} readOnly={readOnly} />
+}
+
+function PublicLinks({ clientId, readOnly }: any) {
+  return (
+    <div className="space-y-6">
+      <ClientLinks clientId={clientId} readOnly={readOnly} />
+      <div className="border-t pt-6">
+        <GoogleDriveViewer />
       </div>
     </div>
   )

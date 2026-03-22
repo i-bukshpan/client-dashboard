@@ -6,6 +6,7 @@ import type { AgentRequest, GeminiContent } from '@/lib/ai/types'
 
 const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-pro-latest']
 const MAX_TOOL_ROUNDS = 5
+const MAX_CONTINUE_ROUNDS = 3 // max continuation attempts when response is cut off
 
 // Simple in-memory rate limiter (per session, resets on server restart)
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
                     system_instruction: { parts: [{ text: sp }] },
                     contents,
                     tools: agentTools,
-                    generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+                    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
                   }),
                 }
               )
@@ -172,7 +173,17 @@ export async function POST(request: NextRequest) {
           }
 
           // No function calls — this is the final text response
-          finalText = textParts.map((p: any) => p.text).join('')
+          const roundText = textParts.map((p: any) => p.text).join('')
+          finalText += roundText
+
+          // Check if model was cut off due to token limit — if so, ask it to continue
+          const finishReason = candidate?.finishReason
+          if (finishReason === 'MAX_TOKENS' && round < MAX_TOOL_ROUNDS - 1) {
+            // Add partial model response to history and ask to continue
+            currentHistory.push({ role: 'model', parts: textParts })
+            currentHistory.push({ role: 'user', parts: [{ text: 'המשך את התשובה מהמקום שעצרת, ללא חזרה על מה שכבר כתבת.' }] })
+            continue
+          }
           break
         }
 

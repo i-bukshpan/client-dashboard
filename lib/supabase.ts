@@ -28,6 +28,9 @@ export interface ClientSharePermissions {
   show_billing: boolean
   show_credentials: boolean
   show_notes: boolean
+  show_sub_clients: boolean
+  show_calendar: boolean
+  show_links: boolean
   allowed_modules: string[] // List of module_names to show
 }
 

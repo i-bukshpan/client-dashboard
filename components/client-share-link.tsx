@@ -35,6 +35,9 @@ const defaultPermissions: ClientSharePermissions = {
   show_billing: true,
   show_credentials: false,
   show_notes: false,
+  show_sub_clients: true,
+  show_calendar: false,
+  show_links: false,
   allowed_modules: []
 }
 
@@ -280,6 +283,30 @@ export function ClientShareLink({ clientId, clientName }: ClientShareLinkProps) 
                       id="show_notes"
                       checked={permissions.show_notes}
                       onCheckedChange={(checked) => setPermissions(prev => ({ ...prev, show_notes: checked }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-md">
+                    <Label htmlFor="show_sub_clients" className="cursor-pointer">לקוחות משנה</Label>
+                    <Switch
+                      id="show_sub_clients"
+                      checked={permissions.show_sub_clients}
+                      onCheckedChange={(checked) => setPermissions(prev => ({ ...prev, show_sub_clients: checked }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-md">
+                    <Label htmlFor="show_calendar" className="cursor-pointer">יומן</Label>
+                    <Switch
+                      id="show_calendar"
+                      checked={permissions.show_calendar}
+                      onCheckedChange={(checked) => setPermissions(prev => ({ ...prev, show_calendar: checked }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-md">
+                    <Label htmlFor="show_links" className="cursor-pointer">קישורים וגוגל דרייב</Label>
+                    <Switch
+                      id="show_links"
+                      checked={permissions.show_links}
+                      onCheckedChange={(checked) => setPermissions(prev => ({ ...prev, show_links: checked }))}
                     />
                   </div>
                 </div>

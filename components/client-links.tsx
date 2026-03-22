@@ -76,6 +76,7 @@ function detectLinkType(url: string): ClientLink['link_type'] {
 
 interface ClientLinksProps {
     clientId: string
+    readOnly?: boolean
 }
 
 const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
@@ -88,7 +89,7 @@ const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; c
     other: { label: 'אחר', icon: LinkIcon, color: 'text-grey', bg: 'bg-grey/5 border-grey/20' },
 }
 
-export function ClientLinks({ clientId }: ClientLinksProps) {
+export function ClientLinks({ clientId, readOnly = false }: ClientLinksProps) {
     const { showToast } = useToast()
     const [links, setLinks] = useState<ClientLink[]>([])
     const [loading, setLoading] = useState(true)
@@ -242,10 +243,12 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                         <p className="text-xs font-medium text-grey">ניהול קישורים חיצוניים, תיקיות גוגל דרייב ומסמכים</p>
                     </div>
                 </div>
-                <Button size="sm" className="gap-2 rounded-xl bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/20 py-5 px-5 font-bold" onClick={openAddDialog}>
-                    <Plus className="h-4 w-4" />
-                    הוסף קישור
-                </Button>
+                {!readOnly && (
+                  <Button size="sm" className="gap-2 rounded-xl bg-purple-500 hover:bg-purple-600 shadow-lg shadow-purple-500/20 py-5 px-5 font-bold" onClick={openAddDialog}>
+                      <Plus className="h-4 w-4" />
+                      הוסף קישור
+                  </Button>
+                )}
             </div>
 
             {links.length === 0 ? (
@@ -254,10 +257,12 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                         <LinkIcon className="h-8 w-8 text-grey/30" />
                     </div>
                     <p className="text-grey font-bold mb-4">אין קישורים עדיין. הוסף קישורים לגוגל שיטס, תיקיות, ועוד.</p>
-                    <Button variant="outline" size="sm" className="gap-2 rounded-xl border-grey/20 font-bold" onClick={openAddDialog}>
-                        <Plus className="h-4 w-4" />
-                        הוסף קישור ראשון
-                    </Button>
+                    {!readOnly && (
+                      <Button variant="outline" size="sm" className="gap-2 rounded-xl border-grey/20 font-bold" onClick={openAddDialog}>
+                          <Plus className="h-4 w-4" />
+                          הוסף קישור ראשון
+                      </Button>
+                    )}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -309,24 +314,28 @@ export function ClientLinks({ clientId }: ClientLinksProps) {
                                         >
                                             <Eye className="h-4 w-4" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => openEditDialog(link)}
-                                            className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-grey hover:text-primary transition-colors"
-                                            title="ערוך"
-                                        >
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleDelete(link.id, link.title)}
-                                            className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-rose-500 hover:text-white hover:bg-rose-500 transition-all"
-                                            title="מחק"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        {!readOnly && (
+                                          <>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => openEditDialog(link)}
+                                                className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-grey hover:text-primary transition-colors"
+                                                title="ערוך"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDelete(link.id, link.title)}
+                                                className="h-8 w-8 rounded-full bg-white/80 shadow-sm border border-border/50 text-rose-500 hover:text-white hover:bg-rose-500 transition-all"
+                                                title="מחק"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                          </>
+                                        )}
                                     </div>
                                 </div>
 
