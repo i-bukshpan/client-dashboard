@@ -21,35 +21,49 @@ const AgentCtx = createContext<AgentContextValue>({
   setSessionId: () => {},
 })
 
-export function AgentProvider({ children }: { children: React.ReactNode }) {
+interface AgentProviderProps {
+  children: React.ReactNode
+  fixedClientId?: string      // Portal mode: override clientId extraction
+  fixedClientName?: string    // Portal mode: override clientName lookup
+  isPortalMode?: boolean      // Portal mode: restricts AI to single client
+}
+
+export function AgentProvider({ children, fixedClientId, fixedClientName, isPortalMode = false }: AgentProviderProps) {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
-  const [clientName, setClientName] = useState<string | undefined>(undefined)
+  const [clientName, setClientName] = useState<string | undefined>(fixedClientName)
 
-  // Extract clientId from /clients/[uuid] routes
-  const clientId = useMemo(() => {
+  // Extract clientId from /clients/[uuid] routes (skipped in portal mode)
+  const routeClientId = useMemo(() => {
+    if (fixedClientId) return undefined
     const match = pathname?.match(/\/clients\/([0-9a-f-]{36})/i)
     return match?.[1]
-  }, [pathname])
+  }, [pathname, fixedClientId])
 
-  // Fetch client name when on a client page
+  const clientId = fixedClientId || routeClientId
+
+  // Fetch client name when on a client page (skipped in portal mode)
   useEffect(() => {
-    if (!clientId) {
+    if (fixedClientName) {
+      setClientName(fixedClientName)
+      return
+    }
+    if (!routeClientId) {
       setClientName(undefined)
       return
     }
     supabase
       .from('clients')
       .select('name')
-      .eq('id', clientId)
+      .eq('id', routeClientId)
       .single()
       .then(({ data }) => setClientName(data?.name ?? undefined))
-  }, [clientId])
+  }, [routeClientId, fixedClientName])
 
   const context: AgentContext = useMemo(
-    () => ({ clientId, clientName, pageUrl: pathname || '/', sessionId }),
-    [clientId, clientName, pathname, sessionId]
+    () => ({ clientId, clientName, pageUrl: pathname || '/', sessionId, isPortalMode }),
+    [clientId, clientName, pathname, sessionId, isPortalMode]
   )
 
   return (

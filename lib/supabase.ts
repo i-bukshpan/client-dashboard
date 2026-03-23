@@ -23,7 +23,9 @@ export interface Client {
 }
 
 export interface ClientSharePermissions {
-  allow_edit: boolean
+  share_enabled?: boolean  // Master toggle - undefined/true = enabled, false = disabled
+  access_level?: 'view' | 'edit' | 'portal'  // view=read-only, edit=CRUD, portal=full management+AI
+  allow_edit: boolean  // Kept for backward compatibility (derived from access_level)
   show_overview: boolean
   show_billing: boolean
   show_credentials: boolean

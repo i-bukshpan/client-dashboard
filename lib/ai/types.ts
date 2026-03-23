@@ -5,6 +5,7 @@ export interface AgentContext {
   clientName?: string
   pageUrl: string
   sessionId?: string
+  isPortalMode?: boolean  // Client portal - restricts AI to single client scope
 }
 
 export interface ChatMessage {

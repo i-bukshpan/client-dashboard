@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, TrendingUp, TrendingDown, Plus, Loader2 } from 'lucide-react'
+import { Users, TrendingUp, TrendingDown, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Trash2, Phone, Mail, ExternalLink, ArrowLeft } from 'lucide-react'
+import { Trash2, Phone, Mail, ArrowLeft, Link2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase, type Client, type Payment } from '@/lib/supabase'
 import { useToast } from '@/components/ui/toast'
@@ -25,19 +25,22 @@ interface SubClientsTabProps {
     parentClientName: string
     readOnly?: boolean
     isPublicView?: boolean
+    isPortalMode?: boolean  // Client portal: enables sub-client share management
 }
 
 interface SubClientWithData extends Client {
     currentBalance: number
     monthlyIncome: number
     monthlyExpense: number
+    linkCopied?: boolean
 }
 
 import { getFinancialData } from '@/lib/actions/financial'
 import { getClientShareToken } from '@/lib/actions/client-share'
 import { useRouter } from 'next/navigation'
+import { ClientShareLink } from '@/components/client-share-link'
 
-export function SubClientsTab({ parentClientId, parentClientName, readOnly = false, isPublicView = false }: SubClientsTabProps) {
+export function SubClientsTab({ parentClientId, parentClientName, readOnly = false, isPublicView = false, isPortalMode = false }: SubClientsTabProps) {
     const { showToast } = useToast()
     const router = useRouter()
     const [subClients, setSubClients] = useState<SubClientWithData[]>([])
@@ -142,6 +145,18 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
         } finally {
             setAddLoading(false)
         }
+    }
+
+    const handleCopyShareLink = async (subClient: SubClientWithData) => {
+        try {
+            const res = await getClientShareToken(subClient.id)
+            if (res.success && res.token) {
+                const base = typeof window !== 'undefined' ? window.location.origin : ''
+                await navigator.clipboard.writeText(`${base}/view/${res.token}`)
+                setSubClients(prev => prev.map(sc => sc.id === subClient.id ? { ...sc, linkCopied: true } : sc))
+                setTimeout(() => setSubClients(prev => prev.map(sc => sc.id === subClient.id ? { ...sc, linkCopied: false } : sc)), 2000)
+            }
+        } catch {}
     }
 
     const handleDelete = async (clientId: string, clientName: string) => {
@@ -260,14 +275,15 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                             key={client.id}
                             client={client}
                             onDelete={readOnly ? undefined : () => handleDelete(client.id, client.name)}
+                            onCopyLink={(!isPublicView && !isPortalMode) ? () => handleCopyShareLink(client) : undefined}
+                            portalShareSlot={isPortalMode ? <ClientShareLink clientId={client.id} clientName={client.name} /> : undefined}
                             onCardClick={isPublicView ? async () => {
                                 try {
-                                    showToast('success', `טוען קישור צפייה עבור ${client.name}...`)
                                     const res = await getClientShareToken(client.id)
                                     if (res.success && res.token) {
                                         router.push(`/view/${res.token}`)
                                     } else {
-                                        showToast('error', 'לא ניתן ליצור או לטעון קישור שיתוף ציבורי עבור לקוח זה')
+                                        showToast('error', 'לא ניתן לטעון קישור שיתוף עבור לקוח זה')
                                     }
                                 } catch (e) {
                                     showToast('error', 'שגיאה במעבר לפרופיל לקוח משנה')
@@ -350,9 +366,11 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
     )
 }
 
-function SubClientCard({ client, onDelete, onCardClick }: { 
-    client: SubClientWithData; 
+function SubClientCard({ client, onDelete, onCopyLink, portalShareSlot, onCardClick }: {
+    client: SubClientWithData;
     onDelete?: () => void;
+    onCopyLink?: () => void;
+    portalShareSlot?: React.ReactNode;
     onCardClick: () => void;
 }) {
     return (
@@ -378,19 +396,38 @@ function SubClientCard({ client, onDelete, onCardClick }: {
                             </div>
                         </div>
                     </div>
-                    {onDelete && (
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 rounded-lg text-rose-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onDelete()
-                            }}
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {onCopyLink && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-primary/50 hover:text-primary hover:bg-primary/5 transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onCopyLink()
+                                }}
+                                title="העתק קישור שיתוף"
+                            >
+                                {client.linkCopied
+                                    ? <Check className="h-4 w-4 text-emerald-600" />
+                                    : <Link2 className="h-4 w-4" />
+                                }
+                            </Button>
+                        )}
+                        {onDelete && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onDelete()
+                                }}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -413,9 +450,16 @@ function SubClientCard({ client, onDelete, onCardClick }: {
                         {client.phone && <Phone className="h-3 w-3" />}
                         {client.email && <Mail className="h-3 w-3" />}
                     </div>
-                    <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
-                        צפה בפרטים
-                        <ArrowLeft className="h-3 w-3" />
+                    <div className="flex items-center gap-2">
+                        {portalShareSlot && (
+                            <div onClick={e => e.stopPropagation()}>
+                                {portalShareSlot}
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                            צפה בפרטים
+                            <ArrowLeft className="h-3 w-3" />
+                        </div>
                     </div>
                 </div>
             </div>

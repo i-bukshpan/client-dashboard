@@ -320,6 +320,30 @@ export async function executeTool(
   args: Record<string, any>,
   context: AgentContext
 ): Promise<any> {
+  // Portal mode security: enforce single-client scope
+  if (context.isPortalMode && context.clientId) {
+    const portalClientId = context.clientId
+
+    // Block tools that expose cross-client data
+    if (toolName === 'search_clients') {
+      return { error: 'חיפוש לקוחות אינו זמין בפורטל האישי' }
+    }
+    if (toolName === 'get_today_summary') {
+      // Redirect to client-specific summary
+      args.client_id = portalClientId
+    }
+
+    // Prevent accessing other clients' data
+    if (args.client_id && args.client_id !== portalClientId) {
+      return { error: 'אין הרשאה לגשת לנתוני לקוחות אחרים' }
+    }
+
+    // Auto-fill client_id for all tools
+    if (!args.client_id) {
+      args.client_id = portalClientId
+    }
+  }
+
   const clientId = args.client_id || context.clientId
 
   switch (toolName) {

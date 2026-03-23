@@ -75,24 +75,29 @@ export async function getClientByShareToken(
       return { success: false, error: error?.message || 'Invalid share token' }
     }
 
-    if (client.parent_id) {
-      const { data: parent } = await supabase
-        .from('clients')
-        .select('share_permissions')
-        .eq('id', client.parent_id)
-        .single()
+    // Check if sharing is explicitly disabled
+    if (client.share_permissions?.share_enabled === false) {
+      return { success: false, error: 'השיתוף עבור לקוח זה הושבת' }
+    }
 
-      if (parent?.share_permissions) {
-        client.share_permissions = {
-          ...parent.share_permissions,
-          show_sub_clients: false
-        }
-      } else {
-        client.share_permissions = {
-          ...(client.share_permissions || {}),
-          show_sub_clients: false
-        }
+    if (client.parent_id) {
+      // Sub-clients use their own share_permissions (set by parent via share dialog)
+      // Merge with defaults, then force show_sub_clients=false
+      const merged = {
+        share_enabled: true,
+        allow_edit: false,
+        show_overview: true,
+        show_billing: false,
+        show_credentials: false,
+        show_notes: false,
+        show_sub_clients: false,
+        show_calendar: false,
+        show_links: false,
+        allowed_modules: [],
+        ...(client.share_permissions || {}),
       }
+      merged.show_sub_clients = false // Sub-clients cannot show nested sub-clients
+      client.share_permissions = merged
     }
 
     return { success: true, client }
