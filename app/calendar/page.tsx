@@ -48,8 +48,8 @@ export default function CalendarPage() {
         endDate.setHours(23, 59, 59, 999)
       }
 
-      const startStr = startDate.toISOString().split('T')[0]
-      const endStr = endDate.toISOString().split('T')[0]
+      const startStr = format(startDate, 'yyyy-MM-dd')
+      const endStr = format(endDate, 'yyyy-MM-dd')
 
       const [remindersResult, meetingsResult] = await Promise.all([
         supabase.from('reminders').select('*, clients(id, name, parent_id)').gte('due_date', startStr).lte('due_date', endStr),
@@ -157,7 +157,7 @@ export default function CalendarPage() {
 
   const getEventsForDate = (date: Date | null) => {
     if (!date) return []
-    return eventsByDate[date.toISOString().split('T')[0]] || []
+    return eventsByDate[format(date, 'yyyy-MM-dd')] || []
   }
 
   // Week view - 7 days
@@ -331,7 +331,7 @@ export default function CalendarPage() {
               <div key={hour} className="grid grid-cols-8 gap-2 border-t border-border/20">
                 <div className="text-[10px] font-bold text-grey py-3 text-center">{`${hour.toString().padStart(2, '0')}:00`}</div>
                 {weekDays.map(day => {
-                  const dateStr = day.toISOString().split('T')[0]
+                  const dateStr = format(day, 'yyyy-MM-dd')
                   const dayEvents = eventsByDate[dateStr] || []
                   const hourEvents = dayEvents.filter(e => {
                     const eventHour = new Date(e.due_date).getHours()
@@ -368,7 +368,7 @@ export default function CalendarPage() {
         <div className="glass-card rounded-2xl p-4 sm:p-8 animate-fade-in-up delay-100">
           <div className="space-y-1">
             {hours.map(hour => {
-              const dateStr = currentDate.toISOString().split('T')[0]
+              const dateStr = format(currentDate, 'yyyy-MM-dd')
               const dayEvents = eventsByDate[dateStr] || []
               const hourEvents = dayEvents.filter(e => {
                 const eventHour = new Date(e.due_date).getHours()
@@ -419,7 +419,7 @@ export default function CalendarPage() {
 
             {/* Unscheduled events (no specific hour) */}
             {(() => {
-              const dateStr = currentDate.toISOString().split('T')[0]
+              const dateStr = format(currentDate, 'yyyy-MM-dd')
               const dayEvents = eventsByDate[dateStr] || []
               const unscheduled = dayEvents.filter(e => {
                 const h = new Date(e.due_date).getHours()
