@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { 
-  Plus, CheckCircle2, Circle, Clock, Calendar, AlertCircle, 
-  Filter, Search, User, Trash2, ChevronDown, Users, 
-  Phone, FileText, CheckSquare, X, RefreshCcw
+import {
+  Plus, CheckCircle2, Circle, Clock, Calendar, AlertCircle,
+  Filter, Search, User, Trash2, ChevronDown, Users,
+  Phone, FileText, CheckSquare, X, RefreshCcw, Mail
 } from 'lucide-react'
+import { SendEmailDialog } from '@/components/send-email-dialog'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -434,12 +435,24 @@ export default function TasksPage() {
                                             </div>
 
                                             {/* Actions */}
-                                            <button 
-                                                onClick={() => handleDelete(task.id)}
-                                                className="shrink-0 p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
+                                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                                                {(task.clients as any)?.email && (
+                                                    <SendEmailDialog
+                                                        toEmail={(task.clients as any).email}
+                                                        toName={(task.clients as any).name}
+                                                        defaultSubject={`תזכורת: ${task.title}`}
+                                                        defaultBody={`שלום ${(task.clients as any).name},\n\nתזכורת למשימה:\n\n📌 ${task.title}\n📅 תאריך יעד: ${new Date(task.due_date).toLocaleDateString('he-IL')}${task.description ? `\n\n${task.description}` : ''}\n\nבברכה`}
+                                                        triggerSize="icon"
+                                                        triggerVariant="ghost"
+                                                    />
+                                                )}
+                                                <button
+                                                    onClick={() => handleDelete(task.id)}
+                                                    className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
                                         </div>
                                     )
                                 })}

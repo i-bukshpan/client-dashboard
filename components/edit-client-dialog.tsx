@@ -14,7 +14,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Edit } from 'lucide-react'
-import { supabase, type Client } from '@/lib/supabase'
+import { type Client } from '@/lib/supabase'
+import { updateClient } from '@/lib/actions/clients'
 
 interface EditClientDialogProps {
   client: Client
@@ -48,19 +49,15 @@ export function EditClientDialog({ client, onUpdate }: EditClientDialogProps) {
       setLoading(true)
       setError(null)
 
-      const { error: updateError } = await supabase
-        .from('clients')
-        .update({
-          name,
-          email: email || null,
-          phone: phone || null,
-          status: status || 'פעיל',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', client.id)
+      const result = await updateClient(client.id, {
+        name,
+        email: email || undefined,
+        phone: phone || undefined,
+        status: status || 'פעיל',
+      })
 
-      if (updateError) {
-        throw updateError
+      if (!result.success) {
+        throw new Error(result.error || 'שגיאה בעדכון הלקוח')
       }
 
       setOpen(false)

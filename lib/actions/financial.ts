@@ -61,11 +61,17 @@ export async function getFinancialData(
         const filterableColumnsMap: Record<string, Set<string>> = {}
         const filterableColumnsLabels: Record<string, string> = {}
 
-        for (const schema of financialSchemas) {
-            // Apply source_table filter
-            if (filters?.source_table && schema.module_name !== filters.source_table) continue
+        const schemasToLoad = financialSchemas.filter(
+            (s: ClientSchema) => !filters?.source_table || s.module_name === filters.source_table
+        )
 
-            const recordsResult = await getRecords(clientId, schema.module_name)
+        const allRecordResults = await Promise.all(
+            schemasToLoad.map((s: ClientSchema) => getRecords(clientId, s.module_name))
+        )
+
+        for (let i = 0; i < schemasToLoad.length; i++) {
+            const schema = schemasToLoad[i]
+            const recordsResult = allRecordResults[i]
             if (!recordsResult.success || !recordsResult.records) continue
 
             for (const record of recordsResult.records) {

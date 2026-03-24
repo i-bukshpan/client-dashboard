@@ -4,8 +4,14 @@ export interface AgentContext {
   clientId?: string
   clientName?: string
   pageUrl: string
-  sessionId?: string
   isPortalMode?: boolean  // Client portal - restricts AI to single client scope
+}
+
+export interface AttachedFile {
+  name: string
+  mimeType: string
+  data: string // base64
+  size: number
 }
 
 export interface ChatMessage {
@@ -13,6 +19,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   toolCalls?: ToolCallRecord[]
+  attachedFile?: AttachedFile
   createdAt: Date
 }
 
@@ -24,9 +31,8 @@ export interface ToolCallRecord {
 }
 
 export interface AgentRequest {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant'; content: string; file?: AttachedFile }>
   context: AgentContext
-  sessionId?: string
 }
 
 // Gemini API types
@@ -37,6 +43,7 @@ export interface GeminiContent {
 
 export interface GeminiPart {
   text?: string
+  inlineData?: { mimeType: string; data: string }
   functionCall?: { name: string; args: Record<string, any> }
   functionResponse?: { name: string; response: Record<string, any> }
 }

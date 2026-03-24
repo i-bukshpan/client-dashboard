@@ -16,7 +16,9 @@ import { ClientMeetings } from '@/components/client-meetings'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import type { ClientSharePermissions, ClientSchema } from '@/lib/supabase'
-import { Bot, Sparkles, Phone, Mail, CalendarDays, Table2, RefreshCw } from 'lucide-react'
+import { Bot, Sparkles, Phone, Mail, CalendarDays, Table2, RefreshCw, MessageSquare, ArrowRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { InternalChat } from '@/components/internal-chat'
 
 const BranchTablesTab = dynamic(
   () => import('@/components/branch-tables-tab').then(m => ({ default: m.BranchTablesTab })),
@@ -43,11 +45,13 @@ interface ClientPortalViewProps {
   client: any
   permissions: ClientSharePermissions
   clientSchemas: ClientSchema[]  // Initial schemas; portal reloads internally on change
+  fromToken?: string  // Parent portal token — shows back button when present
 }
 
 const TAB = "rounded-xl font-black text-sm px-4 py-2 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-sm whitespace-nowrap"
 
-export function ClientPortalView({ client, permissions, clientSchemas: initialSchemas }: ClientPortalViewProps) {
+export function ClientPortalView({ client, permissions, clientSchemas: initialSchemas, fromToken }: ClientPortalViewProps) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState(
     permissions.show_overview !== false ? 'overview' : 'meetings'
   )
@@ -98,12 +102,21 @@ export function ClientPortalView({ client, permissions, clientSchemas: initialSc
         <div className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-white/50 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-4">
+              {fromToken && (
+                <button
+                  onClick={() => router.push(`/view/${fromToken}`)}
+                  className="h-9 w-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-all shrink-0"
+                  title="חזור לתיק הראשי"
+                >
+                  <ArrowRight className="h-4 w-4 text-navy" />
+                </button>
+              )}
               <div className="h-11 w-11 rounded-2xl bg-violet-100 flex items-center justify-center font-black text-lg text-violet-600 shrink-0">
                 {client.name?.charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
                 <h1 className="text-xl font-black text-navy truncate">{client.name}</h1>
-                <p className="text-xs font-medium text-grey">פורטל ניהול אישי</p>
+                <p className="text-xs font-medium text-grey">{fromToken ? 'תיק לקוח משנה' : 'פורטל ניהול אישי'}</p>
               </div>
               <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-violet-50 text-violet-700 border border-violet-100 shrink-0">
                 <Sparkles className="h-3 w-3" />
@@ -158,6 +171,12 @@ export function ClientPortalView({ client, permissions, clientSchemas: initialSc
                 {permissions.show_links && (
                   <TabsTrigger value="links" className={TAB}>קישורים</TabsTrigger>
                 )}
+                <TabsTrigger value="chat" className={TAB}>
+                  <span className="flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    הודעות
+                  </span>
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -181,6 +200,7 @@ export function ClientPortalView({ client, permissions, clientSchemas: initialSc
                   clientName={client.name}
                   schemas={schemas}
                   readOnly={false}
+                  includeSubClients={permissions.show_sub_clients === true}
                 />
               </TabsContent>
             )}
@@ -255,6 +275,14 @@ export function ClientPortalView({ client, permissions, clientSchemas: initialSc
                 </div>
               </TabsContent>
             )}
+
+            {/* ── Chat / Messages ── */}
+            <TabsContent value="chat" className="animate-fade-in-up">
+              <PortalMessages
+                client={client}
+                showSubClients={permissions.show_sub_clients === true}
+              />
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -376,6 +404,141 @@ function PortalOverview({ client }: { client: any }) {
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Portal Messages ────────────────────────────────────────────────────────
+
+function PortalMessages({ client, showSubClients }: { client: any; showSubClients: boolean }) {
+  const [subClients, setSubClients] = useState<{ id: string; name: string }[]>([])
+  const [parentName, setParentName] = useState<string | null>(null)
+  const [activeChat, setActiveChat] = useState<'advisor' | string>('advisor')
+
+  // Load sub-clients if parent
+  useEffect(() => {
+    if (!showSubClients) return
+    supabase
+      .from('clients')
+      .select('id, name')
+      .eq('parent_id', client.id)
+      .then(({ data }) => { if (data) setSubClients(data) })
+  }, [client.id, showSubClients])
+
+  // If this client is a sub-client, load parent name to show in group chat
+  useEffect(() => {
+    if (!client.parent_id) return
+    supabase
+      .from('clients')
+      .select('name')
+      .eq('id', client.parent_id)
+      .single()
+      .then(({ data }) => { if (data) setParentName(data.name) })
+  }, [client.parent_id])
+
+  // Build chat list
+  // For advisor chat: always present
+  // For sub-clients: use sub-client's advisor conversation (group: parent + sub-client + advisor)
+  const chats = useMemo(() => {
+    type ChatEntry = {
+      id: string
+      label: string
+      // Which client's conversation to open (for sub-client chats, this is the sub-client's id)
+      conversationClientId: string
+      otherType: 'advisor' | 'client'
+      otherId: string
+      otherName: string
+      senderNames?: Record<string, string>
+    }
+
+    const list: ChatEntry[] = []
+
+    // Advisor chat — if this client is a sub-client, also include parent name in senderNames
+    const advisorSenderNames: Record<string, string> = {
+      'advisor': 'היועץ',
+      [client.id]: 'אני',
+    }
+    if (client.parent_id && parentName) {
+      advisorSenderNames[client.parent_id] = parentName + ' (לקוח ראשי)'
+    }
+    list.push({
+      id: 'advisor',
+      label: 'היועץ שלי',
+      conversationClientId: client.id,
+      otherType: 'advisor',
+      otherId: 'advisor',
+      otherName: 'היועץ שלי',
+      senderNames: (client.parent_id && parentName) ? advisorSenderNames : undefined,
+    })
+
+    // Sub-client group chats (parent joins sub-client's advisor conversation)
+    subClients.forEach(sc => {
+      list.push({
+        id: sc.id,
+        label: sc.name,
+        conversationClientId: sc.id,   // use sub-client's conversation
+        otherType: 'advisor',           // join the advisor conversation
+        otherId: 'advisor',
+        otherName: sc.name,
+        senderNames: {
+          'advisor': 'היועץ',
+          [sc.id]: sc.name + ' (לקוח משנה)',
+          [client.id]: 'אני (' + client.name + ')',
+        },
+      })
+    })
+
+    return list
+  }, [subClients, client, parentName])
+
+  const active = chats.find(c => c.id === activeChat) || chats[0]
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-4">
+      {/* Chat selector tabs (only when there are multiple chats) */}
+      {chats.length > 1 && (
+        <div className="bg-white/80 backdrop-blur-md border border-white/50 rounded-2xl p-1.5 shadow-sm overflow-x-auto">
+          <div className="flex gap-1 w-max min-w-full">
+            {chats.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setActiveChat(c.id)}
+                className={cn(
+                  'rounded-xl font-black text-sm px-4 py-2 transition-all whitespace-nowrap',
+                  activeChat === c.id
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-grey hover:text-navy'
+                )}
+              >
+                {c.id !== 'advisor' ? `📂 ${c.label}` : c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active chat */}
+      {active && (
+        <div className="bg-white/70 backdrop-blur-md border border-border/40 rounded-[2.5rem] p-6 shadow-sm">
+          <h3 className="text-lg font-black text-navy mb-4 flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            {active.id !== 'advisor'
+              ? `שיחה קבוצתית עם ${active.label}`
+              : `צ'אט עם היועץ`}
+          </h3>
+          <InternalChat
+            clientId={active.conversationClientId}
+            clientName={active.otherName}
+            viewerType="client"
+            viewerId={client.id}
+            viewerName={client.name}
+            otherType={active.otherType}
+            otherId={active.otherId}
+            otherName={active.otherName}
+            senderNames={active.senderNames}
+          />
+        </div>
+      )}
     </div>
   )
 }

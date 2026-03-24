@@ -286,6 +286,34 @@ export const agentTools: GeminiTool[] = [
       },
 
       {
+        name: 'update_reminder',
+        description: 'מעדכן משימה/תזכורת קיימת: ניתן לשנות סטטוס השלמה, תאריך יעד, עדיפות, ולהוסיף הערת מעקב. השתמש כשלקוח אומר "ביצעתי", "יבוצע מחר", "נדחה לשבוע הבא" וכו\'.',
+        parameters: {
+          type: 'object',
+          properties: {
+            reminder_id: { type: 'string', description: 'מזהה המשימה (UUID)' },
+            is_completed: { type: 'boolean', description: 'האם המשימה הושלמה' },
+            due_date: { type: 'string', description: 'תאריך יעד חדש בפורמט YYYY-MM-DD או YYYY-MM-DDTHH:MM:SS' },
+            priority: { type: 'string', enum: ['דחוף', 'רגיל', 'נמוך'], description: 'עדיפות חדשה' },
+            follow_up_note: { type: 'string', description: 'הערת מעקב להוסיף לתיאור המשימה (למשל: "לקוח אישר ביצוע ב-15/4")' },
+          },
+          required: ['reminder_id'],
+        },
+      },
+
+      {
+        name: 'get_reminder_details',
+        description: 'מחזיר פרטים מלאים על משימה/תזכורת לפי מזהה. השתמש כדי לבדוק סטטוס לפני עדכון.',
+        parameters: {
+          type: 'object',
+          properties: {
+            reminder_id: { type: 'string', description: 'מזהה המשימה (UUID)' },
+          },
+          required: ['reminder_id'],
+        },
+      },
+
+      {
         name: 'create_payment',
         description: 'מוסיף תשלום חדש (הכנסה או הוצאה) ללקוח.',
         parameters: {
@@ -779,6 +807,61 @@ ${args.meeting_notes}
         inserted: inserted?.length || 0,
         message: `נוספו ${inserted?.length || 0} שורות לטבלה "${moduleName}" בהצלחה`,
       }
+    }
+
+    // ── update_reminder ───────────────────────────────────────────────
+    case 'update_reminder': {
+      const { reminder_id, is_completed, due_date, priority, follow_up_note } = args
+      if (!reminder_id) return { success: false, error: 'נדרש מזהה משימה' }
+
+      // Fetch existing reminder first
+      const { data: existing } = await supabase
+        .from('reminders')
+        .select('description, title, is_completed, due_date')
+        .eq('id', reminder_id)
+        .single()
+
+      if (!existing) return { success: false, error: 'משימה לא נמצאה' }
+
+      const updates: Record<string, any> = {}
+      if (is_completed !== undefined) updates.is_completed = is_completed
+      if (due_date) updates.due_date = due_date
+      if (priority) updates.priority = priority
+
+      // Append follow-up note to description
+      if (follow_up_note) {
+        const now = new Date().toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        const noteEntry = `\n[${now}] ${follow_up_note}`
+        updates.description = (existing.description || '') + noteEntry
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return { success: false, error: 'לא סופקו שדות לעדכון' }
+      }
+
+      const { error } = await supabase.from('reminders').update(updates).eq('id', reminder_id)
+      if (error) return { success: false, error: error.message }
+
+      return {
+        success: true,
+        message: `משימה "${existing.title}" עודכנה בהצלחה`,
+        updated_fields: Object.keys(updates),
+      }
+    }
+
+    // ── get_reminder_details ──────────────────────────────────────────
+    case 'get_reminder_details': {
+      const { reminder_id } = args
+      if (!reminder_id) return { success: false, error: 'נדרש מזהה משימה' }
+
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('*, clients(name)')
+        .eq('id', reminder_id)
+        .single()
+
+      if (error || !data) return { success: false, error: 'משימה לא נמצאה' }
+      return { success: true, reminder: data }
     }
 
     // ── create_payment ────────────────────────────────────────────────

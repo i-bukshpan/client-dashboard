@@ -31,6 +31,13 @@ export async function saveChatMessage(
   })
 
   if (error) return { success: false, error: error.message }
+
+  // Update session's updated_at so history is sorted correctly
+  await supabase
+    .from('ai_chat_sessions')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', sessionId)
+
   return { success: true }
 }
 
@@ -49,10 +56,17 @@ export async function getChatHistory(sessionId: string, limit = 20) {
 export async function listChatSessions(limit = 20) {
   const { data, error } = await supabase
     .from('ai_chat_sessions')
-    .select('*, ai_chat_messages(count)')
+    .select('*')
     .order('updated_at', { ascending: false })
     .limit(limit)
 
   if (error) return { success: false, error: error.message }
   return { success: true, sessions: data || [] }
+}
+
+export async function updateChatSessionTitle(sessionId: string, title: string) {
+  await supabase
+    .from('ai_chat_sessions')
+    .update({ title: title.substring(0, 80) })
+    .eq('id', sessionId)
 }

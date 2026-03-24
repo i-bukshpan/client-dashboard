@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -9,13 +9,16 @@ import { getClientByShareToken, getClientShareToken } from '@/lib/actions/client
 import { supabase, type ClientSchema } from '@/lib/supabase'
 import { BillingPaymentsPublicView } from '@/components/billing-payments-public-view'
 import { ClientPortalView } from '@/components/client-portal-view'
-import { RefreshCw, ArrowRight, Eye, Pencil, Phone, Mail, CalendarDays } from 'lucide-react'
+import { RefreshCw, ArrowRight, Eye, Pencil, Phone, Mail, CalendarDays, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function ClientViewPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const token = params.token as string
+  // ?from=parentToken means user navigated here from parent portal — show back button
+  const fromToken = searchParams.get('from')
   const [client, setClient] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -157,13 +160,13 @@ export default function ClientViewPage() {
 
   // Portal mode: render full management portal
   if (isPortalMode) {
-    return <ClientPortalView client={client} permissions={permissions} clientSchemas={clientSchemas} />
+    return <ClientPortalView client={client} permissions={permissions} clientSchemas={clientSchemas} fromToken={fromToken || undefined} />
   }
 
   if (!firstAvailableTab) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50" dir="rtl">
-        <ViewHeader client={client} isReadOnly={isReadOnly} />
+        <ViewHeader client={client} isReadOnly={isReadOnly} fromToken={fromToken} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <div className="bg-white/60 backdrop-blur-sm rounded-[2.5rem] border border-border/30 p-16">
             <p className="text-grey font-bold">אין מידע זמין לצפייה.</p>
@@ -175,7 +178,7 @@ export default function ClientViewPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50" dir="rtl">
-      <ViewHeader client={client} isReadOnly={isReadOnly} />
+      <ViewHeader client={client} isReadOnly={isReadOnly} fromToken={fromToken} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -276,7 +279,7 @@ export default function ClientViewPage() {
 
           {permissions.show_calendar && (
             <TabsContent value="calendar" className="animate-fade-in-up">
-              <PublicCalendar clientId={client.id} clientName={client.name} schemas={clientSchemas} readOnly={isReadOnly} />
+              <PublicCalendar clientId={client.id} clientName={client.name} schemas={clientSchemas} readOnly={isReadOnly} includeSubClients={showSubClients} />
             </TabsContent>
           )}
 
@@ -292,18 +295,29 @@ export default function ClientViewPage() {
 }
 
 // Header component
-function ViewHeader({ client, isReadOnly }: any) {
+function ViewHeader({ client, isReadOnly, fromToken }: any) {
+  const router = useRouter()
   const avatarLetter = client?.name?.charAt(0) || '?'
   return (
     <div className="sticky top-0 z-20 bg-white/85 backdrop-blur-xl border-b border-white/50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center gap-4">
+          {/* Back button — only shown when navigated from parent portal */}
+          {fromToken && (
+            <button
+              onClick={() => router.push(`/view/${fromToken}`)}
+              className="h-9 w-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-all shrink-0"
+              title="חזור לתיק הראשי"
+            >
+              <ArrowLeft className="h-4 w-4 text-navy rotate-180" />
+            </button>
+          )}
           <div className="h-11 w-11 rounded-2xl bg-primary/10 flex items-center justify-center font-black text-lg text-primary shrink-0">
             {avatarLetter}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-black text-navy truncate">{client?.name}</h1>
-            <p className="text-xs font-medium text-grey">תיק לקוח</p>
+            <p className="text-xs font-medium text-grey">{fromToken ? 'תיק לקוח משנה' : 'תיק לקוח'}</p>
           </div>
           <span className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black shrink-0",
@@ -354,8 +368,8 @@ function PublicNotes({ clientId, readOnly }: any) {
   )
 }
 
-function PublicCalendar({ clientId, clientName, schemas, readOnly }: any) {
-  return <ClientCalendar clientId={clientId} clientName={clientName} schemas={schemas} readOnly={readOnly} />
+function PublicCalendar({ clientId, clientName, schemas, readOnly, includeSubClients }: any) {
+  return <ClientCalendar clientId={clientId} clientName={clientName} schemas={schemas} readOnly={readOnly} includeSubClients={includeSubClients} />
 }
 
 function PublicLinks({ clientId, readOnly }: any) {

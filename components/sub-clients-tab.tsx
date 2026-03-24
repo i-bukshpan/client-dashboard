@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, TrendingUp, TrendingDown, Plus } from 'lucide-react'
+import { Users, TrendingUp, TrendingDown, Plus, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Trash2, Phone, Mail, ArrowLeft, Link2, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -37,6 +37,7 @@ interface SubClientWithData extends Client {
 
 import { getFinancialData } from '@/lib/actions/financial'
 import { getClientShareToken } from '@/lib/actions/client-share'
+import { updateClient } from '@/lib/actions/clients'
 import { useRouter } from 'next/navigation'
 import { ClientShareLink } from '@/components/client-share-link'
 
@@ -50,6 +51,13 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
     const [newEmail, setNewEmail] = useState('')
     const [newPhone, setNewPhone] = useState('')
     const [addLoading, setAddLoading] = useState(false)
+    // Edit sub-client state
+    const [editOpen, setEditOpen] = useState(false)
+    const [editClient, setEditClient] = useState<SubClientWithData | null>(null)
+    const [editName, setEditName] = useState('')
+    const [editEmail, setEditEmail] = useState('')
+    const [editPhone, setEditPhone] = useState('')
+    const [editLoading, setEditLoading] = useState(false)
 
     const loadSubClients = useCallback(async () => {
         try {
@@ -157,6 +165,35 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                 setTimeout(() => setSubClients(prev => prev.map(sc => sc.id === subClient.id ? { ...sc, linkCopied: false } : sc)), 2000)
             }
         } catch {}
+    }
+
+    const handleOpenEdit = (sc: SubClientWithData) => {
+        setEditClient(sc)
+        setEditName(sc.name)
+        setEditEmail(sc.email || '')
+        setEditPhone(sc.phone || '')
+        setEditOpen(true)
+    }
+
+    const handleEditSave = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!editClient || !editName.trim()) return
+        setEditLoading(true)
+        try {
+            const result = await updateClient(editClient.id, {
+                name: editName.trim(),
+                email: editEmail || undefined,
+                phone: editPhone || undefined,
+            })
+            if (!result.success) throw new Error(result.error)
+            showToast('success', `פרטי "${editName}" עודכנו בהצלחה`)
+            setEditOpen(false)
+            loadSubClients()
+        } catch (err: any) {
+            showToast('error', err.message || 'שגיאה בעדכון')
+        } finally {
+            setEditLoading(false)
+        }
     }
 
     const handleDelete = async (clientId: string, clientName: string) => {
@@ -275,13 +312,21 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                             key={client.id}
                             client={client}
                             onDelete={readOnly ? undefined : () => handleDelete(client.id, client.name)}
+                            onEdit={isPortalMode ? () => handleOpenEdit(client) : undefined}
                             onCopyLink={(!isPublicView && !isPortalMode) ? () => handleCopyShareLink(client) : undefined}
                             portalShareSlot={isPortalMode ? <ClientShareLink clientId={client.id} clientName={client.name} /> : undefined}
-                            onCardClick={isPublicView ? async () => {
+                            onCardClick={(isPublicView || isPortalMode) ? async () => {
                                 try {
                                     const res = await getClientShareToken(client.id)
                                     if (res.success && res.token) {
-                                        router.push(`/view/${res.token}`)
+                                        // Pass current token as ?from= so sub-client portal can show back button
+                                        const currentToken = typeof window !== 'undefined'
+                                            ? window.location.pathname.split('/view/')[1]?.split('/')[0]
+                                            : null
+                                        const url = currentToken
+                                            ? `/view/${res.token}?from=${currentToken}`
+                                            : `/view/${res.token}`
+                                        router.push(url)
                                     } else {
                                         showToast('error', 'לא ניתן לטעון קישור שיתוף עבור לקוח זה')
                                     }
@@ -293,6 +338,71 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
                     ))}
                 </div>
             )}
+
+            {/* Edit sub-client dialog */}
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent dir="rtl" className="max-w-md rounded-[2.5rem] border-none shadow-2xl p-8 overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-2xl" />
+                    <DialogHeader className="relative z-10 text-right">
+                        <DialogTitle className="text-2xl font-black text-navy">עריכת פרטים</DialogTitle>
+                        <DialogDescription className="font-bold text-grey">
+                            עדכן את פרטי {editClient?.name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleEditSave} className="space-y-6 relative z-10 mt-4">
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-name" className="text-xs font-black uppercase tracking-widest text-grey mr-1">שם</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={editName}
+                                    onChange={e => setEditName(e.target.value)}
+                                    required
+                                    className="rounded-2xl border-border/40 bg-slate-50/50 h-12 px-4 focus:bg-white transition-all font-bold"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-email" className="text-xs font-black uppercase tracking-widest text-grey mr-1">אימייל (אופציונלי)</Label>
+                                <Input
+                                    id="edit-email"
+                                    type="email"
+                                    value={editEmail}
+                                    onChange={e => setEditEmail(e.target.value)}
+                                    className="rounded-2xl border-border/40 bg-slate-50/50 h-12 px-4 focus:bg-white transition-all font-bold"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-phone" className="text-xs font-black uppercase tracking-widest text-grey mr-1">טלפון (אופציונלי)</Label>
+                                <Input
+                                    id="edit-phone"
+                                    type="tel"
+                                    value={editPhone}
+                                    onChange={e => setEditPhone(e.target.value)}
+                                    className="rounded-2xl border-border/40 bg-slate-50/50 h-12 px-4 focus:bg-white transition-all font-bold"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setEditOpen(false)}
+                                disabled={editLoading}
+                                className="flex-1 rounded-2xl font-black text-grey h-12"
+                            >
+                                ביטול
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={editLoading}
+                                className="flex-2 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black h-12 px-8 shadow-lg shadow-primary/20"
+                            >
+                                {editLoading ? 'שומר...' : 'שמור שינויים'}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* Add sub-client dialog */}
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -366,9 +476,10 @@ export function SubClientsTab({ parentClientId, parentClientName, readOnly = fal
     )
 }
 
-function SubClientCard({ client, onDelete, onCopyLink, portalShareSlot, onCardClick }: {
+function SubClientCard({ client, onDelete, onEdit, onCopyLink, portalShareSlot, onCardClick }: {
     client: SubClientWithData;
     onDelete?: () => void;
+    onEdit?: () => void;
     onCopyLink?: () => void;
     portalShareSlot?: React.ReactNode;
     onCardClick: () => void;
@@ -397,6 +508,20 @@ function SubClientCard({ client, onDelete, onCopyLink, portalShareSlot, onCardCl
                         </div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {onEdit && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onEdit()
+                                }}
+                                title="ערוך פרטים"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </Button>
+                        )}
                         {onCopyLink && (
                             <Button
                                 variant="ghost"

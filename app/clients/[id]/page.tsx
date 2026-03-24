@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowRight, Phone, Mail, Calendar, Clock,
-  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive, History, CalendarDays
+  Plus, ExternalLink, Copy, CheckCircle2, Link2, Lock, Folder, LayoutDashboard, Settings, FileText, Database, PiggyBank, Key, BarChart3, HardDrive, History, CalendarDays, MessageSquare
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -29,6 +29,7 @@ import { ClientAnalytics } from '@/components/client-analytics'
 import { GoogleDriveViewer } from '@/components/google-drive-viewer'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { ClientCalendar } from '@/components/client-calendar'
+import { InternalChat } from '@/components/internal-chat'
 
 const BillingPayments = dynamic(() => import('@/components/billing-payments').then(m => ({ default: m.BillingPayments })), {
   loading: () => <LoadingSkeleton />,
@@ -238,6 +239,7 @@ export default function ClientDetailPage() {
                   <TabButton value="analytics" label="אנליטיקה" icon={<BarChart3 className="h-4 w-4" />} active={activeTab} />
                   <TabButton value="calendar" label="יומן" icon={<CalendarDays className="h-4 w-4" />} active={activeTab} />
                   <TabButton value="credentials" label="גישות" icon={<Key className="h-4 w-4" />} active={activeTab} />
+                  <TabButton value="chat" label="צ'אט" icon={<MessageSquare className="h-4 w-4" />} active={activeTab} />
                   <TabButton value="settings" label="הגדרות" icon={<Settings className="h-4 w-4" />} active={activeTab} />
                 </TabsList>
               </div>
@@ -266,7 +268,7 @@ export default function ClientDetailPage() {
               <TabsContent value="reminders" className="mt-0 outline-none">
                 <div className="max-w-5xl mx-auto min-h-[500px]">
                   <SectionCard title="תזכורות / משימות פתוחות" color="amber" icon={<Clock className="h-4 w-4" />}>
-                    <Reminders clientId={clientId} clientName={client.name} />
+                    <Reminders clientId={clientId} clientName={client.name} clientEmail={client.email || undefined} />
                   </SectionCard>
                 </div>
               </TabsContent>
@@ -287,7 +289,7 @@ export default function ClientDetailPage() {
 
           {/* ══ Tab 2: Meetings & Logs ══ */}
           <TabsContent value="meetings" className="mt-0 outline-none animate-fade-in-up">
-             <ClientMeetings client={client} onUpdate={handleClientUpdate} />
+             <ClientMeetings client={client} onUpdate={handleClientUpdate} includeSubClients={childCount > 0} />
           </TabsContent>
 
           {/* ══ Tab 3: Data & Modules ══ */}
@@ -399,6 +401,24 @@ export default function ClientDetailPage() {
                 </div>
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          {/* ══ Tab: Chat ══ */}
+          <TabsContent value="chat" className="mt-0 outline-none animate-fade-in-up">
+            <div className="max-w-2xl mx-auto">
+              <SectionCard title={`צ'אט עם ${client.name}`} color="blue" icon={<MessageSquare className="h-4 w-4" />}>
+                <InternalChat
+                  clientId={clientId}
+                  clientName={client.name}
+                  viewerType="advisor"
+                  viewerId="advisor"
+                  viewerName="יועץ"
+                  otherType="client"
+                  otherId={clientId}
+                  otherName={client.name}
+                />
+              </SectionCard>
+            </div>
           </TabsContent>
 
           {/* ══ Tab 6: Settings ══ */}

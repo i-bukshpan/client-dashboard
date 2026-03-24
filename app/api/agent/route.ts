@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { agentTools, executeTool } from '@/lib/ai/tools'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
-import { saveChatMessage, createChatSession } from '@/lib/actions/ai-chat'
 import type { AgentRequest, GeminiContent } from '@/lib/ai/types'
 
 const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-pro-latest']
@@ -39,19 +38,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
   }
 
-  const { messages, context, sessionId } = body
+  const { messages, context } = body
 
   // Rate limit check
-  const rateKey = sessionId || request.headers.get('x-forwarded-for') || 'default'
+  const rateKey = request.headers.get('x-forwarded-for') || 'default'
   if (!checkRateLimit(rateKey)) {
     return NextResponse.json({ error: 'יותר מדי בקשות. המתן כמה דקות.' }, { status: 429 })
   }
 
   // Build conversation history for Gemini
-  const history: GeminiContent[] = messages.map(m => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.content }],
-  }))
+  const history: GeminiContent[] = messages.map(m => {
+    const parts: any[] = []
+    if (m.file) {
+      parts.push({ inlineData: { mimeType: m.file.mimeType, data: m.file.data } })
+    }
+    parts.push({ text: m.content || '(ראה קובץ מצורף)' })
+    return {
+      role: m.role === 'user' ? 'user' : 'model',
+      parts,
+    }
+  })
 
   const systemPrompt = buildSystemPrompt(context)
 
@@ -199,15 +205,6 @@ export async function POST(request: NextRequest) {
         }
 
         send({ type: 'done', tool_calls: allToolCalls })
-
-        // Save to DB (fire and forget — don't block the stream)
-        if (sessionId && finalText) {
-          const lastUserMsg = messages[messages.length - 1]
-          if (lastUserMsg) {
-            saveChatMessage(sessionId, 'user', lastUserMsg.content).catch(console.error)
-          }
-          saveChatMessage(sessionId, 'assistant', finalText, allToolCalls).catch(console.error)
-        }
 
       } catch (err: any) {
         console.error('Agent stream error:', err)

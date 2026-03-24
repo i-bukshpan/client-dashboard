@@ -64,6 +64,25 @@ const priorityStyles: Record<string, string> = {
   'נמוך': 'bg-slate-100 text-slate-600 border-slate-200',
 }
 
+// Format a Date to YYYY-MM-DD using LOCAL timezone (avoids UTC shift)
+function toLocalDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Parse a timestamp string into { date, time? } using LOCAL timezone
+// Treats midnight (00:00) as "no time set" since it likely came from a date-only value
+function parseEventDateTime(raw: string): { date: string; time?: string } {
+  if (!raw) return { date: '' }
+  if (!raw.includes('T') && !raw.includes(' ') && !raw.includes('+')) return { date: raw }
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return { date: raw.split('T')[0] }
+  const date = toLocalDateStr(d)
+  const hours = d.getHours()
+  const mins = d.getMinutes()
+  if (hours === 0 && mins === 0) return { date }
+  return { date, time: `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}` }
+}
+
 const monthNames = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
 const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳']
 
@@ -372,9 +391,10 @@ interface ClientCalendarProps {
   schemas: ClientSchema[]
   initialLinkSchemaId?: string // pre-open link dialog for this schema
   readOnly?: boolean
+  includeSubClients?: boolean // also show sub-client events (for parent client portal)
 }
 
-export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchemaId, readOnly = false }: ClientCalendarProps) {
+export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchemaId, readOnly = false, includeSubClients = false }: ClientCalendarProps) {
   const { showToast } = useToast()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -408,28 +428,51 @@ export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchem
         startDate = new Date(currentDate); startDate.setHours(0, 0, 0, 0)
         endDate = new Date(currentDate); endDate.setHours(23, 59, 59, 999)
       }
-      const startStr = startDate.toISOString().split('T')[0]
-      const endStr = endDate.toISOString().split('T')[0]
+      // Use LOCAL date strings to avoid UTC timezone shift
+      const startStr = toLocalDateStr(startDate)
+      const endStr = toLocalDateStr(endDate)
 
-      // Load reminders & meetings in parallel
+      // Collect all relevant client IDs (self + sub-clients if enabled)
+      let clientIds = [clientId]
+      if (includeSubClients) {
+        const { data: subClients } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('parent_id', clientId)
+        if (subClients) clientIds = [clientId, ...subClients.map(c => c.id)]
+      }
+
+      // Load reminders & meetings in parallel (for all relevant clients)
       const [remindersRes, meetingsRes] = await Promise.all([
-        supabase.from('reminders').select('*').eq('client_id', clientId).gte('due_date', startStr).lte('due_date', endStr),
-        supabase.from('meeting_logs').select('*').eq('client_id', clientId).gte('meeting_date', startStr).lte('meeting_date', endStr),
+        supabase.from('reminders').select('*, clients(name)').in('client_id', clientIds).gte('due_date', startStr).lte('due_date', endStr),
+        supabase.from('meeting_logs').select('*, clients(name)').in('client_id', clientIds).gte('meeting_date', startStr).lte('meeting_date', endStr),
       ])
 
-      const reminderEvents: CalendarEvent[] = (remindersRes.data || []).map(r => ({
-        id: r.id, title: r.title,
-        date: r.due_date.split('T')[0],
-        time: r.due_date.includes('T') ? r.due_date.split('T')[1]?.substring(0, 5) : undefined,
-        eventType: 'reminder', is_completed: r.is_completed, priority: r.priority,
-      }))
+      const reminderEvents: CalendarEvent[] = (remindersRes.data || []).map(r => {
+        const subClientName = includeSubClients && r.client_id !== clientId
+          ? (r as any).clients?.name
+          : undefined
+        const { date, time } = parseEventDateTime(r.due_date)
+        return {
+          id: r.id,
+          title: subClientName ? `${subClientName}: ${r.title}` : r.title,
+          date, time,
+          eventType: 'reminder', is_completed: r.is_completed, priority: r.priority,
+        }
+      })
 
-      const meetingEvents: CalendarEvent[] = (meetingsRes.data || []).map(m => ({
-        id: m.id, title: m.subject,
-        date: m.meeting_date.split('T')[0],
-        time: m.meeting_date.includes('T') ? m.meeting_date.split('T')[1]?.substring(0, 5) : undefined,
-        eventType: 'meeting',
-      }))
+      const meetingEvents: CalendarEvent[] = (meetingsRes.data || []).map(m => {
+        const subClientName = includeSubClients && m.client_id !== clientId
+          ? (m as any).clients?.name
+          : undefined
+        const { date, time } = parseEventDateTime(m.meeting_date)
+        return {
+          id: m.id,
+          title: subClientName ? `${subClientName}: ${m.subject}` : m.subject,
+          date, time,
+          eventType: 'meeting',
+        }
+      })
 
       // Load table records from linked modules
       const tableEvents: CalendarEvent[] = []
@@ -464,11 +507,12 @@ export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchem
             }
           }
 
+          const { date: evDate, time: evTime } = parseEventDateTime(dateVal)
           tableEvents.push({
             id: rec.id,
             title: `${link.label}: ${titleVal}`,
-            date: dateVal.split('T')[0],
-            time: dateVal.includes('T') ? dateVal.split('T')[1]?.substring(0, 5) : undefined,
+            date: evDate,
+            time: evTime,
             eventType: 'table',
             color: link.color,
             tableName: link.label,
@@ -489,7 +533,7 @@ export function ClientCalendar({ clientId, clientName, schemas, initialLinkSchem
     } finally {
       setLoading(false)
     }
-  }, [clientId, currentDate, viewMode, links])
+  }, [clientId, currentDate, viewMode, links, includeSubClients])
 
   useEffect(() => { loadData() }, [loadData])
 

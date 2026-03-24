@@ -52,18 +52,45 @@ export default function CalendarPage() {
       const endStr = endDate.toISOString().split('T')[0]
 
       const [remindersResult, meetingsResult] = await Promise.all([
-        supabase.from('reminders').select('*, clients(*)').gte('due_date', startStr).lte('due_date', endStr),
-        supabase.from('meeting_logs').select('*, clients(*)').gte('meeting_date', startStr).lte('meeting_date', endStr)
+        supabase.from('reminders').select('*, clients(id, name, parent_id)').gte('due_date', startStr).lte('due_date', endStr),
+        supabase.from('meeting_logs').select('*, clients(id, name, parent_id)').gte('meeting_date', startStr).lte('meeting_date', endStr)
       ])
 
+      // Collect parent_ids that need lookup
+      const allEvents = [...(remindersResult.data || []), ...(meetingsResult.data || [])]
+      const parentIds = Array.from(new Set(
+        allEvents.map((e: any) => e.clients?.parent_id).filter(Boolean)
+      )) as string[]
+      let parentNames: Record<string, string> = {}
+      if (parentIds.length > 0) {
+        const { data: parents } = await supabase.from('clients').select('id, name').in('id', parentIds)
+        parents?.forEach((p: any) => { parentNames[p.id] = p.name })
+      }
+
+      function buildClientLabel(clientData: any) {
+        if (!clientData) return undefined
+        if (clientData.parent_id && parentNames[clientData.parent_id]) {
+          return `${parentNames[clientData.parent_id]} ← ${clientData.name}`
+        }
+        return clientData.name
+      }
+
       const reminders: CalendarEvent[] = (remindersResult.data || []).map(r => ({
-        id: r.id, title: r.title, due_date: r.due_date, client_id: r.client_id,
-        client: (r as any).clients, eventType: 'reminder', is_completed: r.is_completed, priority: r.priority
+        id: r.id,
+        title: r.title,
+        due_date: r.due_date,
+        client_id: r.client_id,
+        client: r.clients ? { ...(r as any).clients, displayName: buildClientLabel((r as any).clients) } : null,
+        eventType: 'reminder', is_completed: r.is_completed, priority: r.priority
       }))
 
       const meetings: CalendarEvent[] = (meetingsResult.data || []).map(m => ({
-        id: m.id, title: m.subject, due_date: m.meeting_date, client_id: m.client_id,
-        client: (m as any).clients, eventType: 'meeting'
+        id: m.id,
+        title: m.subject,
+        due_date: m.meeting_date,
+        client_id: m.client_id,
+        client: m.clients ? { ...(m as any).clients, displayName: buildClientLabel((m as any).clients) } : null,
+        eventType: 'meeting'
       }))
 
       setEvents([...reminders, ...meetings].sort((a, b) => 
@@ -374,7 +401,7 @@ export default function CalendarPage() {
                         <div className="flex-1 min-w-0">
                           <h4 className="font-bold text-navy truncate group-hover:text-primary transition-colors">{event.title}</h4>
                           <p className="text-xs font-bold text-grey">
-                            {format(new Date(event.due_date), 'HH:mm')} • {event.client?.name || '🔒 אישי'}
+                            {format(new Date(event.due_date), 'HH:mm')} • {event.client?.displayName || event.client?.name || '🔒 אישי'}
                           </p>
                         </div>
                         {event.eventType === 'meeting' && (
@@ -412,7 +439,7 @@ export default function CalendarPage() {
                       >
                         <Clock className="h-4 w-4 text-grey shrink-0" />
                         <span className="font-bold text-navy text-sm group-hover:text-primary transition-colors truncate">{event.title}</span>
-                        <span className="text-xs text-grey mr-auto">{event.client?.name || 'אישי'}</span>
+                        <span className="text-xs text-grey mr-auto">{event.client?.displayName || event.client?.name || 'אישי'}</span>
                       </Link>
                     ))}
                   </div>
@@ -466,7 +493,7 @@ export default function CalendarPage() {
                         {event.title}
                       </div>
                       <div className="text-xs font-bold text-grey flex items-center gap-2">
-                        {event.client?.name || '🔒 אישי'} • {format(eventDate, 'd בMMMM HH:mm', { locale: he })}
+                        {event.client?.displayName || event.client?.name || '🔒 אישי'} • {format(eventDate, 'd בMMMM HH:mm', { locale: he })}
                         {isOverdue && <span className="text-rose-500 font-black text-[10px] bg-rose-50 px-2 py-0.5 rounded-full">איחור</span>}
                       </div>
                     </div>

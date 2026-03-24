@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  LayoutDashboard, Users, CheckSquare, Calendar, 
-  Wallet, BarChart3, Settings, HelpCircle, Shield 
+import {
+  LayoutDashboard, Users, CheckSquare, Calendar,
+  Wallet, BarChart3, Settings, HelpCircle, Shield, MessageSquare
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +14,7 @@ const navigation = [
   { name: 'לקוחות', href: '/clients', icon: Users },
   { name: 'משימות', href: '/tasks', icon: CheckSquare },
   { name: 'יומן', href: '/calendar', icon: Calendar },
+  { name: 'הודעות', href: '/messages', icon: MessageSquare },
   { name: 'כספים', href: '/cashflow', icon: Wallet },
   { name: 'דוחות', href: '/reports', icon: BarChart3 },
   { name: 'תקינות מערכת', href: '/admin/system-health', icon: Shield },

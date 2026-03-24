@@ -100,24 +100,11 @@ export async function updateClientDriveFolder(clientId: string, folderId: string
  */
 export async function getClientTimeline(clientId: string): Promise<{ success: boolean; data: any[] }> {
   try {
-    // 1. Fetch Audit Logs
-    const { data: logs } = await supabase
-      .from('audit_log')
-      .select('*')
-      .eq('entity_id', clientId)
-      .order('created_at', { ascending: false })
-
-    // 2. Fetch Meetings
-    const { data: meetings } = await supabase
-      .from('meetings')
-      .select('*')
-      .eq('client_id', clientId)
-
-    // 3. Fetch Reminders
-    const { data: reminders } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('client_id', clientId)
+    const [{ data: logs }, { data: meetings }, { data: reminders }] = await Promise.all([
+      supabase.from('audit_log').select('*').eq('entity_id', clientId).order('created_at', { ascending: false }),
+      supabase.from('meetings').select('*').eq('client_id', clientId),
+      supabase.from('reminders').select('*').eq('client_id', clientId),
+    ])
 
     // Merge and format
     const timeline = [

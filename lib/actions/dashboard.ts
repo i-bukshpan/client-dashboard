@@ -143,7 +143,7 @@ export async function loadDashboardData(): Promise<{
             // 10. Pending payments for alerts
             supabase
                 .from('payments')
-                .select('*, clients(*)')
+                .select('id, amount, payment_date, payment_status, description, client_id, clients(id, name)')
                 .eq('payment_status', 'ממתין')
                 .order('payment_date', { ascending: true })
                 .limit(10),
@@ -156,7 +156,7 @@ export async function loadDashboardData(): Promise<{
                 today.setHours(0, 0, 0, 0)
                 return supabase
                     .from('reminders')
-                    .select('*, clients(*)')
+                    .select('id, title, due_date, client_id, clients(id, name)')
                     .eq('is_completed', false)
                     .lte('due_date', nextWeek.toISOString())
                     .gte('due_date', today.toISOString())

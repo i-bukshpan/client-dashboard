@@ -18,10 +18,11 @@ import { downloadIcs } from '@/lib/utils/ics-export'
 interface ClientMeetingsProps {
     client: Client
     onUpdate: () => void
+    includeSubClients?: boolean
 }
 
-export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
-    const [meetingLogs, setMeetingLogs] = useState<MeetingLog[]>([])
+export function ClientMeetings({ client, onUpdate, includeSubClients = false }: ClientMeetingsProps) {
+    const [meetingLogs, setMeetingLogs] = useState<(MeetingLog & { _subClientName?: string })[]>([])
     const [logsLoading, setLogsLoading] = useState(true)
 
     // Meeting Form
@@ -41,9 +42,29 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
 
     const loadMeetingLogs = async () => {
         setLogsLoading(true)
-        const result = await getMeetingLogs(client.id)
-        if (result.success) {
-            setMeetingLogs(result.logs || [])
+        if (!includeSubClients) {
+            const result = await getMeetingLogs(client.id)
+            if (result.success) setMeetingLogs(result.logs || [])
+        } else {
+            // Load own meetings + sub-client meetings
+            const { data: subClients } = await supabase
+                .from('clients')
+                .select('id, name')
+                .eq('parent_id', client.id)
+            const subClientMap: Record<string, string> = {}
+            const subIds: string[] = []
+            ;(subClients || []).forEach(sc => { subClientMap[sc.id] = sc.name; subIds.push(sc.id) })
+            const allIds = [client.id, ...subIds]
+            const { data: logs } = await supabase
+                .from('meeting_logs')
+                .select('*')
+                .in('client_id', allIds)
+                .order('meeting_date', { ascending: false })
+            const enriched = (logs || []).map(log => ({
+                ...log,
+                _subClientName: log.client_id !== client.id ? subClientMap[log.client_id] : undefined,
+            }))
+            setMeetingLogs(enriched)
         }
         setLogsLoading(false)
     }
@@ -234,6 +255,11 @@ export function ClientMeetings({ client, onUpdate }: ClientMeetingsProps) {
                                         <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100/50">
                                             {format(new Date(log.meeting_date), 'dd/MM/yyyy')}
                                         </span>
+                                        {(log as any)._subClientName && (
+                                            <span className="text-xs font-black text-violet-700 bg-violet-50 px-2.5 py-1 rounded-md border border-violet-100/50">
+                                                📂 {(log as any)._subClientName}
+                                            </span>
+                                        )}
                                         {log.details && (
                                             <span className="text-xs font-bold text-grey bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200/50">
                                                 {log.details}

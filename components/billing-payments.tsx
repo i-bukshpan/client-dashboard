@@ -110,7 +110,7 @@ export function BillingPayments({ clientId, clientName, clientPhone }: BillingPa
     } finally {
       setFinancialLoading(false)
     }
-  }, [clientId, filterType, filterSource, filterDateFrom, filterDateTo, filterSearch, extraFilters])
+  }, [clientId, filterType, filterSource, filterDateFrom, filterDateTo, filterSearch, JSON.stringify(extraFilters)])
 
   useEffect(() => {
     loadPayments()
@@ -122,7 +122,8 @@ export function BillingPayments({ clientId, clientName, clientPhone }: BillingPa
   // Reload financial data when filters change
   useEffect(() => {
     loadFinancialData()
-  }, [filterType, filterSource, filterDateFrom, filterDateTo, filterSearch, extraFilters])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType, filterSource, filterDateFrom, filterDateTo, filterSearch, JSON.stringify(extraFilters)])
 
   const loadSchemas = async () => {
     try {

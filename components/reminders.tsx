@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, CheckCircle2, Circle, AlertCircle } from 'lucide-react'
+import { SendEmailDialog } from '@/components/send-email-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,10 +25,11 @@ import { toast } from 'sonner'
 interface RemindersProps {
   clientId: string
   clientName?: string
+  clientEmail?: string
   readOnly?: boolean
 }
 
-export function Reminders({ clientId, clientName = 'לקוח', readOnly = false }: RemindersProps) {
+export function Reminders({ clientId, clientName = 'לקוח', clientEmail, readOnly = false }: RemindersProps) {
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
@@ -383,16 +385,28 @@ export function Reminders({ clientId, clientName = 'לקוח', readOnly = false 
                       </div>
                     </div>
                   </div>
-                  {!readOnly && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDelete(reminder.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1 mt-2 justify-end">
+                    {clientEmail && (
+                      <SendEmailDialog
+                        toEmail={clientEmail}
+                        toName={clientName}
+                        defaultSubject={`תזכורת: ${reminder.title}`}
+                        defaultBody={`שלום ${clientName},\n\nרצינו להזכיר לך את המשימה הבאה:\n\n📌 ${reminder.title}\n📅 תאריך יעד: ${new Date(reminder.due_date).toLocaleDateString('he-IL')}${reminder.description ? `\n\n${reminder.description}` : ''}\n\nבברכה`}
+                        triggerSize="icon"
+                        triggerVariant="ghost"
+                      />
+                    )}
+                    {!readOnly && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(reminder.id)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )
             })}

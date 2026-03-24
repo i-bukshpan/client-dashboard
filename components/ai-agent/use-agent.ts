@@ -1,24 +1,23 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
-import { createChatSession } from '@/lib/actions/ai-chat'
-import type { ChatMessage, AgentContext } from '@/lib/ai/types'
+import type { ChatMessage, AgentContext, AttachedFile } from '@/lib/ai/types'
 
-export function useAgent(context: AgentContext, sessionId?: string, setSessionId?: (id: string) => void) {
+export function useAgent(context: AgentContext) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [activeTools, setActiveTools] = useState<string[]>([])
   const abortRef = useRef<AbortController | null>(null)
 
-  const sendMessage = useCallback(async (userText: string) => {
-    if (!userText.trim() || isLoading) return
+  const sendMessage = useCallback(async (userText: string, attachedFile?: AttachedFile) => {
+    if ((!userText.trim() && !attachedFile) || isLoading) return
 
-    // Add user message immediately
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: userText,
+      content: userText || (attachedFile ? `📎 ${attachedFile.name}` : ''),
+      attachedFile,
       createdAt: new Date(),
     }
     setMessages(prev => [...prev, userMsg])
@@ -26,20 +25,10 @@ export function useAgent(context: AgentContext, sessionId?: string, setSessionId
     setStreamingText('')
     setActiveTools([])
 
-    // Ensure we have a session
-    let currentSessionId = sessionId
-    if (!currentSessionId) {
-      const res = await createChatSession(context.clientId, context.pageUrl)
-      if (res.success && res.session) {
-        currentSessionId = res.session.id
-        setSessionId?.(res.session.id)
-      }
-    }
-
-    // Build messages history for API
     const historyForApi = [...messages, userMsg].map(m => ({
       role: m.role,
       content: m.content,
+      ...(m.attachedFile ? { file: m.attachedFile } : {}),
     }))
 
     abortRef.current = new AbortController()
@@ -48,17 +37,11 @@ export function useAgent(context: AgentContext, sessionId?: string, setSessionId
       const response = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: historyForApi,
-          context,
-          sessionId: currentSessionId,
-        }),
+        body: JSON.stringify({ messages: historyForApi, context }),
         signal: abortRef.current.signal,
       })
 
-      if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`)
-      }
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -70,13 +53,10 @@ export function useAgent(context: AgentContext, sessionId?: string, setSessionId
         if (done) break
 
         const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
+        for (const line of chunk.split('\n')) {
           if (!line.startsWith('data: ')) continue
           try {
             const data = JSON.parse(line.slice(6))
-
             if (data.type === 'text') {
               accumulated += data.delta
               setStreamingText(accumulated)
@@ -86,7 +66,6 @@ export function useAgent(context: AgentContext, sessionId?: string, setSessionId
               setActiveTools(prev => prev.filter(t => t !== data.tool))
               toolCallsForMessage.push({ toolName: data.tool, success: data.success })
             } else if (data.type === 'done') {
-              // Finalize assistant message
               const assistantMsg: ChatMessage = {
                 id: crypto.randomUUID(),
                 role: 'assistant',
@@ -98,36 +77,28 @@ export function useAgent(context: AgentContext, sessionId?: string, setSessionId
               setStreamingText('')
               setActiveTools([])
             } else if (data.type === 'error') {
-              const errMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: 'assistant',
-                content: `שגיאה: ${data.message}`,
-                createdAt: new Date(),
-              }
-              setMessages(prev => [...prev, errMsg])
+              setMessages(prev => [...prev, {
+                id: crypto.randomUUID(), role: 'assistant',
+                content: `שגיאה: ${data.message}`, createdAt: new Date(),
+              }])
               setStreamingText('')
               setActiveTools([])
             }
-          } catch {
-            // ignore parse errors for incomplete chunks
-          }
+          } catch { /* ignore parse errors */ }
         }
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return
-      const errMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'שגיאה בחיבור לסוכן. נסה שוב.',
-        createdAt: new Date(),
-      }
-      setMessages(prev => [...prev, errMsg])
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), role: 'assistant',
+        content: 'שגיאה בחיבור לסוכן. נסה שוב.', createdAt: new Date(),
+      }])
       setStreamingText('')
       setActiveTools([])
     } finally {
       setIsLoading(false)
     }
-  }, [messages, isLoading, context, sessionId, setSessionId])
+  }, [messages, isLoading, context])
 
   const clearMessages = useCallback(() => {
     abortRef.current?.abort()
