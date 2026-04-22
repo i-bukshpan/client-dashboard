@@ -65,7 +65,7 @@ export function KanbanBoard({ initialTasks }: Props) {
 
       // Update in Supabase
       const supabase = createClient()
-      await supabase.from('tasks').update({ status: newStatus }).eq('id', activeId)
+      await (supabase.from('tasks') as any).update({ status: newStatus }).eq('id', activeId)
     }
   }
 
@@ -102,3 +102,4 @@ export function KanbanBoard({ initialTasks }: Props) {
     </div>
   )
 }
+

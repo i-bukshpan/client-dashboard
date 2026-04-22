@@ -43,7 +43,7 @@ export function AddClientSheet() {
       drive_folder_id = await createClientFolder(data.name)
     } catch { /* fallback gracefully */ }
 
-    await supabase.from('clients').insert({
+    await (supabase.from('clients') as any).insert({
       name: data.name,
       email: data.email || null,
       phone: data.phone || null,
@@ -117,3 +117,4 @@ export function AddClientSheet() {
     </Sheet>
   )
 }
+

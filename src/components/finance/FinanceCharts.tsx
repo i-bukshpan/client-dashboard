@@ -120,3 +120,4 @@ export function FinanceCharts({ income, expenses }: Props) {
     </div>
   )
 }
+

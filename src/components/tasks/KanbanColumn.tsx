@@ -40,3 +40,4 @@ export function KanbanColumn({ id, title, tasks }: Props) {
     </div>
   )
 }
+

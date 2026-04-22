@@ -140,3 +140,4 @@ export function DashboardTimeline({ appointments }: DashboardTimelineProps) {
     </Card>
   )
 }
+

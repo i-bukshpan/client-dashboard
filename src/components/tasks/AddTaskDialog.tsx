@@ -39,7 +39,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const { error } = await supabase.from('tasks').insert({
+    const { error } = await (supabase.from('tasks') as any).insert({
       title: form.title,
       priority: form.priority as any,
       client_id: form.client_id || null,
@@ -137,3 +137,4 @@ export function AddTaskDialog({ clients, employees }: Props) {
     </Dialog>
   )
 }
+

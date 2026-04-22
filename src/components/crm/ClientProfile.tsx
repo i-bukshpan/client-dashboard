@@ -18,7 +18,7 @@ export function ClientProfile({ client }: { client: Client }) {
   async function save() {
     setLoading(true)
     const supabase = createClient()
-    await supabase.from('clients').update({
+    await (supabase.from('clients') as any).update({
       name: form.name,
       email: form.email,
       phone: form.phone,
@@ -73,3 +73,4 @@ export function ClientProfile({ client }: { client: Client }) {
     </Card>
   )
 }
+

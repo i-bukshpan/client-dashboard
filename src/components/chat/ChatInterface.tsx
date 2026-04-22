@@ -66,7 +66,7 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
     e.preventDefault()
     if (!newMessage.trim() || !selectedConv) return
 
-    const { error } = await supabase.from('chat_messages').insert({
+    const { error } = await (supabase.from('chat_messages') as any).insert({
       conversation_id: selectedConv.id,
       sender_id: currentUserId,
       content: newMessage,
@@ -184,3 +184,4 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
     </div>
   )
 }
+

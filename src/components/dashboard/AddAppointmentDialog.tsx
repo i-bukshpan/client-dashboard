@@ -32,7 +32,7 @@ export function AddAppointmentDialog({ open, onClose }: Props) {
   async function onSubmit(data: FormData) {
     setLoading(true)
     const supabase = createClient()
-    await supabase.from('appointments').insert({
+    await (supabase.from('appointments') as any).insert({
       title: data.title,
       start_time: data.start_time,
       end_time: data.end_time,
@@ -79,3 +79,4 @@ export function AddAppointmentDialog({ open, onClose }: Props) {
     </Dialog>
   )
 }
+

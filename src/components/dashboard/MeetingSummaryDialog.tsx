@@ -57,18 +57,18 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
     if (!user) return
 
     // Insert meeting summary
-    await supabase.from('meeting_summaries').insert({
+    await (supabase.from('meeting_summaries') as any).insert({
       appointment_id: appointment.id,
       notes: data.notes,
       action_items: data.action_items,
     })
 
     // Mark appointment as done
-    await supabase.from('appointments').update({ status: 'done' }).eq('id', appointment.id)
+    await (supabase.from('appointments') as any).update({ status: 'done' }).eq('id', appointment.id)
 
     // Bulk insert tasks
     if (data.action_items.length > 0) {
-      await supabase.from('tasks').insert(
+      await (supabase.from('tasks') as any).insert(
         data.action_items.map((item) => ({
           title: item.title,
           priority: item.priority,
@@ -82,7 +82,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
 
     // Log income if provided
     if (data.income_amount && Number(data.income_amount) > 0) {
-      await supabase.from('income').insert({
+      await (supabase.from('income') as any).insert({
         amount: Number(data.income_amount),
         category: data.income_category ?? 'ייעוץ',
         date: new Date().toISOString().split('T')[0],
@@ -228,3 +228,4 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
     </Dialog>
   )
 }
+

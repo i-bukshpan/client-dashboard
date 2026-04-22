@@ -25,7 +25,7 @@ export function EmployeeSalaryCard({ employeeId, baseSalary, bonuses, totalSalar
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const { error } = await supabase.from('employee_bonuses').insert({
+    const { error } = await (supabase.from('employee_bonuses') as any).insert({
       employee_id: employeeId,
       amount: Number(newBonus.amount),
       reason: newBonus.reason,
@@ -97,3 +97,4 @@ export function EmployeeSalaryCard({ employeeId, baseSalary, bonuses, totalSalar
     </div>
   )
 }
+

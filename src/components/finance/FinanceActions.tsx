@@ -60,8 +60,8 @@ export function FinanceActions({ clients }: Props) {
     }
 
     const { error } = openType === 'income'
-      ? await supabase.from('income').insert({ ...payload, client_id: data.client_id || null })
-      : await supabase.from('expenses').insert(payload)
+      ? await (supabase.from('income') as any).insert({ ...payload, client_id: data.client_id || null })
+      : await (supabase.from('expenses') as any).insert(payload)
 
     if (error) {
       toast.error('שגיאה בשמירת הנתונים')
@@ -183,3 +183,4 @@ export function FinanceActions({ clients }: Props) {
     </div>
   )
 }
+
