@@ -34,7 +34,7 @@ export default async function EmployeeLayout({
     .eq('id', user.id)
     .single()
 
-  if (profile?.role === 'admin') redirect('/admin/dashboard')
+  if ((profile as any)?.role === 'admin') redirect('/admin/dashboard')
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
