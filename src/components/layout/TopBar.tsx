@@ -29,7 +29,7 @@ export function TopBar({ title, profile }: TopBarProps) {
   }
 
   const initials = profile?.full_name
-    ? profile.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2)
+    ? profile.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
     : 'NA'
 
   return (

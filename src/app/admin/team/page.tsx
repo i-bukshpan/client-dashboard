@@ -48,7 +48,7 @@ export default async function TeamPage() {
                 <Avatar className="w-12 h-12">
                   <AvatarImage src={emp.avatar_url ?? undefined} />
                   <AvatarFallback className="bg-blue-600 text-white font-bold">
-                    {emp.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    {emp.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
