@@ -59,7 +59,7 @@ export default async function EmployeeLayout({
       </aside>
 
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar title="פורטל עובד" profile={profile as Profile} />
+        <TopBar title="פורטל עובד" profile={profile as any} />
         <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950">
           {children}
         </main>

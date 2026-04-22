@@ -36,7 +36,7 @@ export default async function AdminLayout({
 
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar title="Nehemiah OS" profile={profile as Profile} />
+        <TopBar title="Nehemiah OS" profile={profile as any} />
         <main className="flex-1 overflow-y-auto p-6 page-enter">
           {children}
         </main>
