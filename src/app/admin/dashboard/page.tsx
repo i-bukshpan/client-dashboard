@@ -20,8 +20,8 @@ export default async function DashboardPage() {
     supabase.from('tasks').select('*', { count: 'exact', head: true }).neq('status', 'done'),
   ])
 
-  const monthlyIncome = incomeRows?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
-  const monthlyExpenses = expenseRows?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
+  const monthlyIncome = (incomeRows as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
+  const monthlyExpenses = (expenseRows as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
 
   // Today's appointments
   const { data: appointments } = await supabase
