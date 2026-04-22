@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Hash, User, Search } from 'lucide-react'
+import { Send, Hash, User, Search, MessageSquare } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 
