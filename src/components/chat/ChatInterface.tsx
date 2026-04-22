@@ -162,7 +162,7 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
                   )
                 })}
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Input Area */}
             <div className="p-4 border-t border-border/50 bg-card/30">
