@@ -27,7 +27,7 @@ export default async function EmployeeTasksPage() {
       </div>
 
       <div className="flex-1 min-h-0">
-        <KanbanBoard initialTasks={tasks ?? []} />
+        <KanbanBoard initialTasks={(tasks as any[]) ?? []} />
       </div>
     </div>
   )

@@ -56,7 +56,7 @@ export default async function EmployeeDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <UpcomingTasks tasks={recentTasks ?? []} />
+        <UpcomingTasks tasks={(recentTasks as any[]) ?? []} />
         <Card className="border-border/50">
           <CardHeader>
             <CardTitle className="text-base">הודעות מהנהלה</CardTitle>

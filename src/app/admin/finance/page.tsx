@@ -20,9 +20,9 @@ export default async function FinancePage() {
   ])
 
   // Monthly stats
-  const monthlyIncome = income?.filter(r => r.date >= startOfMonth && r.date <= endOfMonth)
+  const monthlyIncome = (income as any[])?.filter(r => r.date >= startOfMonth && r.date <= endOfMonth)
     .reduce((s, r) => s + Number(r.amount), 0) ?? 0
-  const monthlyExpenses = expenses?.filter(r => r.date >= startOfMonth && r.date <= endOfMonth)
+  const monthlyExpenses = (expenses as any[])?.filter(r => r.date >= startOfMonth && r.date <= endOfMonth)
     .reduce((s, r) => s + Number(r.amount), 0) ?? 0
   const monthlyProfit = monthlyIncome - monthlyExpenses
 
@@ -45,7 +45,7 @@ export default async function FinancePage() {
             <p className="text-muted-foreground text-sm">מעקב הכנסות, הוצאות ותזרים</p>
           </div>
         </div>
-        <FinanceActions clients={clients ?? []} />
+        <FinanceActions clients={(clients as any[]) ?? []} />
       </div>
 
       {/* Stats Grid */}
@@ -68,10 +68,10 @@ export default async function FinancePage() {
       </div>
 
       {/* Charts */}
-      <FinanceCharts income={income ?? []} expenses={expenses ?? []} />
+      <FinanceCharts income={(income as any[]) ?? []} expenses={(expenses as any[]) ?? []} />
 
       {/* History Tables */}
-      <FinanceTables income={income ?? []} expenses={expenses ?? []} />
+      <FinanceTables income={(income as any[]) ?? []} expenses={(expenses as any[]) ?? []} />
     </div>
   )
 }
