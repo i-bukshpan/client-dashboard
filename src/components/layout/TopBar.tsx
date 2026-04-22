@@ -71,7 +71,7 @@ export function TopBar({ title, profile }: TopBarProps) {
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-foreground leading-none">{profile?.full_name ?? 'מנהל'}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {profile?.role === 'admin' ? 'מנהל ראשי' : 'עובד'}
+                  {(profile as any)?.role === 'admin' ? 'מנהל ראשי' : 'עובד'}
                 </p>
               </div>
             </div>

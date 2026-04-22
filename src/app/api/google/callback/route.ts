@@ -17,7 +17,7 @@ export async function GET(request: Request) {
           .select('role')
           .eq('id', user.id)
           .single()
-        const dest = profile?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
+        const dest = (profile as any)?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
         return NextResponse.redirect(new URL(dest, origin))
       }
     }
