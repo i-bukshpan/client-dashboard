@@ -139,7 +139,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
                   dir="ltr"
                   {...register('income_amount')}
                 />
-                <Select onValueChange={(v) => setValue('income_category', v)} defaultValue="ייעוץ">
+                <Select onValueChange={(v) => setValue('income_category', v as any)} defaultValue="ייעוץ">
                   <SelectTrigger className="w-36">
                     <SelectValue placeholder="קטגוריה" />
                   </SelectTrigger>
@@ -191,7 +191,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
                     </div>
                     <div className="flex gap-2">
                       <Select
-                        onValueChange={(v) => setValue(`action_items.${index}.priority`, v as 'low' | 'medium' | 'high' | 'urgent')}
+                        onValueChange={(v) => setValue(`action_items.${index}.priority`, v as any)}
                         defaultValue="medium"
                       >
                         <SelectTrigger className="flex-1 bg-background">
