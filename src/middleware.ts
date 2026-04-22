@@ -50,7 +50,7 @@ export async function middleware(request: NextRequest) {
         .select('role')
         .eq('id', user.id)
         .single()
-      const dest = profile?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
+      const dest = (profile as any)?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
       return NextResponse.redirect(new URL(dest, request.url))
     }
     return supabaseResponse
@@ -68,7 +68,7 @@ export async function middleware(request: NextRequest) {
       .select('role')
       .eq('id', user.id)
       .single()
-    if (profile?.role !== 'admin') {
+    if ((profile as any)?.role !== 'admin') {
       return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
   }
@@ -80,7 +80,7 @@ export async function middleware(request: NextRequest) {
       .select('role')
       .eq('id', user.id)
       .single()
-    if (profile?.role !== 'admin') {
+    if ((profile as any)?.role !== 'admin') {
       return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
   }

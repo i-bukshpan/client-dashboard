@@ -10,7 +10,7 @@ export default async function ChatPage() {
 
   // Fetch all conversations for the admin, or just the one for an employee
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const isAdmin = profile?.role === 'admin'
+  const isAdmin = (profile as any)?.role === 'admin'
 
   const { data: conversations } = await supabase
     .from('conversations')
