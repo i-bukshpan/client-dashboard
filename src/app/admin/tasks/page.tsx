@@ -26,11 +26,11 @@ export default async function TasksPage() {
             <p className="text-muted-foreground text-sm">מעקב וניהול משימות צוות ולקוחות</p>
           </div>
         </div>
-        <AddTaskDialog clients={clients ?? []} employees={employees ?? []} />
+        <AddTaskDialog clients={(clients as any[]) ?? []} employees={(employees as any[]) ?? []} />
       </div>
 
       <div className="flex-1 min-h-0">
-        <KanbanBoard initialTasks={tasks ?? []} />
+        <KanbanBoard initialTasks={(tasks as any[]) ?? []} />
       </div>
     </div>
   )

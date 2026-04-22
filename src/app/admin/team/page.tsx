@@ -37,8 +37,8 @@ export default async function TeamPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {employees?.map((emp) => {
-          const empBonuses = bonuses?.filter(b => b.employee_id === emp.id) ?? []
+        {(employees as any[])?.map((emp: any) => {
+          const empBonuses = (bonuses as any[])?.filter(b => b.employee_id === emp.id) ?? []
           const totalBonuses = empBonuses.reduce((s, b) => s + Number(b.amount), 0)
           const totalSalary = Number(emp.salary_base) + totalBonuses
 

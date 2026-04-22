@@ -41,7 +41,7 @@ export default async function CRMPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {clients.map((client) => {
+          {(clients as any[]).map((client) => {
             const initials = client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
             return (
               <Link key={client.id} href={`/admin/crm/${client.id}`}>

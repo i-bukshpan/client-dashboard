@@ -52,11 +52,11 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Timeline takes 2/3 */}
         <div className="xl:col-span-2">
-          <DashboardTimeline appointments={appointments ?? []} />
+          <DashboardTimeline appointments={(appointments as any[]) ?? []} />
         </div>
         {/* Upcoming tasks takes 1/3 */}
         <div>
-          <UpcomingTasks tasks={tasks ?? []} />
+          <UpcomingTasks tasks={(tasks as any[]) ?? []} />
         </div>
       </div>
     </div>
