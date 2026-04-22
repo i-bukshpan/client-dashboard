@@ -136,7 +136,7 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
             </div>
 
             {/* Message Area */}
-            <ScrollArea className="flex-1 p-4" viewportRef={scrollRef}>
+            <div className="flex-1 p-4 overflow-y-auto" ref={scrollRef}>
               <div className="space-y-4">
                 {messages.map((msg) => {
                   const isOwn = msg.sender_id === currentUserId
