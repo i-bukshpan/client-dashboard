@@ -101,7 +101,7 @@ export function FinanceActions({ clients }: Props) {
             </div>
             <div className="space-y-2">
               <Label>לקוח משויך</Label>
-              <Select onValueChange={(v) => setValue('client_id', v)}>
+              <Select onValueChange={(v: any) => setValue('client_id', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="בחר לקוח (אופציונלי)" />
                 </SelectTrigger>
@@ -155,7 +155,7 @@ export function FinanceActions({ clients }: Props) {
             </div>
             <div className="space-y-2">
               <Label>קטגוריה</Label>
-              <Select onValueChange={(v) => setValue('category', v)}>
+              <Select onValueChange={(v: any) => setValue('category', v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="בחר קטגוריה" />
                 </SelectTrigger>
@@ -183,4 +183,5 @@ export function FinanceActions({ clients }: Props) {
     </div>
   )
 }
+
 

@@ -100,3 +100,4 @@ export function Sidebar({ urgentCount = 0, unreadMessages = 0 }: SidebarProps) {
   )
 }
 
+

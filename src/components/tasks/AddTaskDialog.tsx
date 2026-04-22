@@ -80,7 +80,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>עדיפות</Label>
-              <Select onValueChange={(v) => setForm({ ...form, priority: v })} defaultValue="medium">
+              <Select onValueChange={(v: any) => setForm({ ...form, priority: v })} defaultValue="medium">
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -100,7 +100,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
 
           <div className="space-y-2">
             <Label>שיווק ללקוח (אופציונלי)</Label>
-            <Select onValueChange={(v) => setForm({ ...form, client_id: v })}>
+            <Select onValueChange={(v: any) => setForm({ ...form, client_id: v })}>
               <SelectTrigger>
                 <SelectValue placeholder="בחר לקוח" />
               </SelectTrigger>
@@ -114,7 +114,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
 
           <div className="space-y-2">
             <Label>אחראי לביצוע</Label>
-            <Select onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+            <Select onValueChange={(v: any) => setForm({ ...form, assigned_to: v })}>
               <SelectTrigger>
                 <SelectValue placeholder="בחר עובד" />
               </SelectTrigger>
@@ -137,4 +137,5 @@ export function AddTaskDialog({ clients, employees }: Props) {
     </Dialog>
   )
 }
+
 

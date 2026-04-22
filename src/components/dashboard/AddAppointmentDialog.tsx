@@ -80,3 +80,4 @@ export function AddAppointmentDialog({ open, onClose }: Props) {
   )
 }
 
+
