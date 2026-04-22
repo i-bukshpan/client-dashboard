@@ -25,7 +25,8 @@ export async function loginWithEmail(formData: FormData) {
     .single()
 
   revalidatePath('/', 'layout')
-  redirect(profile?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard')
+  const role = (profile as any)?.role
+  redirect(role === 'admin' ? '/admin/dashboard' : '/employee/dashboard')
 }
 
 export async function loginWithGoogle() {
