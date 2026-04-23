@@ -99,3 +99,4 @@ export function FinanceTables({ income, expenses }: Props) {
 }
 
 
+

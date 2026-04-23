@@ -86,3 +86,4 @@ export function DashboardKPIs({ monthlyIncome, monthlyExpenses, pendingTasks }: 
 }
 
 
+

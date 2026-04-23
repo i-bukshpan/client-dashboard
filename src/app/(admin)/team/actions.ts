@@ -47,3 +47,4 @@ export async function createEmployee(formData: {
   revalidatePath('/admin/team')
   return { success: true, tempPassword } // In real app, send this via email
 }
+

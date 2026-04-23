@@ -26,8 +26,7 @@ export async function loginWithEmail(formData: FormData) {
 
   // Fallback: If no profile exists and it's the admin email, create it
   if (!profile && email === 'yb8511@gmail.com') {
-    const { data: newProfile } = await supabase
-      .from('profiles')
+    const { data: newProfile } = await (supabase.from('profiles') as any)
       .insert({ id: user.id, email, full_name: 'מנהל ראשי', role: 'admin' })
       .select('role')
       .single()
@@ -57,3 +56,4 @@ export async function logout() {
   revalidatePath('/', 'layout')
   redirect('/login')
 }
+

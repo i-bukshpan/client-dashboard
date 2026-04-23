@@ -89,3 +89,4 @@ export function getMimeIcon(mimeType: string): string {
   if (mimeType.includes('folder')) return '📁'
   return '📎'
 }
+
