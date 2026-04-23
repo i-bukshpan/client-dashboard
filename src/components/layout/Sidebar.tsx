@@ -13,11 +13,13 @@ import {
   TrendingUp,
   ChevronRight,
   AlertTriangle,
+  Calendar as CalendarIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 const navItems = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'לוח בקרה' },
+  { href: '/admin/calendar', icon: CalendarIcon, label: 'יומן אירועים' },
   { href: '/admin/crm', icon: Users, label: 'לקוחות (CRM)' },
   { href: '/admin/finance', icon: DollarSign, label: 'פיננסים' },
   { href: '/admin/tasks', icon: CheckSquare, label: 'משימות' },

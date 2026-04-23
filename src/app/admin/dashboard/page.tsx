@@ -4,6 +4,7 @@ import { DashboardTimeline } from '@/components/dashboard/DashboardTimeline'
 import { UpcomingTasks } from '@/components/dashboard/UpcomingTasks'
 
 export const metadata = { title: 'לוח בקרה | Nehemiah OS' }
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -14,49 +15,41 @@ export default async function DashboardPage() {
   const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().split('T')[0]
 
   // KPI data
-  const [{ data: incomeRows }, { data: expenseRows }, { count: pendingTasks }] = await Promise.all([
+  const [{ data: incomeRows }, { data: expenseRows }, { data: allTasks }, { data: allAppts }] = await Promise.all([
     supabase.from('income').select('amount').gte('date', startOfMonth).lte('date', endOfMonth),
     supabase.from('expenses').select('amount').gte('date', startOfMonth).lte('date', endOfMonth),
-    supabase.from('tasks').select('*', { count: 'exact', head: true }).neq('status', 'done'),
+    supabase.from('tasks').select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)'),
+    supabase.from('appointments').select('*, clients(id, name), profiles(id, full_name, avatar_url)')
   ])
 
   const monthlyIncome = (incomeRows as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
   const monthlyExpenses = (expenseRows as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
+  const pendingTasksCount = (allTasks as any[])?.filter(t => t.status !== 'done').length ?? 0
 
-  // Today's appointments
-  const { data: appointments } = await supabase
-    .from('appointments')
-    .select('*, clients(id, name), profiles(id, full_name, avatar_url)')
-    .gte('start_time', `${todayStr}T00:00:00`)
-    .lt('start_time', `${tomorrowStr}T00:00:00`)
-    .order('start_time', { ascending: true })
+  // Today's appointments for Timeline
+  const todayAppts = (allAppts as any[])?.filter(a => 
+    a.start_time >= `${todayStr}T00:00:00` && a.start_time < `${tomorrowStr}T00:00:00`
+  ).sort((a, b) => a.start_time.localeCompare(b.start_time))
 
   // Upcoming/overdue tasks
-  const { data: tasks } = await supabase
-    .from('tasks')
-    .select('*, clients(id, name), profiles(id, full_name, avatar_url)')
-    .neq('status', 'done')
-    .order('due_date', { ascending: true })
-    .limit(5)
+  const upcomingTasks = (allTasks as any[])?.filter(t => t.status !== 'done')
+    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))
+    .slice(0, 5)
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
       <DashboardKPIs
         monthlyIncome={monthlyIncome}
         monthlyExpenses={monthlyExpenses}
-        pendingTasks={pendingTasks ?? 0}
+        pendingTasks={pendingTasksCount}
       />
 
-      {/* Main content */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Timeline takes 2/3 */}
         <div className="xl:col-span-2">
-          <DashboardTimeline appointments={(appointments as any[]) ?? []} />
+          <DashboardTimeline appointments={todayAppts ?? []} />
         </div>
-        {/* Upcoming tasks takes 1/3 */}
         <div>
-          <UpcomingTasks tasks={(tasks as any[]) ?? []} />
+          <UpcomingTasks tasks={upcomingTasks ?? []} />
         </div>
       </div>
     </div>

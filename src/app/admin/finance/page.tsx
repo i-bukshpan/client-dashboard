@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card'
 
 export const metadata = { title: 'פיננסים | Nehemiah OS' }
 
+export const dynamic = 'force-dynamic'
+
 export default async function FinancePage() {
   const supabase = await createClient()
   const today = new Date()

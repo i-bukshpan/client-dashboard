@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Plus, UserPlus } from 'lucide-react'
+import { Loader2, Plus, UserPlus, Mail, Phone, IdCard, MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { createClientFolder } from '@/lib/google-drive'
+import { toast } from 'sonner'
 
 const schema = z.object({
   name: z.string().min(2, 'שם מלא נדרש'),
@@ -34,82 +35,147 @@ export function AddClientSheet() {
 
   async function onSubmit(data: FormData) {
     setLoading(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    // Create Drive folder
-    let drive_folder_id: string | null = null
     try {
-      drive_folder_id = await createClientFolder(data.name)
-    } catch { /* fallback gracefully */ }
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
 
-    await (supabase.from('clients') as any).insert({
-      name: data.name,
-      email: data.email || null,
-      phone: data.phone || null,
-      id_number: data.id_number || null,
-      address: data.address || null,
-      notes: data.notes || null,
-      drive_folder_id,
-      created_by: user!.id,
-    })
+      if (!user) {
+        throw new Error('לא נמצא משתמש מחובר. נסה לרענן את העמוד.')
+      }
 
-    setLoading(false)
-    reset()
-    setOpen(false)
-    window.location.reload()
+      // Create Drive folder
+      let drive_folder_id: string | null = null
+      try {
+        drive_folder_id = await createClientFolder(data.name)
+      } catch { /* fallback gracefully */ }
+
+      const { error } = await (supabase.from('clients') as any).insert({
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        id_number: data.id_number || null,
+        address: data.address || null,
+        notes: data.notes || null,
+        drive_folder_id,
+        created_by: user.id,
+      })
+
+      if (error) {
+        console.error('Supabase error:', error)
+        throw new Error(error.message || 'שגיאה בשמירת הלקוח במסד הנתונים')
+      }
+
+      reset()
+      setOpen(false)
+      window.location.reload()
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'אירעה שגיאה בלתי צפויה')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button className="gap-2">
+        <Button className="gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-lg">
           <UserPlus className="w-4 h-4" />
           הוסף לקוח
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto" side="right">
-        <SheetHeader className="mb-6">
-          <SheetTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-primary" />
-            לקוח חדש
-          </SheetTitle>
-        </SheetHeader>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
+        <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">
+          <SheetHeader>
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-2 shadow-sm border border-blue-200">
+              <UserPlus className="w-5 h-5 text-blue-700" />
+            </div>
+            <SheetTitle className="text-xl font-bold text-slate-900">יצירת לקוח חדש</SheetTitle>
+            <SheetDescription className="text-slate-500 text-sm">
+              הזן את פרטי הלקוח. המערכת תיצור תיקיית Google Drive מגובה עבורו אוטומטית.
+            </SheetDescription>
+          </SheetHeader>
+        </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
           <div className="space-y-2">
-            <Label>שם מלא *</Label>
-            <Input placeholder="ישראל ישראלי" {...register('name')} />
-            {errors.name && <p className="text-destructive text-xs">{errors.name.message}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>אימייל</Label>
-              <Input type="email" dir="ltr" placeholder="mail@example.com" {...register('email')} />
-              {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label>טלפון</Label>
-              <Input type="tel" dir="ltr" placeholder="050-0000000" {...register('phone')} />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>תעודת זהות</Label>
-            <Input dir="ltr" placeholder="000000000" {...register('id_number')} />
-          </div>
-          <div className="space-y-2">
-            <Label>כתובת</Label>
-            <Input placeholder="רחוב, עיר" {...register('address')} />
-          </div>
-          <div className="space-y-2">
-            <Label>הערות</Label>
-            <Textarea placeholder="מידע נוסף על הלקוח..." {...register('notes')} />
+            <Label className="text-slate-700 font-medium">שם מלא <span className="text-red-500">*</span></Label>
+            <Input 
+              className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" 
+              placeholder="ישראל ישראלי" 
+              {...register('name')} 
+            />
+            {errors.name && <p className="text-red-500 text-xs font-medium">{errors.name.message}</p>}
           </div>
 
-          <div className="pt-4 border-t">
-            <Button type="submit" className="w-full gap-2" disabled={loading}>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-slate-700 font-medium">אימייל</Label>
+              <div className="relative">
+                <Input 
+                  type="email" 
+                  dir="ltr" 
+                  className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white pl-10" 
+                  placeholder="mail@example.com" 
+                  {...register('email')} 
+                />
+                <Mail className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              </div>
+              {errors.email && <p className="text-red-500 text-xs font-medium">{errors.email.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-slate-700 font-medium">טלפון</Label>
+              <div className="relative">
+                <Input 
+                  type="tel" 
+                  dir="ltr" 
+                  className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white pl-10" 
+                  placeholder="050-0000000" 
+                  {...register('phone')} 
+                />
+                <Phone className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-700 font-medium">תעודת זהות / ח.פ</Label>
+            <div className="relative">
+              <Input 
+                dir="ltr" 
+                className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white pl-10" 
+                placeholder="000000000" 
+                {...register('id_number')} 
+              />
+              <IdCard className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-700 font-medium">כתובת מגורים / עסק</Label>
+            <div className="relative">
+              <Input 
+                className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white pr-10" 
+                placeholder="רחוב, עיר" 
+                {...register('address')} 
+              />
+              <MapPin className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-slate-700 font-medium">הערות</Label>
+            <Textarea 
+              className="min-h-[100px] border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white resize-y" 
+              placeholder="מידע נוסף, רגישויות, פרטים טכניים..." 
+              {...register('notes')} 
+            />
+          </div>
+
+          <div className="pt-6 mt-6 border-t border-slate-100 pb-8">
+            <Button type="submit" className="w-full h-11 gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 shadow-sm font-medium transition-all active:scale-[0.98]" disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              {loading ? 'יוצר לקוח ותיקיית Drive...' : 'צור לקוח'}
+              {loading ? 'מקים תיקיית לקוח ושומר נתונים...' : 'צור לקוח חדש'}
             </Button>
           </div>
         </form>
@@ -117,6 +183,7 @@ export function AddClientSheet() {
     </Sheet>
   )
 }
+
 
 
 

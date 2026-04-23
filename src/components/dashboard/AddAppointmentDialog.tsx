@@ -4,13 +4,13 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { CalendarClock, Loader2, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 const schema = z.object({
   title: z.string().min(2, 'נדרש שם פגישה'),
@@ -31,54 +31,101 @@ export function AddAppointmentDialog({ open, onClose }: Props) {
 
   async function onSubmit(data: FormData) {
     setLoading(true)
-    const supabase = createClient()
-    await (supabase.from('appointments') as any).insert({
-      title: data.title,
-      start_time: data.start_time,
-      end_time: data.end_time,
-      notes: data.notes,
-      status: 'scheduled',
-    })
-    setLoading(false)
-    reset()
-    onClose()
-    window.location.reload()
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        throw new Error('לא נמצא משתמש מחובר. נסה לרענן את העמוד.')
+      }
+
+      const { error } = await (supabase.from('appointments') as any).insert({
+        title: data.title,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        notes: data.notes,
+        status: 'scheduled',
+        employee_id: user.id, // Set employee to the current user
+      })
+
+      if (error) {
+        console.error('Supabase error:', error)
+        throw new Error(error.message || 'שגיאה בשמירת הפגישה במסד הנתונים')
+      }
+
+      toast.success('הפגישה נוצרה בהצלחה')
+      reset()
+      onClose()
+      window.location.reload()
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'אירעה שגיאה בלתי צפויה')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>פגישה חדשה</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
+        <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">
+          <SheetHeader>
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-2 shadow-sm border border-blue-200">
+              <CalendarClock className="w-5 h-5 text-blue-700" />
+            </div>
+            <SheetTitle className="text-xl font-bold text-slate-900">קביעת פגישה חדשה</SheetTitle>
+            <SheetDescription className="text-slate-500 text-sm">
+              הזן את פרטי הפגישה. זימון ישלח למשתתפים במידה ורלוונטי.
+            </SheetDescription>
+          </SheetHeader>
+        </div>
+        
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
           <div className="space-y-2">
-            <Label>נושא הפגישה</Label>
-            <Input placeholder="לדוגמה: פגישת ייעוץ ראשונית" {...register('title')} />
-            {errors.title && <p className="text-destructive text-xs">{errors.title.message}</p>}
+            <Label className="text-slate-700 font-medium">נושא הפגישה <span className="text-red-500">*</span></Label>
+            <Input 
+              className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" 
+              placeholder="לדוגמה: פגישת ייעוץ ראשונית" 
+              {...register('title')} 
+            />
+            {errors.title && <p className="text-red-500 text-xs font-medium">{errors.title.message}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>שעת התחלה</Label>
-              <Input type="datetime-local" dir="ltr" {...register('start_time')} />
+              <Label className="text-slate-700 font-medium">שעת התחלה <span className="text-red-500">*</span></Label>
+              <Input 
+                type="datetime-local" 
+                dir="ltr" 
+                className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" 
+                {...register('start_time')} 
+              />
+              {errors.start_time && <p className="text-red-500 text-xs font-medium">{errors.start_time.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label>שעת סיום</Label>
-              <Input type="datetime-local" dir="ltr" {...register('end_time')} />
+              <Label className="text-slate-700 font-medium">שעת סיום <span className="text-red-500">*</span></Label>
+              <Input 
+                type="datetime-local" 
+                dir="ltr" 
+                className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" 
+                {...register('end_time')} 
+              />
+              {errors.end_time && <p className="text-red-500 text-xs font-medium">{errors.end_time.message}</p>}
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>ביטול</Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="w-4 h-4 animate-spin me-2" />}
-              הוסף פגישה
+
+          <div className="pt-6 mt-6 border-t border-slate-100 pb-8">
+            <Button type="submit" disabled={loading} className="w-full h-11 gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 shadow-sm font-medium transition-all active:scale-[0.98]">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {loading ? 'שומר פגישה...' : 'שמור פגישה'}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
+
 
 
 

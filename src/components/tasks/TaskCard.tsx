@@ -42,7 +42,7 @@ export function TaskCard({ task, isOverlay }: Props) {
   }
 
   const pcfg = priorityConfig[task.priority]
-  const initials = task.profiles?.full_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) ?? '?'
+  const initials = (task as any).assigned_person?.full_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) ?? '?'
 
   return (
     <Card
@@ -61,9 +61,9 @@ export function TaskCard({ task, isOverlay }: Props) {
           <Badge className={cn("text-[10px] px-1.5 h-5 border-0", pcfg.color)}>
             {pcfg.label}
           </Badge>
-          {task.clients?.name && (
+          {(task as any).clients?.name && (
             <Badge variant="outline" className="text-[10px] px-1.5 h-5 truncate max-w-[100px] border-primary/20 text-primary">
-              {task.clients.name}
+              {(task as any).clients.name}
             </Badge>
           )}
         </div>
@@ -75,11 +75,11 @@ export function TaskCard({ task, isOverlay }: Props) {
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-1.5">
             <Avatar className="w-5 h-5 border border-background">
-              <AvatarImage src={task.profiles?.avatar_url ?? undefined} />
+              <AvatarImage src={(task as any).assigned_person?.avatar_url ?? undefined} />
               <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-black">{initials}</AvatarFallback>
             </Avatar>
             <span className="text-[10px] text-muted-foreground truncate max-w-[70px]">
-              {task.profiles?.full_name?.split(' ')[0]}
+              {(task as any).assigned_person?.full_name?.split(' ')[0]}
             </span>
           </div>
 

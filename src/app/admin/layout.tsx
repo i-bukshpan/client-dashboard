@@ -19,7 +19,10 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single()
 
-  if ((profile as any)?.role !== 'admin') redirect('/employee/dashboard')
+  const isAdminEmail = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
+  const role = isAdminEmail ? 'admin' : (profile as any)?.role
+
+  if (role !== 'admin') redirect('/employee/dashboard')
 
   // Fetch urgent alerts count (overdue tasks)
   const today = new Date().toISOString().split('T')[0]

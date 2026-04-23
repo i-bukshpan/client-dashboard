@@ -14,37 +14,43 @@ export async function createEmployee(formData: {
   email: string
   salary: number
 }) {
-  // 1. Create the user in Supabase Auth
-  // We generate a random password or a temporary one (e.g., ChangeMe123!)
-  const tempPassword = Math.random().toString(36).slice(-10) + 'Aa1!'
-  
-  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: formData.email,
-    password: tempPassword,
-    email_confirm: true, // Auto-confirm email
-    user_metadata: { full_name: formData.name, role: 'employee' }
-  })
+  // 1. Invite the user via Email
+  const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    formData.email,
+    { data: { full_name: formData.name, role: 'employee' } }
+  )
 
-  if (authError) {
-    console.error('Auth Error:', authError)
-    return { error: 'שגיאה ביצירת משתמש במערכת האימות' }
+  if (inviteError) {
+    console.error('Invite Error:', inviteError)
+    return { error: `שגיאה בשליחת הזמנה למייל: ${inviteError.message}` }
   }
 
+  if (!inviteData.user) {
+    return { error: 'לא התקבל משתמש ממערכת האימות' }
+  }
+
+  const authUser = inviteData.user;
+
   // 2. Update the profile (Trigger might handle this, but we ensure it)
+  // Use upsert to handle cases where the trigger didn't fire or failed
   const { error: profileError } = await supabaseAdmin
     .from('profiles')
-    .update({ 
+    .upsert({ 
+      id: authUser.id,
       full_name: formData.name,
+      email: formData.email,
       salary_base: formData.salary,
       role: 'employee'
     })
-    .eq('id', authUser.user.id)
 
   if (profileError) {
-    return { error: 'המשתמש נוצר אך חלה שגיאה בעדכון הפרופיל' }
+    console.error('Profile Error:', profileError)
+    // Rollback auth user creation if profile creation fails
+    await supabaseAdmin.auth.admin.deleteUser(authUser.id)
+    return { error: `המשתמש נוצר אך חלה שגיאה בעדכון הפרופיל: ${profileError.message}` }
   }
 
   revalidatePath('/admin/team')
-  return { success: true, tempPassword } // In real app, send this via email
+  return { success: true }
 }
 

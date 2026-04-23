@@ -50,7 +50,10 @@ export async function middleware(request: NextRequest) {
         .select('role')
         .eq('id', user.id)
         .single()
-      const dest = (profile as any)?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
+      
+      const isAdminEmail = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
+      const role = isAdminEmail ? 'admin' : (profile as any)?.role
+      const dest = role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
       return NextResponse.redirect(new URL(dest, request.url))
     }
     return supabaseResponse
@@ -61,29 +64,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Role-based guard
-  if (ADMIN_ONLY_ROUTES.some((r) => pathname.startsWith(r))) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    if ((profile as any)?.role !== 'admin') {
-      return NextResponse.redirect(new URL('/employee/dashboard', request.url))
-    }
-  }
-
-  // Employee trying to access admin area
+  // Role-based guard for all admin areas
   if (pathname.startsWith('/admin')) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
-    if ((profile as any)?.role !== 'admin') {
+    
+    // VIP Bypass for Admin Email (even if DB is empty or blocks access)
+    const isAdminEmail = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
+    const role = isAdminEmail ? 'admin' : (profile as any)?.role
+
+    if (role !== 'admin') {
       return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
   }
+
 
   return supabaseResponse
 }

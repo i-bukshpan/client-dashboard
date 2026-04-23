@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: 'מערכת ניהול עסקית מקצועית לנחמיה דרוק, יועץ פיננסי.',
 }
 
+import { Toaster } from 'sonner'
+
 export default function RootLayout({
   children,
 }: {
@@ -21,7 +23,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <Toaster position="bottom-left" richColors />
+      </body>
     </html>
   )
 }

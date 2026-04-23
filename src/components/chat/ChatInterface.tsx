@@ -12,22 +12,39 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   initialConversations: any[]
+  allEmployees: any[]
   currentUserId: string
   isAdmin: boolean
 }
 
-export function ChatInterface({ initialConversations, currentUserId, isAdmin }: Props) {
+export function ChatInterface({ initialConversations, allEmployees, currentUserId, isAdmin }: Props) {
   const [conversations, setConversations] = useState(initialConversations)
-  const [selectedConv, setSelectedConv] = useState(initialConversations[0] || null)
+  const [selectedConv, setSelectedConv] = useState<any | null>(initialConversations[0] || null)
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
+  // Generate virtual conversations for employees who don't have one yet
+  const displayList = isAdmin ? allEmployees.map(emp => {
+    const existing = conversations.find(c => c.employee_id === emp.id)
+    if (existing) return existing
+    return {
+      id: `new-${emp.id}`,
+      employee_id: emp.id,
+      admin_id: currentUserId,
+      profiles: emp,
+      isVirtual: true
+    }
+  }) : conversations
+
   // Load messages for selected conversation
   useEffect(() => {
-    if (!selectedConv) return
+    if (!selectedConv || selectedConv.isVirtual) {
+      setMessages([])
+      return
+    }
     const fetchMessages = async () => {
       const { data } = await supabase
         .from('chat_messages')
@@ -38,7 +55,6 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
     }
     fetchMessages()
 
-    // Real-time subscription
     const channel = supabase
       .channel(`chat:${selectedConv.id}`)
       .on(
@@ -55,19 +71,34 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
     }
   }, [selectedConv])
 
-  // Scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo(0, scrollRef.current.scrollHeight)
-    }
-  }, [messages])
-
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() || !selectedConv) return
 
+    let conversationId = selectedConv.id
+
+    // Create conversation if virtual
+    if (selectedConv.isVirtual) {
+      const { data: newConv, error: convError } = await (supabase.from('conversations') as any)
+        .insert({
+          admin_id: currentUserId,
+          employee_id: selectedConv.employee_id
+        })
+        .select()
+        .single()
+
+      if (convError) {
+        console.error('Error creating conversation:', convError)
+        return
+      }
+      conversationId = newConv.id
+      const fullConv = { ...newConv, profiles: selectedConv.profiles }
+      setConversations(prev => [...prev, fullConv])
+      setSelectedConv(fullConv)
+    }
+
     const { error } = await (supabase.from('chat_messages') as any).insert({
-      conversation_id: selectedConv.id,
+      conversation_id: conversationId,
       sender_id: currentUserId,
       content: newMessage,
     })
@@ -79,31 +110,33 @@ export function ChatInterface({ initialConversations, currentUserId, isAdmin }: 
     <div className="flex h-full">
       {/* Conversation List (Sidebar) */}
       <div className={cn("w-64 border-l border-border/50 flex flex-col bg-muted/20", !isAdmin && "hidden")}>
-        <div className="p-4 border-b border-border/50">
+        <div className="p-4 border-b border-border/50 bg-white/50">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input className="pr-9 h-9 text-xs" placeholder="חיפוש עובד..." />
+            <Input className="pr-9 h-9 text-xs border-slate-200 focus:ring-primary/20" placeholder="חיפוש עובד..." />
           </div>
         </div>
         <ScrollArea className="flex-1">
-          {conversations.map((conv) => (
+          {displayList.map((conv) => (
             <button
               key={conv.id}
               onClick={() => setSelectedConv(conv)}
               className={cn(
-                "w-full p-4 flex items-center gap-3 hover:bg-muted/50 transition-colors text-right border-b border-border/30",
-                selectedConv?.id === conv.id && "bg-white dark:bg-slate-900 border-l-4 border-l-primary"
+                "w-full p-4 flex items-center gap-3 hover:bg-white transition-all text-right border-b border-border/10",
+                selectedConv?.id === conv.id && "bg-white dark:bg-slate-900 border-l-4 border-l-primary shadow-sm"
               )}
             >
-              <Avatar className="w-10 h-10">
+              <Avatar className="w-10 h-10 border border-slate-100 shadow-sm">
                 <AvatarImage src={conv.profiles?.avatar_url} />
                 <AvatarFallback className="bg-primary/10 text-primary font-bold">
                   {conv.profiles?.full_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate">{conv.profiles?.full_name}</p>
-                <p className="text-xs text-muted-foreground truncate italic">לחץ לתחילת שיחה</p>
+                <p className="font-bold text-sm truncate text-slate-900">{conv.profiles?.full_name}</p>
+                <p className="text-[10px] text-muted-foreground truncate italic mt-0.5">
+                  {conv.isVirtual ? 'התחל שיחה חדשה' : 'צפה בשיחה'}
+                </p>
               </div>
             </button>
           ))}

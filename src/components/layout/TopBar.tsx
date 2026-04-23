@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -28,9 +29,13 @@ export function TopBar({ title, profile }: TopBarProps) {
     document.documentElement.classList.toggle('dark')
   }
 
+  // If profile is null, we assume it's the Admin VIP Bypass
+  const isVIPAdmin = !profile
+  const displayName = profile?.full_name || 'מנהל ראשי'
+  const roleDisplay = isVIPAdmin || (profile as any)?.role === 'admin' ? 'מנהל ראשי' : 'עובד'
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
-    : 'NA'
+    : 'מ'
 
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center px-6 gap-4 shrink-0">
@@ -66,30 +71,30 @@ export function TopBar({ title, profile }: TopBarProps) {
             <div role="button" className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-accent transition-colors cursor-pointer outline-none">
               <Avatar className="w-8 h-8">
                 <AvatarImage src={profile?.avatar_url ?? undefined} />
-                <AvatarFallback className="bg-blue-600 text-white text-xs font-bold">{initials}</AvatarFallback>
+                <AvatarFallback className="bg-slate-900 text-white text-xs font-bold">{initials}</AvatarFallback>
               </Avatar>
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-foreground leading-none">{profile?.full_name ?? 'מנהל'}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {(profile as any)?.role === 'admin' ? 'מנהל ראשי' : 'עובד'}
-                </p>
+                <p className="text-sm font-semibold text-foreground leading-none">{displayName}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{roleDisplay}</p>
               </div>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 mt-1">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">חשבון שלי</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2">
-              <User className="w-4 h-4" />
-              פרופיל
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2">
-              <Settings className="w-4 h-4" />
-              הגדרות
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">חשבון שלי</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {/* <DropdownMenuItem className="gap-2">
+                <User className="w-4 h-4" />
+                פרופיל
+              </DropdownMenuItem> */}
+              <DropdownMenuItem className="gap-2 text-slate-400 cursor-not-allowed">
+                <Settings className="w-4 h-4" />
+                הגדרות (בקרוב)
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="gap-2 text-destructive focus:text-destructive"
+              className="gap-2 text-destructive focus:text-destructive cursor-pointer"
               onClick={() => logout()}
             >
               <LogOut className="w-4 h-4" />
@@ -101,6 +106,7 @@ export function TopBar({ title, profile }: TopBarProps) {
     </header>
   )
 }
+
 
 
 

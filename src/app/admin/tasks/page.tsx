@@ -5,11 +5,16 @@ import { AddTaskDialog } from '@/components/tasks/AddTaskDialog'
 
 export const metadata = { title: 'משימות | Nehemiah OS' }
 
+export const dynamic = 'force-dynamic'
+
 export default async function TasksPage() {
   const supabase = await createClient()
 
   const [{ data: tasks }, { data: clients }, { data: employees }] = await Promise.all([
-    supabase.from('tasks').select('*, clients(id, name), profiles(id, full_name, avatar_url)').order('created_at', { ascending: false }),
+    supabase
+      .from('tasks')
+      .select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)')
+      .order('created_at', { ascending: false }),
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('profiles').select('id, full_name').order('full_name'),
   ])

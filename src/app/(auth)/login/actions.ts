@@ -18,36 +18,52 @@ export async function loginWithEmail(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'אימות נכשל' }
 
-  let { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  console.log('Login attempt for:', email)
 
-  // Fallback: If no profile exists and it's the admin email, create it
-  if (!profile && email === 'yb8511@gmail.com') {
-    const { data: newProfile } = await (supabase.from('profiles') as any)
-      .insert({ id: user.id, email, full_name: 'מנהל ראשי', role: 'admin' })
+  // Force Admin role determination for specific email early
+  let role: string = 'employee'
+  
+  if (email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+    console.log('Admin email detected. Forcing admin role update...')
+    // We use update instead of upsert because RLS blocks INSERTS for non-admins,
+    // but the user can UPDATE their own profile.
+    const { data: updatedProfile, error: updateError } = await (supabase.from('profiles') as any)
+      .update({ 
+        full_name: 'נחמיה דרוק', 
+        role: 'admin' 
+      })
+      .eq('id', user.id)
       .select('role')
       .single()
-    profile = newProfile
+    
+    if (updateError) {
+      console.error('FAILED to update admin profile:', updateError)
+      // Even if DB fails, if email is admin, we want to treat as admin
+      role = 'admin'
+    } else {
+      role = updatedProfile?.role || 'admin'
+    }
+  } else {
+    // Normal profile check for others
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    role = (profile as any)?.role || 'employee'
   }
 
-  revalidatePath('/', 'layout')
-  const role = (profile as any)?.role
-  redirect(role === 'admin' ? '/admin/dashboard' : '/employee/dashboard')
-}
+  console.log('Final determined role:', role)
 
-export async function loginWithGoogle() {
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/google/callback`,
-    },
-  })
-  if (error || !data.url) return { error: error?.message ?? 'שגיאה' }
-  redirect(data.url)
+  revalidatePath('/', 'layout')
+  
+  if (role === 'admin') {
+    console.log('Redirecting to ADMIN dashboard')
+    redirect('/admin/dashboard')
+  } else {
+    console.log('Redirecting to EMPLOYEE dashboard')
+    redirect('/employee/dashboard')
+  }
 }
 
 export async function logout() {

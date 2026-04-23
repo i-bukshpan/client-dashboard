@@ -4,10 +4,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, UserPlus, TrendingUp, DollarSign } from 'lucide-react'
-import { AddEmployeeDialog } from '@/components/team/AddEmployeeDialog'
+import { AddEmployeeSheet } from '@/components/team/AddEmployeeSheet'
 import { EmployeeSalaryCard } from '@/components/team/EmployeeSalaryCard'
 
 export const metadata = { title: 'ניהול צוות | Nehemiah OS' }
+
+export const dynamic = 'force-dynamic'
 
 export default async function TeamPage() {
   const supabase = await createClient()
@@ -33,7 +35,7 @@ export default async function TeamPage() {
             <p className="text-muted-foreground text-sm">ניהול עובדים ומשכורות</p>
           </div>
         </div>
-        <AddEmployeeDialog />
+        <AddEmployeeSheet />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -72,4 +74,5 @@ export default async function TeamPage() {
     </div>
   )
 }
+
 
