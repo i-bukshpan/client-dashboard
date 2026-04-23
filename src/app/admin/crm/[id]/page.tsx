@@ -29,10 +29,11 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
     supabase.from('income').select('*').eq('client_id', id).order('date', { ascending: false })
   ])
 
-  if (!client) notFound()
+  const clientObj = client as any
+  if (!clientObj) notFound()
 
   const totalRevenue = (income as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
-  const initials = client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
+  const initials = clientObj.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
 
   return (
     <div className="space-y-6">
@@ -40,7 +41,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/admin/crm" className="hover:text-primary transition-colors">ניהול לקוחות</Link>
         <ArrowRight className="w-4 h-4 rotate-180" />
-        <span className="text-foreground font-medium">{client.name}</span>
+        <span className="text-foreground font-medium">{clientObj.name}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -56,7 +57,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
                   </AvatarFallback>
                 </Avatar>
               </div>
-              <h2 className="text-2xl font-bold text-slate-900">{client.name}</h2>
+              <h2 className="text-2xl font-bold text-slate-900">{clientObj.name}</h2>
               <p className="text-sm text-muted-foreground mt-1">לקוח רשום</p>
               
               <div className="mt-6 grid grid-cols-2 gap-4">
@@ -67,40 +68,40 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">משימות פתוחות</p>
                   <p className="text-lg font-bold text-blue-600">
-                    {tasks?.filter(t => t.status !== 'done').length ?? 0}
+                    {(tasks as any[])?.filter(t => t.status !== 'done').length ?? 0}
                   </p>
                 </div>
               </div>
             </CardContent>
             <div className="p-4 bg-slate-50/50 border-t border-slate-100 space-y-3">
-              {client.email && (
+              {clientObj.email && (
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <Mail className="w-4 h-4 text-slate-400" />
-                  <span dir="ltr">{client.email}</span>
+                  <span dir="ltr">{clientObj.email}</span>
                 </div>
               )}
-              {client.phone && (
+              {clientObj.phone && (
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <Phone className="w-4 h-4 text-slate-400" />
-                  <span dir="ltr">{client.phone}</span>
+                  <span dir="ltr">{clientObj.phone}</span>
                 </div>
               )}
-              {client.id_number && (
+              {clientObj.id_number && (
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <Users className="w-4 h-4 text-slate-400" />
-                  <span>ת.ז. {client.id_number}</span>
+                  <span>ת.ז. {clientObj.id_number}</span>
                 </div>
               )}
-              {client.address && (
+              {clientObj.address && (
                 <div className="flex items-center gap-3 text-sm text-slate-600">
                   <MapPin className="w-4 h-4 text-slate-400" />
-                  <span>{client.address}</span>
+                  <span>{clientObj.address}</span>
                 </div>
               )}
             </div>
           </Card>
 
-          {client.drive_folder_id && (
+          {clientObj.drive_folder_id && (
             <Card className="border-blue-100 bg-blue-50/30 overflow-hidden group cursor-pointer hover:bg-blue-50 transition-colors">
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
