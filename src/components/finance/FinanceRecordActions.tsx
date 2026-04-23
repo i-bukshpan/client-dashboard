@@ -41,7 +41,7 @@ export function FinanceRecordActions({ id, type }: Props) {
   }
 
   return (
-    <DropdownMenu dir="rtl">
+    <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-100">
           <MoreHorizontal className="h-4 w-4 text-slate-400" />
