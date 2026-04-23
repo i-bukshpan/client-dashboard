@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   initialConversations: any[]
-  allEmployees: any[]
+  allEmployees?: any[]
   currentUserId: string
   isAdmin: boolean
 }
@@ -27,7 +27,7 @@ export function ChatInterface({ initialConversations, allEmployees, currentUserI
   const supabase = createClient()
 
   // Generate virtual conversations for employees who don't have one yet
-  const displayList = isAdmin ? allEmployees.map(emp => {
+  const displayList = isAdmin ? (allEmployees || []).map(emp => {
     const existing = conversations.find(c => c.employee_id === emp.id)
     if (existing) return existing
     return {
