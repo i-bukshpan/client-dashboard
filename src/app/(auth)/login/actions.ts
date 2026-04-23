@@ -18,11 +18,21 @@ export async function loginWithEmail(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'אימות נכשל' }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .single()
+
+  // Fallback: If no profile exists and it's the admin email, create it
+  if (!profile && email === 'yb8511@gmail.com') {
+    const { data: newProfile } = await supabase
+      .from('profiles')
+      .insert({ id: user.id, email, full_name: 'מנהל ראשי', role: 'admin' })
+      .select('role')
+      .single()
+    profile = newProfile
+  }
 
   revalidatePath('/', 'layout')
   const role = (profile as any)?.role
