@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { UserPlus, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { createEmployee } from '@/app/(admin)/team/actions'
 import { toast } from 'sonner'
 
 export function AddEmployeeDialog() {
