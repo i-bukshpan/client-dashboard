@@ -8,8 +8,6 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Users, Plus, Mail, Phone, FolderOpen } from 'lucide-react'
 import { AddClientSheet } from '@/components/crm/AddClientSheet'
 
-import { InviteClientButton } from '@/components/crm/InviteClientButton'
-
 export const metadata = { title: 'לקוחות (CRM) | Nehemiah OS' }
 
 export default async function CRMPage() {
@@ -85,16 +83,10 @@ export default async function CRMPage() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                     <Link href={`/admin/crm/${client.id}`}>
-                      <Button variant="ghost" size="sm" className="text-xs h-8 text-slate-500 hover:text-primary">
+                      <Button variant="ghost" size="sm" className="text-xs h-8 text-slate-500 hover:text-primary w-full text-right">
                         צפה בפרופיל
                       </Button>
                     </Link>
-                    <InviteClientButton 
-                      clientId={client.id} 
-                      email={client.email} 
-                      name={client.name} 
-                      isInvited={!!client.user_id}
-                    />
                   </div>
                 </CardContent>
               </Card>

@@ -34,7 +34,7 @@ export function AddEmployeeSheet() {
     if (res.error) {
       toast.error(res.error)
     } else {
-      toast.success(`העובד נוצר בהצלחה! סיסמה זמנית: ${res.tempPassword}`)
+      toast.success('הזמנה נשלחה למייל של העובד בהצלחה!')
       setOpen(false)
       window.location.reload()
     }
