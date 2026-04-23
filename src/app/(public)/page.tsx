@@ -43,9 +43,11 @@ export default function LandingPage() {
             מערכת ה-OS של נחמיה דרוק מעניקה שליטה מלאה על לקוחות, משימות, צוות ותזרים מזומנים – הכל במקום אחד, מאובטח ומסונכרן בזמן אמת.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button size="lg" className="rounded-full px-10 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-500 shadow-xl shadow-blue-600/30 gap-2">
-              לכניסה למערכת
-              <ChevronLeft className="w-5 h-5" />
+            <Button size="lg" asChild className="rounded-full px-10 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-500 shadow-xl shadow-blue-600/30 gap-2">
+              <Link href="/login">
+                לכניסה למערכת
+                <ChevronLeft className="w-5 h-5" />
+              </Link>
             </Button>
             <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-lg font-bold border-slate-200">
               איך זה עובד?
