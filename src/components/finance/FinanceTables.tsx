@@ -19,22 +19,24 @@ interface Props {
   expenses: Expense[]
 }
 
+import { FinanceRecordActions } from './FinanceRecordActions'
+
 export function FinanceTables({ income, expenses }: Props) {
   return (
-    <Card className="border-border/50 shadow-sm">
+    <Card className="border-border/50 shadow-sm overflow-hidden">
       <CardContent className="p-0">
         <Tabs defaultValue="income">
-          <div className="flex items-center justify-between px-4 border-b border-border/50">
+          <div className="flex items-center justify-between px-4 border-b border-border/50 bg-slate-50/50">
             <TabsList className="bg-transparent h-12 gap-6">
               <TabsTrigger
                 value="income"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs"
               >
                 פירוט הכנסות
               </TabsTrigger>
               <TabsTrigger
                 value="expenses"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs"
               >
                 פירוט הוצאות
               </TabsTrigger>
@@ -43,25 +45,29 @@ export function FinanceTables({ income, expenses }: Props) {
 
           <TabsContent value="income" className="m-0">
             <Table>
-              <TableHeader className="bg-muted/30">
+              <TableHeader className="bg-slate-50/50">
                 <TableRow>
-                  <TableHead>תאריך</TableHead>
+                  <TableHead className="w-[100px]">תאריך</TableHead>
                   <TableHead>לקוח</TableHead>
                   <TableHead>קטגוריה</TableHead>
                   <TableHead>הערות</TableHead>
                   <TableHead className="text-left">סכום</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {income.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="text-xs">{format(new Date(row.date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="font-medium">{row.clients?.name ?? '—'}</TableCell>
+                  <TableRow key={row.id} className="group hover:bg-slate-50/50 transition-colors">
+                    <TableCell className="text-[11px] text-slate-500">{format(new Date(row.date), 'dd/MM/yyyy')}</TableCell>
+                    <TableCell className="font-bold text-slate-900">{row.clients?.name ?? '—'}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="text-[10px]">{row.category}</Badge>
+                      <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-100">{row.category}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground truncate max-w-[150px]">{row.notes}</TableCell>
-                    <TableCell className="text-left font-bold text-emerald-600">₪{Number(row.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-left font-black text-emerald-600">₪{Number(row.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-left">
+                      <FinanceRecordActions id={row.id} type="income" />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -70,23 +76,27 @@ export function FinanceTables({ income, expenses }: Props) {
 
           <TabsContent value="expenses" className="m-0">
             <Table>
-              <TableHeader className="bg-muted/30">
+              <TableHeader className="bg-slate-50/50">
                 <TableRow>
-                  <TableHead>תאריך</TableHead>
+                  <TableHead className="w-[100px]">תאריך</TableHead>
                   <TableHead>קטגוריה</TableHead>
                   <TableHead>הערות</TableHead>
                   <TableHead className="text-left">סכום</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {expenses.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="text-xs">{format(new Date(row.date), 'dd/MM/yyyy')}</TableCell>
+                  <TableRow key={row.id} className="group hover:bg-slate-50/50 transition-colors">
+                    <TableCell className="text-[11px] text-slate-500">{format(new Date(row.date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] border-red-200 text-red-700">{row.category}</Badge>
+                      <Badge variant="outline" className="text-[10px] border-red-200 text-red-700 bg-red-50">{row.category}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">{row.notes}</TableCell>
-                    <TableCell className="text-left font-bold text-red-600">₪{Number(row.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-left font-black text-red-600">₪{Number(row.amount).toLocaleString()}</TableCell>
+                    <TableCell className="text-left">
+                      <FinanceRecordActions id={row.id} type="expenses" />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

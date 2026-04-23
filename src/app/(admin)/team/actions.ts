@@ -54,3 +54,17 @@ export async function createEmployee(formData: {
   return { success: true }
 }
 
+export async function inviteExistingEmployee(email: string, name: string) {
+  const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    email,
+    { data: { full_name: name, role: 'employee' } }
+  )
+
+  if (inviteError) {
+    console.error('Invite Error:', inviteError)
+    return { error: `שגיאה בשליחת הזמנה: ${inviteError.message}` }
+  }
+
+  return { success: true }
+}
+
