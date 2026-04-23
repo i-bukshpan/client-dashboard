@@ -31,7 +31,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
 
   if (!client) notFound()
 
-  const totalRevenue = income?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
+  const totalRevenue = (income as any[])?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
   const initials = client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
 
   return (
@@ -129,11 +129,11 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {!tasks || tasks.length === 0 ? (
+              {!(tasks as any[]) || (tasks as any[]).length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground text-sm italic">אין משימות משויכות ללקוח זה.</div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {tasks.map((task) => (
+                  {(tasks as any[]).map((task) => (
                     <div key={task.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className={cn(
@@ -164,7 +164,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
               </CardHeader>
               <CardContent className="p-4">
                 <div className="space-y-4">
-                  {appts?.slice(0, 3).map((appt) => (
+                  {(appts as any[])?.slice(0, 3).map((appt) => (
                     <div key={appt.id} className="flex gap-3">
                       <div className="w-1 bg-amber-200 rounded-full" />
                       <div>
@@ -173,7 +173,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
                       </div>
                     </div>
                   ))}
-                  {(!appts || appts.length === 0) && <p className="text-xs text-muted-foreground italic text-center py-2">אין פגישות רשומות</p>}
+                  {(!(appts as any[]) || (appts as any[]).length === 0) && <p className="text-xs text-muted-foreground italic text-center py-2">אין פגישות רשומות</p>}
                 </div>
               </CardContent>
             </Card>
@@ -187,7 +187,7 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
               </CardHeader>
               <CardContent className="p-4">
                 <div className="space-y-4">
-                  {income?.slice(0, 3).map((inc) => (
+                  {(income as any[])?.slice(0, 3).map((inc) => (
                     <div key={inc.id} className="flex justify-between items-center">
                       <div>
                         <p className="text-xs font-bold text-slate-800">{inc.category}</p>
