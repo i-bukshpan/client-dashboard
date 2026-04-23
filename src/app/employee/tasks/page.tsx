@@ -8,11 +8,14 @@ export default async function EmployeeTasksPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: tasks } = await supabase
-    .from('tasks')
-    .select('*, clients(id, name), profiles(id, full_name, avatar_url)')
-    .eq('assigned_to', user!.id)
-    .order('created_at', { ascending: false })
+  const [{ data: tasks }, { data: employees }] = await Promise.all([
+    supabase
+      .from('tasks')
+      .select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)')
+      .eq('assigned_to', user!.id)
+      .order('created_at', { ascending: false }),
+    supabase.from('profiles').select('id, full_name').eq('role', 'employee').order('full_name')
+  ])
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -27,7 +30,7 @@ export default async function EmployeeTasksPage() {
       </div>
 
       <div className="flex-1 min-h-0">
-        <KanbanBoard initialTasks={(tasks as any[]) ?? []} />
+        <KanbanBoard initialTasks={(tasks as any[]) ?? []} employees={(employees as any[]) ?? []} />
       </div>
     </div>
   )
