@@ -67,12 +67,8 @@ export interface Task {
   archived: boolean | null
   created_by: string
   created_at: string
-}
-
-export interface TaskWithJoins extends Task {
   clients?: Pick<Client, 'id' | 'name'>
   profiles?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
-  task_updates?: { count: number }[]
 }
 
 export interface TaskUpdate {
@@ -131,24 +127,95 @@ export interface EmployeeBonus {
   created_by: string
 }
 
-// Supabase Database generic type
-export type Database = {
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Partial<Profile>; Update: Partial<Profile> }
-      clients: { Row: Client; Insert: Partial<Client>; Update: Partial<Client> }
-      appointments: { Row: Appointment; Insert: Partial<Appointment>; Update: Partial<Appointment> }
-      meeting_summaries: { Row: MeetingSummary; Insert: Partial<MeetingSummary>; Update: Partial<MeetingSummary> }
-      tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task> }
-      task_updates: { Row: TaskUpdate; Insert: Partial<TaskUpdate>; Update: Partial<TaskUpdate> }
-      income: { Row: Income; Insert: Partial<Income>; Update: Partial<Income> }
-      expenses: { Row: Expense; Insert: Partial<Expense>; Update: Partial<Expense> }
-      chat_messages: { Row: ChatMessage; Insert: Partial<ChatMessage>; Update: Partial<ChatMessage> }
-      conversations: { Row: Conversation; Insert: Partial<Conversation>; Update: Partial<Conversation> }
-      employee_bonuses: { Row: EmployeeBonus; Insert: Partial<EmployeeBonus>; Update: Partial<EmployeeBonus> }
+      profiles: {
+        Row: Profile
+        Insert: Partial<Omit<Profile, 'never'>>
+        Update: Partial<Omit<Profile, 'never'>>
+        Relationships: []
+      }
+      clients: {
+        Row: Client
+        Insert: Partial<Omit<Client, 'never'>>
+        Update: Partial<Omit<Client, 'never'>>
+        Relationships: []
+      }
+      appointments: {
+        Row: Appointment
+        Insert: Partial<Omit<Appointment, 'clients' | 'profiles'>>
+        Update: Partial<Omit<Appointment, 'clients' | 'profiles'>>
+        Relationships: []
+      }
+      meeting_summaries: {
+        Row: MeetingSummary
+        Insert: Partial<Omit<MeetingSummary, 'never'>>
+        Update: Partial<Omit<MeetingSummary, 'never'>>
+        Relationships: []
+      }
+      tasks: {
+        Row: Task
+        Insert: Partial<Omit<Task, 'clients' | 'profiles'>>
+        Update: Partial<Omit<Task, 'clients' | 'profiles'>>
+        Relationships: []
+      }
+      task_updates: {
+        Row: TaskUpdate
+        Insert: Partial<Omit<TaskUpdate, 'profiles'>>
+        Update: Partial<Omit<TaskUpdate, 'profiles'>>
+        Relationships: []
+      }
+      income: {
+        Row: Income
+        Insert: Partial<Omit<Income, 'clients'>>
+        Update: Partial<Omit<Income, 'clients'>>
+        Relationships: []
+      }
+      expenses: {
+        Row: Expense
+        Insert: Partial<Omit<Expense, 'never'>>
+        Update: Partial<Omit<Expense, 'never'>>
+        Relationships: []
+      }
+      chat_messages: {
+        Row: ChatMessage
+        Insert: Partial<Omit<ChatMessage, 'profiles'>>
+        Update: Partial<Omit<ChatMessage, 'profiles'>>
+        Relationships: []
+      }
+      conversations: {
+        Row: Conversation
+        Insert: Partial<Omit<Conversation, 'profiles'>>
+        Update: Partial<Omit<Conversation, 'profiles'>>
+        Relationships: []
+      }
+      employee_bonuses: {
+        Row: EmployeeBonus
+        Insert: Partial<Omit<EmployeeBonus, 'never'>>
+        Update: Partial<Omit<EmployeeBonus, 'never'>>
+        Relationships: []
+      }
     }
-    Views: { [_ in never]: never }
-    Functions: { [_ in never]: never }
-    Enums: { [_ in never]: never }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
