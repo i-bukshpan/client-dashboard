@@ -64,6 +64,7 @@ export interface Task {
   due_date: string | null
   assigned_to: string | null
   client_id: string | null
+  archived: boolean | null
   created_by: string
   created_at: string
   clients?: Pick<Client, 'id' | 'name'>

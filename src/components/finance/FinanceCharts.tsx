@@ -16,6 +16,7 @@ import {
 import type { Income, Expense } from '@/types/database'
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
 import { he } from 'date-fns/locale'
+import { useState, useEffect } from 'react'
 
 interface Props {
   income: Income[]
@@ -23,6 +24,12 @@ interface Props {
 }
 
 export function FinanceCharts({ income, expenses }: Props) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Generate last 6 months data
   const data = Array.from({ length: 6 }).map((_, i) => {
     const monthDate = subMonths(new Date(), 5 - i)
@@ -51,6 +58,13 @@ export function FinanceCharts({ income, expenses }: Props) {
     }
   })
 
+  if (!mounted) return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <Card className="h-[400px] bg-muted/20 animate-pulse border-border/50" />
+      <Card className="h-[400px] bg-muted/20 animate-pulse border-border/50" />
+    </div>
+  )
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <Card className="border-border/50 shadow-sm">
@@ -58,8 +72,8 @@ export function FinanceCharts({ income, expenses }: Props) {
           <CardTitle className="text-base">הכנסות מול הוצאות</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full" style={{ minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
@@ -88,8 +102,8 @@ export function FinanceCharts({ income, expenses }: Props) {
           <CardTitle className="text-base">מגמת רווחיות</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full" style={{ minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
@@ -120,6 +134,3 @@ export function FinanceCharts({ income, expenses }: Props) {
     </div>
   )
 }
-
-
-

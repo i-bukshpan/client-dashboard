@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   DndContext,
   closestCorners,
@@ -10,6 +10,7 @@ import {
   useSensors,
   DragOverlay,
   defaultDropAnimationSideEffects,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -19,11 +20,13 @@ import {
 } from '@dnd-kit/sortable'
 import { TaskCard } from './TaskCard'
 import { TaskDetailSheet } from './TaskDetailSheet'
-import { createClient } from '@/lib/supabase/client'
+import { updateTask } from '@/app/(admin)/tasks/actions'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useRouter } from 'next/navigation'
+import { Archive } from 'lucide-react'
+import { format } from 'date-fns'
 
 interface Props {
   initialTasks: any[]
@@ -41,7 +44,16 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
   const [activeTask, setActiveTask] = useState<any | null>(null)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    setTasks(initialTasks)
+  }, [initialTasks])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -79,8 +91,7 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
 
     if (task.status !== newStatus && ['todo', 'in_progress', 'done'].includes(newStatus)) {
       setTasks((prev) => prev.map((t) => (t.id === activeId ? { ...t, status: newStatus } : t)))
-      const supabase = createClient()
-      await (supabase.from('tasks') as any).update({ status: newStatus }).eq('id', activeId)
+      await updateTask(activeId, { status: newStatus })
     }
   }
 
@@ -88,8 +99,13 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
     // Optional: handle visual reordering within columns
   }
 
+  if (!mounted) return <div className="flex-1 bg-slate-50/30 animate-pulse rounded-2xl" />
+
+  const boardTasks = tasks.filter(t => !t.archived)
+  const archivedTasks = tasks.filter(t => t.archived)
+
   return (
-    <div className="flex-1 overflow-x-auto min-h-0 pb-4 scrollbar-thin scrollbar-thumb-slate-200">
+    <div className="flex-1 overflow-y-auto min-h-0 pb-10 scrollbar-thin scrollbar-thumb-slate-200">
       <DndContext 
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -97,29 +113,14 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-6 h-full min-w-max px-1">
+        <div className="flex gap-6 h-[600px] min-w-max px-1 mb-10">
           {COLUMNS.map(col => (
-            <div key={col.id} className="w-80 flex flex-col bg-slate-50/50 rounded-2xl border border-slate-200/50 shadow-sm">
-              <div className="p-4 flex items-center justify-between border-b border-slate-200/50 bg-white/50 rounded-t-2xl">
-                <div className="flex items-center gap-2">
-                  <div className={cn("w-2 h-2 rounded-full", col.color)} />
-                  <h3 className="font-bold text-slate-800">{col.label}</h3>
-                  <Badge variant="secondary" className="bg-slate-100 text-slate-500 text-[10px] font-bold">
-                    {tasks.filter(t => t.status === col.id).length}
-                  </Badge>
-                </div>
-              </div>
-              
-              <ScrollArea className="flex-1 p-3">
-                <SortableContext items={tasks.filter(t => t.status === col.id).map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-3 pb-4">
-                    {tasks.filter(t => t.status === col.id).map(task => (
-                      <TaskCard key={task.id} task={task} onEdit={handleEdit} />
-                    ))}
-                  </div>
-                </SortableContext>
-              </ScrollArea>
-            </div>
+            <DroppableColumn 
+              key={col.id} 
+              col={col} 
+              tasks={boardTasks.filter(t => t.status === col.id)} 
+              onEdit={handleEdit} 
+            />
           ))}
         </div>
 
@@ -132,6 +133,62 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
         </DragOverlay>
       </DndContext>
 
+      {archivedTasks.length > 0 && (
+        <div className="mt-12 space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+              <Archive className="w-4 h-4 text-slate-500" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-lg">ארכיון משימות</h3>
+            <Badge variant="secondary" className="bg-slate-100 text-slate-500 text-xs font-bold">
+              {archivedTasks.length}
+            </Badge>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-right text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="p-4 font-bold text-slate-700">משימה</th>
+                  <th className="p-4 font-bold text-slate-700">סטטוס</th>
+                  <th className="p-4 font-bold text-slate-700">לקוח</th>
+                  <th className="p-4 font-bold text-slate-700">אחראי</th>
+                  <th className="p-4 font-bold text-slate-700">תאריך יעד</th>
+                  <th className="p-4 font-bold text-slate-700"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {archivedTasks.map(task => (
+                  <tr key={task.id} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => handleEdit(task)}>
+                    <td className="p-4">
+                      <div className="font-bold text-slate-900">{task.title}</div>
+                      {task.description && <div className="text-[11px] text-slate-400 truncate max-w-xs">{task.description}</div>}
+                    </td>
+                    <td className="p-4">
+                      <Badge variant="outline" className="text-[10px] font-medium border-slate-200">
+                        {COLUMNS.find(c => c.id === task.status)?.label}
+                      </Badge>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-slate-600 font-medium">{task.clients?.name || '-'}</span>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-slate-600 font-medium">{task.assigned_person?.full_name || '-'}</span>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-slate-500">{task.due_date ? format(new Date(task.due_date), 'dd/MM/yyyy') : '-'}</span>
+                    </td>
+                    <td className="p-4">
+                      <button className="text-blue-600 hover:text-blue-700 font-bold text-xs">פרטים</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {selectedTask && (
         <TaskDetailSheet
           task={selectedTask}
@@ -141,6 +198,39 @@ export function KanbanBoard({ initialTasks, employees }: Props) {
           employees={employees}
         />
       )}
+    </div>
+  )
+}
+
+function DroppableColumn({ col, tasks, onEdit }: { col: any, tasks: any[], onEdit: (t: any) => void }) {
+  const { setNodeRef } = useDroppable({
+    id: col.id,
+  })
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      className="w-80 flex flex-col bg-slate-50/50 rounded-2xl border border-slate-200/50 shadow-sm"
+    >
+      <div className="p-4 flex items-center justify-between border-b border-slate-200/50 bg-white/50 rounded-t-2xl">
+        <div className="flex items-center gap-2">
+          <div className={cn("w-2 h-2 rounded-full", col.color)} />
+          <h3 className="font-bold text-slate-800">{col.label}</h3>
+          <Badge variant="secondary" className="bg-slate-100 text-slate-500 text-[10px] font-bold">
+            {tasks.length}
+          </Badge>
+        </div>
+      </div>
+      
+      <ScrollArea className="flex-1 p-3">
+        <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3 pb-4 min-h-[150px]">
+            {tasks.map(task => (
+              <TaskCard key={task.id} task={task} onEdit={onEdit} />
+            ))}
+          </div>
+        </SortableContext>
+      </ScrollArea>
     </div>
   )
 }

@@ -9,9 +9,10 @@ import {
   SheetTrigger,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Loader2, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -28,8 +29,8 @@ export function AddTaskDialog({ clients, employees }: Props) {
   const [form, setForm] = useState({
     title: '',
     priority: 'medium',
-    client_id: '',
-    assigned_to: '',
+    client_id: null as string | null,
+    assigned_to: null as string | null,
     due_date: '',
   })
 
@@ -47,8 +48,8 @@ export function AddTaskDialog({ clients, employees }: Props) {
       const { error } = await (supabase.from('tasks') as any).insert({
         title: form.title,
         priority: form.priority as any,
-        client_id: form.client_id || null,
-        assigned_to: form.assigned_to || null,
+        client_id: form.client_id,
+        assigned_to: form.assigned_to,
         due_date: form.due_date || null,
         created_by: user.id,
         status: 'todo',
@@ -72,11 +73,9 @@ export function AddTaskDialog({ clients, employees }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button className="gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-lg">
-          <Plus className="w-4 h-4" />
-          משימה חדשה
-        </Button>
+      <SheetTrigger className={cn(buttonVariants({ variant: 'default' }), "gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-lg")}>
+        <Plus className="w-4 h-4" />
+        משימה חדשה
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
         <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">
@@ -111,7 +110,12 @@ export function AddTaskDialog({ clients, employees }: Props) {
                 onValueChange={(v: any) => setForm({ ...form, priority: v })}
               >
                 <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
-                  <SelectValue placeholder="בחר עדיפות" />
+                  <SelectValue placeholder="בחר עדיפות">
+                  {(val) => {
+                    const map: any = { low: "נמוכה", medium: "בינונית", high: "גבוהה", urgent: "דחופה" };
+                    return map[val] || "בחר עדיפות";
+                  }}
+                </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">נמוכה</SelectItem>
@@ -136,13 +140,16 @@ export function AddTaskDialog({ clients, employees }: Props) {
           <div className="space-y-2">
             <Label className="text-slate-700 font-medium">שיוך ללקוח (אופציונלי)</Label>
             <Select 
-              value={form.client_id} 
-              onValueChange={(v: any) => setForm({ ...form, client_id: v })}
+              value={form.client_id ?? ''} 
+              onValueChange={(v: any) => setForm({ ...form, client_id: v || null })}
             >
               <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
-                <SelectValue placeholder="בחר לקוח" />
+                <SelectValue placeholder="בחר לקוח">
+                  {(val) => clients.find(c => c.id === val)?.name || "בחר לקוח"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="">ללא / כללי</SelectItem>
                 {clients.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -153,13 +160,16 @@ export function AddTaskDialog({ clients, employees }: Props) {
           <div className="space-y-2">
             <Label className="text-slate-700 font-medium">אחראי לביצוע</Label>
             <Select 
-              value={form.assigned_to} 
-              onValueChange={(v: any) => setForm({ ...form, assigned_to: v })}
+              value={form.assigned_to ?? ''} 
+              onValueChange={(v: any) => setForm({ ...form, assigned_to: v || null })}
             >
               <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
-                <SelectValue placeholder="בחר עובד" />
+                <SelectValue placeholder="בחר עובד">
+                  {(val) => employees.find(e => e.id === val)?.full_name || "בחר עובד"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="">ללא / לא משויך</SelectItem>
                 {employees.map((e) => (
                   <SelectItem key={e.id} value={e.id}>{e.full_name}</SelectItem>
                 ))}

@@ -13,7 +13,7 @@ export default async function TasksPage() {
   const [{ data: tasks }, { data: clients }, { data: employees }] = await Promise.all([
     supabase
       .from('tasks')
-      .select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)')
+      .select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url), task_updates(count)')
       .order('created_at', { ascending: false }),
     supabase.from('clients').select('id, name').order('name'),
     supabase.from('profiles').select('id, full_name').order('full_name'),

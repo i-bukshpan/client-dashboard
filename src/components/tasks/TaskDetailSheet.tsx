@@ -15,9 +15,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createClient } from '@/lib/supabase/client'
+import { archiveTask, updateTask, deleteTask, addTaskComment, getTaskComments } from '@/app/(admin)/tasks/actions'
 import { toast } from 'sonner'
-import { Loader2, Trash2, CheckCircle2 } from 'lucide-react'
+import { Loader2, Trash2, CheckCircle2, MessageSquare, Send, Archive } from 'lucide-react'
+import { useEffect } from 'react'
+import { format } from 'date-fns'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 const schema = z.object({
   title: z.string().min(1, 'כותרת נדרשת'),
@@ -41,6 +44,35 @@ interface Props {
 export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees }: Props) {
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [comments, setComments] = useState<any[]>([])
+  const [newComment, setNewComment] = useState('')
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false)
+
+  useEffect(() => {
+    if (open && task.id) {
+      fetchComments()
+    }
+  }, [open, task.id])
+
+  async function fetchComments() {
+    setIsCommentsLoading(true)
+    const res = await getTaskComments(task.id)
+    if (res.data) setComments(res.data)
+    setIsCommentsLoading(false)
+  }
+
+  async function handleAddComment() {
+    if (!newComment.trim()) return
+    setLoading(true)
+    const res = await addTaskComment(task.id, newComment)
+    if (res.error) {
+      toast.error(res.error)
+    } else {
+      setNewComment('')
+      fetchComments()
+    }
+    setLoading(false)
+  }
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -56,43 +88,50 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
 
   async function onSubmit(data: FormData) {
     setLoading(true)
-    try {
-      const supabase = createClient()
-      const { error } = await (supabase.from('tasks') as any).update({
-        title: data.title,
-        description: data.description || null,
-        status: data.status,
-        priority: data.priority,
-        due_date: data.due_date || null,
-        assigned_to: data.assigned_to || null,
-      }).eq('id', task.id)
+    const res = await updateTask(task.id, {
+      title: data.title,
+      description: data.description || null,
+      status: data.status,
+      priority: data.priority,
+      due_date: data.due_date || null,
+      assigned_to: data.assigned_to || null,
+    })
 
-      if (error) throw error
+    if (res.error) {
+      toast.error(res.error)
+    } else {
       toast.success('משימה עודכנה בהצלחה')
       onUpdated()
       onOpenChange(false)
-    } catch (err: any) {
-      toast.error('שגיאה בעדכון המשימה: ' + err.message)
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   async function onDelete() {
     if (!confirm('האם אתה בטוח שברצונך למחוק משימה זו?')) return
     setDeleting(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.from('tasks').delete().eq('id', task.id)
-      if (error) throw error
+    const res = await deleteTask(task.id)
+    if (res.error) {
+      toast.error(res.error)
+    } else {
       toast.success('משימה נמחקה')
       onUpdated()
       onOpenChange(false)
-    } catch (err: any) {
-      toast.error('שגיאה במחיקת המשימה')
-    } finally {
-      setDeleting(false)
     }
+    setDeleting(false)
+  }
+
+  async function onArchive() {
+    setLoading(true)
+    const res = await archiveTask(task.id, !task.archived)
+    if (res.error) {
+      toast.error(res.error)
+    } else {
+      toast.success(task.archived ? 'משימה הוחזרה מהארכיון' : 'משימה הועברה לארכיון')
+      onUpdated()
+      onOpenChange(false)
+    }
+    setLoading(false)
   }
 
   return (
@@ -102,9 +141,14 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
           <SheetHeader>
             <div className="flex items-center justify-between">
               <SheetTitle className="text-xl font-bold text-slate-900">עריכת משימה</SheetTitle>
-              <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={onDelete} disabled={deleting}>
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={onArchive} disabled={loading}>
+                  <Archive className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={onDelete} disabled={deleting}>
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
           </SheetHeader>
         </div>
@@ -130,7 +174,12 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
               <Label className="text-slate-700 font-medium">סטטוס</Label>
               <Select value={watch('status')} onValueChange={(v: any) => setValue('status', v)}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
-                  <SelectValue />
+                  <SelectValue placeholder="סטטוס">
+                    {(val) => {
+                      const map: any = { todo: "לביצוע", in_progress: "בביצוע", done: "הושלם" };
+                      return map[val] || "סטטוס";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todo">לביצוע</SelectItem>
@@ -143,7 +192,12 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
               <Label className="text-slate-700 font-medium">עדיפות</Label>
               <Select value={watch('priority')} onValueChange={(v: any) => setValue('priority', v)}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
-                  <SelectValue />
+                  <SelectValue placeholder="עדיפות">
+                    {(val) => {
+                      const map: any = { low: "נמוכה", medium: "בינונית", high: "גבוהה", urgent: "דחוף" };
+                      return map[val] || "עדיפות";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">נמוכה</SelectItem>
@@ -158,9 +212,11 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">אחראי</Label>
-              <Select value={watch('assigned_to')} onValueChange={(v: any) => setValue('assigned_to', v)}>
+              <Select value={watch('assigned_to') || ''} onValueChange={(v: any) => setValue('assigned_to', v || '')}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
-                  <SelectValue placeholder="בחר עובד" />
+                  <SelectValue placeholder="בחר עובד">
+                    {(val) => employees.find(e => e.id === val)?.full_name || "בחר עובד"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {employees.map((emp) => (
@@ -183,6 +239,58 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
             </Button>
           </div>
         </form>
+
+        <div className="p-6 pt-0 space-y-6">
+          <div className="pt-6 border-t border-slate-100">
+            <div className="flex items-center gap-2 mb-4">
+              <MessageSquare className="w-4 h-4 text-slate-400" />
+              <h4 className="font-bold text-slate-900">עדכונים ותגובות</h4>
+            </div>
+
+            <div className="space-y-4 mb-4">
+              {isCommentsLoading ? (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+                </div>
+              ) : comments.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic text-center py-4 bg-slate-50 rounded-lg">אין עדכונים עדיין</p>
+              ) : (
+                comments.map((c) => (
+                  <div key={c.id} className="flex gap-3">
+                    <Avatar className="w-8 h-8 shrink-0">
+                      <AvatarImage src={c.profiles?.avatar_url} />
+                      <AvatarFallback className="text-[10px] bg-slate-100 text-slate-600 font-bold">
+                        {c.profiles?.full_name?.split(' ').map((n: any) => n[0]).join('')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900">{c.profiles?.full_name}</span>
+                        <span className="text-[10px] text-muted-foreground">{format(new Date(c.created_at), 'dd/MM/yyyy HH:mm')}</span>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-2xl rounded-tr-none text-xs text-slate-700 leading-relaxed border border-slate-100/50">
+                        {c.content}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Input 
+                placeholder="הוסף עדכון..." 
+                className="flex-1 h-11 border-slate-200 rounded-xl"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+              />
+              <Button size="icon" className="h-11 w-11 rounded-xl shrink-0" onClick={handleAddComment} disabled={loading || !newComment.trim()}>
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   )

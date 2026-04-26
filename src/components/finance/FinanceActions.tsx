@@ -15,6 +15,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
+import { buttonVariants } from '@/components/ui/button'
 import { Plus, Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -87,11 +89,12 @@ export function FinanceActions({ clients }: Props) {
   return (
     <div className="flex gap-2">
       <Sheet open={openType === 'income'} onOpenChange={(o) => !o && setOpenType(null)}>
-        <SheetTrigger asChild>
-          <Button className="bg-emerald-600 hover:bg-emerald-500 gap-2 shadow-lg shadow-emerald-600/20 rounded-lg text-white font-medium" onClick={() => setOpenType('income')}>
-            <TrendingUp className="w-4 h-4" />
-            הוסף הכנסה
-          </Button>
+        <SheetTrigger 
+          className={cn(buttonVariants({ variant: 'default' }), "bg-emerald-600 hover:bg-emerald-500 gap-2 shadow-lg shadow-emerald-600/20 rounded-lg text-white font-medium")}
+          onClick={() => setOpenType('income')}
+        >
+          <TrendingUp className="w-4 h-4" />
+          הוסף הכנסה
         </SheetTrigger>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
           <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">
@@ -121,9 +124,12 @@ export function FinanceActions({ clients }: Props) {
                 onValueChange={(v: any) => setValue('client_id', v)}
               >
                 <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
-                  <SelectValue placeholder="בחר לקוח" />
+                  <SelectValue placeholder="בחר לקוח">
+                    {(val) => clients.find(c => c.id === val)?.name || "בחר לקוח"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">ללא / כללי</SelectItem>
                   {clients.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
@@ -149,11 +155,12 @@ export function FinanceActions({ clients }: Props) {
       </Sheet>
 
       <Sheet open={openType === 'expense'} onOpenChange={(o) => !o && setOpenType(null)}>
-        <SheetTrigger asChild>
-          <Button variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 gap-2 rounded-lg font-medium" onClick={() => setOpenType('expense')}>
-            <TrendingDown className="w-4 h-4" />
-            הוסף הוצאה
-          </Button>
+        <SheetTrigger 
+          className={cn(buttonVariants({ variant: 'outline' }), "text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 gap-2 rounded-lg font-medium")}
+          onClick={() => setOpenType('expense')}
+        >
+          <TrendingDown className="w-4 h-4" />
+          הוסף הוצאה
         </SheetTrigger>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
           <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">
@@ -183,7 +190,9 @@ export function FinanceActions({ clients }: Props) {
                 onValueChange={(v: any) => setValue('category', v)}
               >
                 <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
-                  <SelectValue placeholder="בחר קטגוריה" />
+                  <SelectValue placeholder="בחר קטגוריה">
+                    {(val) => val || "בחר קטגוריה"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {['שכירויות', 'חשמל', 'שיווק', 'מיסים', 'משכורות', 'כללי'].map((c) => (

@@ -22,6 +22,8 @@ interface Props {
 import { FinanceRecordActions } from './FinanceRecordActions'
 
 export function FinanceTables({ income, expenses }: Props) {
+  console.log('FinanceTables Props:', { incomeCount: income.length, expenseCount: expenses.length })
+  
   return (
     <Card className="border-border/50 shadow-sm overflow-hidden">
       <CardContent className="p-0">
@@ -30,15 +32,17 @@ export function FinanceTables({ income, expenses }: Props) {
             <TabsList className="bg-transparent h-12 gap-6">
               <TabsTrigger
                 value="income"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs gap-2"
               >
                 פירוט הכנסות
+                <Badge variant="secondary" className="h-5 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-100">{income.length}</Badge>
               </TabsTrigger>
               <TabsTrigger
                 value="expenses"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent shadow-none font-bold text-xs gap-2"
               >
                 פירוט הוצאות
+                <Badge variant="secondary" className="h-5 px-1.5 bg-red-50 text-red-700 border-red-100">{expenses.length}</Badge>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -86,6 +90,13 @@ export function FinanceTables({ income, expenses }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {expenses.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground italic">
+                      אין הוצאות רשומות
+                    </TableCell>
+                  </TableRow>
+                )}
                 {expenses.map((row) => (
                   <TableRow key={row.id} className="group hover:bg-slate-50/50 transition-colors">
                     <TableCell className="text-[11px] text-slate-500">{format(new Date(row.date), 'dd/MM/yyyy')}</TableCell>

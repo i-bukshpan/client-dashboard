@@ -5,10 +5,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 import { Loader2, Plus, UserPlus, Mail, Phone, IdCard, MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { createClientFolder } from '@/lib/google-drive'
@@ -78,11 +79,9 @@ export function AddClientSheet() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button className="gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-lg">
-          <UserPlus className="w-4 h-4" />
-          הוסף לקוח
-        </Button>
+      <SheetTrigger className={cn(buttonVariants({ variant: 'default' }), "gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm rounded-lg")}>
+        <UserPlus className="w-4 h-4" />
+        הוסף לקוח
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto p-0 border-l-slate-200" side="right">
         <div className="p-6 pb-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10 backdrop-blur-sm">

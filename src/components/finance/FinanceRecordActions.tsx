@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { MoreHorizontal, Trash2, Edit3, Loader2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -42,10 +43,8 @@ export function FinanceRecordActions({ id, type }: Props) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-100">
-          <MoreHorizontal className="h-4 w-4 text-slate-400" />
-        </Button>
+      <DropdownMenuTrigger className={cn(buttonVariants({ variant: 'ghost' }), "h-8 w-8 p-0 hover:bg-slate-100")}>
+        <MoreHorizontal className="h-4 w-4 text-slate-400" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem className="gap-2 text-slate-600">

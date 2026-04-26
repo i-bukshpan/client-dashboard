@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, UserPlus, TrendingUp, DollarSign } from 'lucide-react'
 import { AddEmployeeSheet } from '@/components/team/AddEmployeeSheet'
+import { MonthYearSelector } from '@/components/team/MonthYearSelector'
 import { EmployeeActions } from '@/components/team/EmployeeActions'
 import { EmployeeSalaryCard } from '@/components/team/EmployeeSalaryCard'
 
@@ -12,16 +14,23 @@ export const metadata = { title: 'ניהול צוות | Nehemiah OS' }
 
 export const dynamic = 'force-dynamic'
 
-export default async function TeamPage() {
+export default async function TeamPage({ searchParams }: { searchParams: Promise<{ month?: string, year?: string }> }) {
+  const params = await searchParams
   const supabase = await createClient()
 
-  // Fetch employees and their bonuses for current month
+  // Month/Year filtering
   const today = new Date()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
+  const currentMonth = params.month ? parseInt(params.month) : today.getMonth() + 1
+  const currentYear = params.year ? parseInt(params.year) : today.getFullYear()
+  
+  const startOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
+  const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+  const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-  const [{ data: employees }, { data: bonuses }] = await Promise.all([
+  const [{ data: employees }, { data: bonuses }, { data: salaryExpenses }] = await Promise.all([
     supabase.from('profiles').select('*').eq('role', 'employee'),
-    supabase.from('employee_bonuses').select('*').gte('date', startOfMonth),
+    supabaseAdmin.from('employee_bonuses').select('*').gte('date', startOfMonth).lte('date', endOfMonth),
+    supabaseAdmin.from('expenses').select('*').eq('category', 'משכורות').gte('date', startOfMonth).lte('date', endOfMonth),
   ])
 
   return (
@@ -36,7 +45,10 @@ export default async function TeamPage() {
             <p className="text-muted-foreground text-sm">ניהול עובדים ומשכורות</p>
           </div>
         </div>
-        <AddEmployeeSheet />
+        <div className="flex items-center gap-3">
+          <MonthYearSelector currentMonth={currentMonth} currentYear={currentYear} />
+          <AddEmployeeSheet />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -60,14 +72,16 @@ export default async function TeamPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100">עובד</Badge>
-                  <EmployeeActions employeeId={emp.id} email={emp.email} name={emp.full_name} />
+                  <EmployeeActions employeeId={emp.id} email={emp.email} name={emp.full_name} salaryBase={Number(emp.salary_base)} />
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 <EmployeeSalaryCard
                   employeeId={emp.id}
+                  employeeName={emp.full_name}
                   baseSalary={Number(emp.salary_base)}
                   bonuses={empBonuses}
+                  payments={(salaryExpenses as any[])?.filter(e => e.notes?.includes(`[EMP:${emp.id}]`)) ?? []}
                   totalSalary={totalSalary}
                 />
               </CardContent>

@@ -80,11 +80,19 @@ export function TaskCard({ task, onEdit }: TaskCardProps) {
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Calendar className="w-3 h-3" />
-            <span className="text-[10px] font-medium">
-              {task.due_date ? format(new Date(task.due_date), 'dd/MM/yy') : 'ללא תאריך'}
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Calendar className="w-3 h-3" />
+              <span className="text-[10px] font-medium">
+                {task.due_date ? format(new Date(task.due_date), 'dd/MM/yy') : 'ללא תאריך'}
+              </span>
+            </div>
+            {task.task_updates && task.task_updates[0]?.count > 0 && (
+              <div className="flex items-center gap-1 text-slate-400">
+                <Users className="w-3 h-3" />
+                <span className="text-[10px] font-bold">{task.task_updates[0].count}</span>
+              </div>
+            )}
           </div>
           {task.clients && (
             <div className="flex items-center gap-1.5 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">

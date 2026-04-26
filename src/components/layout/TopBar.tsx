@@ -67,16 +67,14 @@ export function TopBar({ title, profile }: TopBarProps) {
 
         {/* User menu */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div role="button" className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-accent transition-colors cursor-pointer outline-none">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={profile?.avatar_url ?? undefined} />
-                <AvatarFallback className="bg-slate-900 text-white text-xs font-bold">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-foreground leading-none">{displayName}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{roleDisplay}</p>
-              </div>
+          <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-accent transition-colors cursor-pointer outline-none border-none bg-transparent">
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={profile?.avatar_url ?? undefined} />
+              <AvatarFallback className="bg-slate-900 text-white text-xs font-bold">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-semibold text-foreground leading-none">{displayName}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{roleDisplay}</p>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52 mt-1">

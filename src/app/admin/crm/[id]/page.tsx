@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function ClientProfilePage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
-  const { id } = params
+  const { id } = await (params as any)
 
   const [
     { data: client },

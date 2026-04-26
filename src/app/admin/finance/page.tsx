@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { FinanceCharts } from '@/components/finance/FinanceCharts'
 import { FinanceTables } from '@/components/finance/FinanceTables'
 import { FinanceActions } from '@/components/finance/FinanceActions'
@@ -12,14 +13,23 @@ export const dynamic = 'force-dynamic'
 export default async function FinancePage() {
   const supabase = await createClient()
   const today = new Date()
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0]
+  const currentMonth = today.getMonth() + 1
+  const currentYear = today.getFullYear()
+  const startOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
+  const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+  const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
   const [{ data: income }, { data: expenses }, { data: clients }] = await Promise.all([
-    supabase.from('income').select('*, clients(id, name)').order('date', { ascending: false }),
-    supabase.from('expenses').select('*').order('date', { ascending: false }),
+    supabaseAdmin.from('income').select('*, clients(id, name)').order('date', { ascending: false }),
+    supabaseAdmin.from('expenses').select('*').order('date', { ascending: false }),
     supabase.from('clients').select('id, name').order('name'),
   ])
+
+  console.log('Finance Data:', { 
+    incomeCount: income?.length, 
+    expenseCount: expenses?.length,
+    recentExpense: expenses?.[0] 
+  })
 
   // Monthly stats
   const monthlyIncome = (income as any[])?.filter(r => r.date >= startOfMonth && r.date <= endOfMonth)
