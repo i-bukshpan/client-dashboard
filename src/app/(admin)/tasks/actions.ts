@@ -2,9 +2,10 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import { Task } from '@/types/database'
 import { revalidatePath } from 'next/cache'
 
-export async function updateTask(id: string, data: any) {
+export async function updateTask(id: string, data: Partial<Task>) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'משתמש לא מחובר' }

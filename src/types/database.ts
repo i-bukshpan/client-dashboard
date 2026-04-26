@@ -67,7 +67,20 @@ export interface Task {
   archived: boolean | null
   created_by: string
   created_at: string
+}
+
+export interface TaskWithJoins extends Task {
   clients?: Pick<Client, 'id' | 'name'>
+  profiles?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
+  task_updates?: { count: number }[]
+}
+
+export interface TaskUpdate {
+  id: string
+  task_id: string
+  user_id: string
+  content: string
+  created_at: string
   profiles?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
 }
 
@@ -118,7 +131,7 @@ export interface EmployeeBonus {
   created_by: string
 }
 
-// Supabase Database generic type (simplified)
+// Supabase Database generic type
 export type Database = {
   public: {
     Tables: {
@@ -127,12 +140,15 @@ export type Database = {
       appointments: { Row: Appointment; Insert: Partial<Appointment>; Update: Partial<Appointment> }
       meeting_summaries: { Row: MeetingSummary; Insert: Partial<MeetingSummary>; Update: Partial<MeetingSummary> }
       tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task> }
+      task_updates: { Row: TaskUpdate; Insert: Partial<TaskUpdate>; Update: Partial<TaskUpdate> }
       income: { Row: Income; Insert: Partial<Income>; Update: Partial<Income> }
       expenses: { Row: Expense; Insert: Partial<Expense>; Update: Partial<Expense> }
       chat_messages: { Row: ChatMessage; Insert: Partial<ChatMessage>; Update: Partial<ChatMessage> }
       conversations: { Row: Conversation; Insert: Partial<Conversation>; Update: Partial<Conversation> }
       employee_bonuses: { Row: EmployeeBonus; Insert: Partial<EmployeeBonus>; Update: Partial<EmployeeBonus> }
     }
+    Views: { [_ in never]: never }
+    Functions: { [_ in never]: never }
+    Enums: { [_ in never]: never }
   }
 }
-
