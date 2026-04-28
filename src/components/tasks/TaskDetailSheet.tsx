@@ -175,10 +175,7 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
               <Select value={watch('status')} onValueChange={(v: any) => setValue('status', v)}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
                   <SelectValue placeholder="סטטוס">
-                    {(val) => {
-                      const map: any = { todo: "לביצוע", in_progress: "בביצוע", done: "הושלם" };
-                      return map[val] || "סטטוס";
-                    }}
+                    {{ todo: 'לביצוע', in_progress: 'בביצוע', done: 'הושלם' }[watch('status')] || 'סטטוס'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -193,10 +190,7 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
               <Select value={watch('priority')} onValueChange={(v: any) => setValue('priority', v)}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
                   <SelectValue placeholder="עדיפות">
-                    {(val) => {
-                      const map: any = { low: "נמוכה", medium: "בינונית", high: "גבוהה", urgent: "דחוף" };
-                      return map[val] || "עדיפות";
-                    }}
+                    {{ low: 'נמוכה', medium: 'בינונית', high: 'גבוהה', urgent: 'דחוף' }[watch('priority')] || 'עדיפות'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -215,10 +209,11 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdated, employees
               <Select value={watch('assigned_to') || ''} onValueChange={(v: any) => setValue('assigned_to', v || '')}>
                 <SelectTrigger className="h-11 border-slate-200 focus:border-slate-400 rounded-xl">
                   <SelectValue placeholder="בחר עובד">
-                    {(val) => employees.find(e => e.id === val)?.full_name || "בחר עובד"}
+                    {watch('assigned_to') ? (employees.find(e => e.id === watch('assigned_to'))?.full_name || 'עובד') : 'ללא אחראי'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">ללא אחראי</SelectItem>
                   {employees.map((emp) => (
                     <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
                   ))}

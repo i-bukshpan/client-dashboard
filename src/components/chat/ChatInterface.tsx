@@ -23,6 +23,7 @@ export function ChatInterface({ initialConversations, allEmployees, currentUserI
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
@@ -38,6 +39,68 @@ export function ChatInterface({ initialConversations, allEmployees, currentUserI
       isVirtual: true
     }
   }) : conversations
+
+  // Fetch unread counts
+  useEffect(() => {
+    const fetchUnread = async () => {
+      // Fetch messages not sent by current user
+      const { data: messagesData } = await (supabase.from('chat_messages') as any)
+        .select('id, conversation_id')
+        .neq('sender_id', currentUserId)
+
+      // Fetch read receipts for current user
+      const { data: receiptsData } = await (supabase.from('chat_read_receipts') as any)
+        .select('message_id')
+        .eq('user_id', currentUserId)
+
+      const readMessageIds = new Set(receiptsData?.map((r: any) => r.message_id) || [])
+      const counts: Record<string, number> = {}
+      
+      messagesData?.forEach((msg: any) => {
+        if (!readMessageIds.has(msg.id)) {
+          counts[msg.conversation_id] = (counts[msg.conversation_id] || 0) + 1
+        }
+      })
+      setUnreadCounts(counts)
+    }
+    fetchUnread()
+  }, [messages, currentUserId])
+
+  // Mark as read when selecting or receiving messages
+  useEffect(() => {
+    if (!selectedConv || selectedConv.isVirtual) return
+
+    const markAsRead = async () => {
+      // Find all messages in this conversation not sent by me
+      const { data: messages } = await (supabase.from('chat_messages') as any)
+        .select('id')
+        .eq('conversation_id', selectedConv.id)
+        .neq('sender_id', currentUserId)
+
+      if (!messages || messages.length === 0) return
+
+      // Find which ones are already read
+      const { data: readReceipts } = await (supabase.from('chat_read_receipts') as any)
+        .select('message_id')
+        .eq('user_id', currentUserId)
+        .in('message_id', messages.map((m: any) => m.id))
+
+      const readIds = new Set(readReceipts?.map((r: any) => r.message_id) || [])
+      const unreadIds = (messages as any[]).filter(m => !readIds.has(m.id)).map(m => m.id)
+
+      if (unreadIds.length > 0) {
+        const receipts = unreadIds.map(id => ({
+          message_id: id,
+          user_id: currentUserId
+        }))
+        await (supabase.from('chat_read_receipts') as any).upsert(receipts, { onConflict: 'message_id,user_id' })
+        
+        // Update local count
+        setUnreadCounts(prev => ({ ...prev, [selectedConv.id]: 0 }))
+      }
+    }
+    markAsRead()
+  }, [selectedConv, messages, currentUserId])
 
   // Load messages for selected conversation
   useEffect(() => {
@@ -138,6 +201,11 @@ export function ChatInterface({ initialConversations, allEmployees, currentUserI
                   {conv.isVirtual ? 'התחל שיחה חדשה' : 'צפה בשיחה'}
                 </p>
               </div>
+              {unreadCounts[conv.id] > 0 && (
+                <div className="w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {unreadCounts[conv.id]}
+                </div>
+              )}
             </button>
           ))}
         </ScrollArea>

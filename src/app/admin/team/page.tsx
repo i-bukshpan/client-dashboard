@@ -9,6 +9,7 @@ import { AddEmployeeSheet } from '@/components/team/AddEmployeeSheet'
 import { MonthYearSelector } from '@/components/team/MonthYearSelector'
 import { EmployeeActions } from '@/components/team/EmployeeActions'
 import { EmployeeSalaryCard } from '@/components/team/EmployeeSalaryCard'
+import { AdminEmployeeAnnouncements } from '@/components/team/AdminEmployeeAnnouncements'
 
 export const metadata = { title: 'ניהול צוות | Nehemiah OS' }
 
@@ -27,10 +28,11 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const lastDay = new Date(currentYear, currentMonth, 0).getDate()
   const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-  const [{ data: employees }, { data: bonuses }, { data: salaryExpenses }] = await Promise.all([
+  const [{ data: employees }, { data: bonuses }, { data: salaryExpenses }, { data: announcements }] = await Promise.all([
     supabase.from('profiles').select('*').eq('role', 'employee'),
     supabaseAdmin.from('employee_bonuses').select('*').gte('date', startOfMonth).lte('date', endOfMonth),
     supabaseAdmin.from('expenses').select('*').eq('category', 'משכורות').gte('date', startOfMonth).lte('date', endOfMonth),
+    supabaseAdmin.from('employee_announcements').select('*').order('created_at', { ascending: false })
   ])
 
   return (
@@ -89,8 +91,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           )
         })}
       </div>
+
+      <div className="mt-8">
+        <AdminEmployeeAnnouncements announcements={(announcements as any[]) ?? []} employees={(employees as any[]) ?? []} />
+      </div>
     </div>
   )
 }
-
-

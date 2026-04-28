@@ -21,6 +21,9 @@ import { Plus, Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
+const INCOME_CATEGORIES = ['ייעוץ עסקי', 'ייעוץ פנסיוני', 'ייעוץ השקעות', 'עמלת ניהול', 'שירות חודשי', 'ייעוץ חד פעמי', 'אחר']
+const EXPENSE_CATEGORIES = ['שכירות', 'חשמל ומים', 'שיווק ופרסום', 'מיסים ואגרות', 'משכורות', 'ציוד משרדי', 'תוכנות ורישיונות', 'הכשרות', 'כללי']
+
 const schema = z.object({
   amount: z.string().min(1, 'סכום נדרש'),
   category: z.string().min(1, 'קטגוריה נדרשת'),
@@ -47,15 +50,16 @@ export function FinanceActions({ clients }: Props) {
     }
   })
 
+  const watchedClientId = watch('client_id') ?? undefined
+  const watchedCategory = watch('category')
+
   async function onSubmit(data: FormData) {
     setLoading(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
-      if (!user) {
-        throw new Error('לא נמצא משתמש מחובר. נסה לרענן את העמוד.')
-      }
+      if (!user) throw new Error('לא נמצא משתמש מחובר. נסה לרענן את העמוד.')
 
       const payload = {
         amount: Number(data.amount),
@@ -71,7 +75,7 @@ export function FinanceActions({ clients }: Props) {
 
       if (error) {
         console.error('Supabase error:', error)
-        throw new Error(error.message || 'שגיאה בשמירת הנתונים במסד הנתונים')
+        throw new Error(error.message || 'שגיאה בשמירת הנתונים')
       }
 
       toast.success(openType === 'income' ? 'הכנסה נוספה בהצלחה' : 'הוצאה נוספה בהצלחה')
@@ -86,12 +90,15 @@ export function FinanceActions({ clients }: Props) {
     }
   }
 
+  const selectedClientName = clients.find(c => c.id === watchedClientId)?.name
+
   return (
     <div className="flex gap-2">
+      {/* Income Sheet */}
       <Sheet open={openType === 'income'} onOpenChange={(o) => !o && setOpenType(null)}>
-        <SheetTrigger 
+        <SheetTrigger
           className={cn(buttonVariants({ variant: 'default' }), "bg-emerald-600 hover:bg-emerald-500 gap-2 shadow-lg shadow-emerald-600/20 rounded-lg text-white font-medium")}
-          onClick={() => setOpenType('income')}
+          onClick={() => { reset({ date: new Date().toISOString().split('T')[0], category: '' }); setOpenType('income') }}
         >
           <TrendingUp className="w-4 h-4" />
           הוסף הכנסה
@@ -117,15 +124,13 @@ export function FinanceActions({ clients }: Props) {
                 <Input type="date" dir="ltr" className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('date')} />
               </div>
             </div>
+
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">לקוח משויך (אופציונלי)</Label>
-              <Select 
-                value={watch('client_id')}
-                onValueChange={(v: any) => setValue('client_id', v)}
-              >
-                <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
+              <Select value={(watchedClientId || undefined) as any} onValueChange={(v) => setValue('client_id', v as any)}>
+                <SelectTrigger className="h-10 border-slate-200 rounded-lg bg-white">
                   <SelectValue placeholder="בחר לקוח">
-                    {(val) => clients.find(c => c.id === val)?.name || "בחר לקוח"}
+                    {selectedClientName || 'ללא / כללי'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -136,14 +141,29 @@ export function FinanceActions({ clients }: Props) {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">קטגוריה</Label>
-              <Input placeholder="לדוגמה: ייעוץ עסקי" className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('category')} />
+              <Select value={(watchedCategory || undefined) as any} onValueChange={(v) => setValue('category', v as any)}>
+                <SelectTrigger className="h-10 border-slate-200 rounded-lg bg-white">
+                  <SelectValue placeholder="בחר קטגוריה">
+                    {watchedCategory || 'בחר קטגוריה'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {INCOME_CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.category && <p className="text-red-500 text-xs">{errors.category.message}</p>}
             </div>
+
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">הערות</Label>
-              <Input placeholder="תיאור קצר..." className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('notes')} />
+              <Input placeholder="תיאור קצר..." className="h-10 border-slate-200 rounded-lg bg-white" {...register('notes')} />
             </div>
+
             <div className="pt-6 mt-6 border-t border-slate-100 pb-8">
               <Button type="submit" className="w-full h-11 gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm font-medium transition-all active:scale-[0.98]" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -154,10 +174,11 @@ export function FinanceActions({ clients }: Props) {
         </SheetContent>
       </Sheet>
 
+      {/* Expense Sheet */}
       <Sheet open={openType === 'expense'} onOpenChange={(o) => !o && setOpenType(null)}>
-        <SheetTrigger 
+        <SheetTrigger
           className={cn(buttonVariants({ variant: 'outline' }), "text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 gap-2 rounded-lg font-medium")}
-          onClick={() => setOpenType('expense')}
+          onClick={() => { reset({ date: new Date().toISOString().split('T')[0], category: '' }); setOpenType('expense') }}
         >
           <TrendingDown className="w-4 h-4" />
           הוסף הוצאה
@@ -175,37 +196,37 @@ export function FinanceActions({ clients }: Props) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium">סכום (₪)</Label>
-                <Input type="number" step="0.01" dir="ltr" className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('amount')} />
+                <Input type="number" step="0.01" dir="ltr" className="h-10 border-slate-200 rounded-lg bg-white" {...register('amount')} />
                 {errors.amount && <p className="text-red-500 text-xs">{errors.amount.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium">תאריך</Label>
-                <Input type="date" dir="ltr" className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('date')} />
+                <Input type="date" dir="ltr" className="h-10 border-slate-200 rounded-lg bg-white" {...register('date')} />
               </div>
             </div>
+
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">קטגוריה</Label>
-              <Select 
-                value={watch('category')}
-                onValueChange={(v: any) => setValue('category', v)}
-              >
-                <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
+              <Select value={(watchedCategory || undefined) as any} onValueChange={(v) => setValue('category', v as any)}>
+                <SelectTrigger className="h-10 border-slate-200 rounded-lg bg-white">
                   <SelectValue placeholder="בחר קטגוריה">
-                    {(val) => val || "בחר קטגוריה"}
+                    {watchedCategory || 'בחר קטגוריה'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {['שכירויות', 'חשמל', 'שיווק', 'מיסים', 'משכורות', 'כללי'].map((c) => (
+                  {EXPENSE_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {errors.category && <p className="text-red-500 text-xs">{errors.category.message}</p>}
             </div>
+
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">הערות</Label>
-              <Input placeholder="תיאור ההוצאה..." className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white" {...register('notes')} />
+              <Input placeholder="תיאור ההוצאה..." className="h-10 border-slate-200 rounded-lg bg-white" {...register('notes')} />
             </div>
+
             <div className="pt-6 mt-6 border-t border-slate-100 pb-8">
               <Button type="submit" className="w-full h-11 gap-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white shadow-sm font-medium transition-all active:scale-[0.98]" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -218,6 +239,3 @@ export function FinanceActions({ clients }: Props) {
     </div>
   )
 }
-
-
-

@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { CalendarView } from '@/components/dashboard/CalendarView'
 import { Calendar as CalendarIcon } from 'lucide-react'
+import { CalendarAppointmentDialog } from '@/components/dashboard/CalendarAppointmentDialog'
+import { GoogleSyncButton } from '@/components/calendar/GoogleSyncButton'
 
 export const metadata = { title: 'יומן אירועים | Nehemiah OS' }
 export const dynamic = 'force-dynamic'
@@ -13,12 +15,16 @@ export default async function CalendarPage() {
     { data: income }, 
     { data: expenses }, 
     { data: tasks },
-    { data: appointments }
+    { data: appointments },
+    { data: clients },
+    { data: profiles }
   ] = await Promise.all([
     supabase.from('income').select('*, clients(id, name)'),
     supabase.from('expenses').select('*'),
     supabase.from('tasks').select('*, clients(id, name), assigned_person:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url)'),
-    supabase.from('appointments').select('*, clients(id, name), profiles(id, full_name, avatar_url)')
+    supabase.from('appointments').select('*, clients(id, name), profiles(id, full_name, avatar_url)'),
+    supabase.from('clients').select('id, name').order('name'),
+    supabase.from('profiles').select('id, full_name').eq('role', 'employee').order('full_name')
   ])
 
   return (
@@ -33,6 +39,13 @@ export default async function CalendarPage() {
             <p className="text-muted-foreground text-sm">ניהול ומעקב משימות, פגישות ותזרים בלוח שנה</p>
           </div>
         </div>
+        <div className="flex items-center gap-3">
+          <GoogleSyncButton />
+          <CalendarAppointmentDialog 
+            clients={(clients as any[]) || []} 
+            profiles={(profiles as any[]) || []} 
+          />
+        </div>
       </div>
 
       <div>
@@ -41,6 +54,8 @@ export default async function CalendarPage() {
           income={(income as any[]) ?? []} 
           expenses={(expenses as any[]) ?? []} 
           appointments={(appointments as any[]) ?? []}
+          clients={(clients as any[]) ?? []}
+          profiles={(profiles as any[]) ?? []}
         />
       </div>
     </div>

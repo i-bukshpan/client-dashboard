@@ -200,7 +200,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 1.25rem;
+  inset-inline-start: 1.25rem;
   width: 2px;
   background: linear-gradient(to bottom, var(--primary), transparent);
 }

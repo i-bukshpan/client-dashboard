@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs'
 import { DashboardTimeline } from '@/components/dashboard/DashboardTimeline'
 import { UpcomingTasks } from '@/components/dashboard/UpcomingTasks'
+import { DashboardQuickActions } from '@/components/dashboard/DashboardQuickActions'
 
 export const metadata = { title: 'לוח בקרה | Nehemiah OS' }
 export const dynamic = 'force-dynamic'
@@ -38,6 +39,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardQuickActions />
       <DashboardKPIs
         monthlyIncome={monthlyIncome}
         monthlyExpenses={monthlyExpenses}

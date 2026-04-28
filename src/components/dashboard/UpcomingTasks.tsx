@@ -27,7 +27,7 @@ export function UpcomingTasks({ tasks }: UpcomingTasksProps) {
     <Card className="border-border/50 shadow-sm h-full">
       <CardHeader className="flex flex-row items-center gap-2 pb-4">
         <CheckSquare className="w-5 h-5 text-amber-500" />
-        <CardTitle className="text-base">משימות פתוחות</CardTitle>
+        <CardTitle className="text-base">המשימות הבאות</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {tasks.length === 0 ? (

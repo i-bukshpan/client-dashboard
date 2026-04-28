@@ -65,9 +65,9 @@ export function DashboardTimeline({ appointments }: DashboardTimelineProps) {
                 const initials = appt.clients?.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) ?? '?'
 
                 return (
-                  <div key={appt.id} className={`flex gap-4 pe-10 ${isPast && appt.status === 'scheduled' ? 'opacity-60' : ''}`}>
+                  <div key={appt.id} className={`relative flex gap-4 ps-10 ${isPast && appt.status === 'scheduled' ? 'opacity-60' : ''}`}>
                     {/* Timeline dot */}
-                    <div className="absolute end-[1.1rem] flex items-center justify-center">
+                    <div className="absolute start-[1.1rem] flex items-center justify-center">
                       <div
                         className={`w-4 h-4 rounded-full border-2 border-background ${
                           isCurrent ? 'bg-blue-500 shadow-lg shadow-blue-500/50' :

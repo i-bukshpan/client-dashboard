@@ -91,7 +91,7 @@ export function AddAppointmentDialog({ open, onClose }: Props) {
             {errors.title && <p className="text-red-500 text-xs font-medium">{errors.title.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-slate-700 font-medium">שעת התחלה <span className="text-red-500">*</span></Label>
               <Input 

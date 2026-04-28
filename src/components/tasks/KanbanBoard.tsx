@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useRouter } from 'next/navigation'
-import { Archive } from 'lucide-react'
+import { Archive, CheckSquare } from 'lucide-react'
 import { format } from 'date-fns'
 
 interface Props {
@@ -225,6 +225,12 @@ function DroppableColumn({ col, tasks, onEdit }: { col: any, tasks: any[], onEdi
       <ScrollArea className="flex-1 p-3">
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-3 pb-4 min-h-[150px]">
+            {tasks.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground/40">
+                <CheckSquare className="w-8 h-8" />
+                <p className="text-xs">אין משימות</p>
+              </div>
+            )}
             {tasks.map(task => (
               <TaskCard key={task.id} task={task} onEdit={onEdit} />
             ))}

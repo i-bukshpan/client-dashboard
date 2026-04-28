@@ -111,11 +111,8 @@ export function AddTaskDialog({ clients, employees }: Props) {
               >
                 <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
                   <SelectValue placeholder="בחר עדיפות">
-                  {(val) => {
-                    const map: any = { low: "נמוכה", medium: "בינונית", high: "גבוהה", urgent: "דחופה" };
-                    return map[val] || "בחר עדיפות";
-                  }}
-                </SelectValue>
+                    {{ low: 'נמוכה', medium: 'בינונית', high: 'גבוהה', urgent: 'דחופה' }[form.priority] || 'בחר עדיפות'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="low">נמוכה</SelectItem>
@@ -145,7 +142,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
             >
               <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
                 <SelectValue placeholder="בחר לקוח">
-                  {(val) => clients.find(c => c.id === val)?.name || "בחר לקוח"}
+                  {form.client_id ? (clients.find(c => c.id === form.client_id)?.name || 'לקוח') : 'ללא / כללי'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -165,7 +162,7 @@ export function AddTaskDialog({ clients, employees }: Props) {
             >
               <SelectTrigger className="h-10 border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-100 rounded-lg bg-white">
                 <SelectValue placeholder="בחר עובד">
-                  {(val) => employees.find(e => e.id === val)?.full_name || "בחר עובד"}
+                  {form.assigned_to ? (employees.find(e => e.id === form.assigned_to)?.full_name || 'עובד') : 'ללא / לא משויך'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>

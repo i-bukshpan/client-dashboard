@@ -20,15 +20,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CalendarAppointmentDialog } from './CalendarAppointmentDialog'
 
 interface Props {
   tasks: any[]
   income: any[]
   expenses: any[]
   appointments: any[]
+  clients: any[]
+  profiles: any[]
 }
 
-export function CalendarView({ tasks, income, expenses, appointments }: Props) {
+export function CalendarView({ tasks, income, expenses, appointments, clients, profiles }: Props) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
 
@@ -154,12 +157,20 @@ export function CalendarView({ tasks, income, expenses, appointments }: Props) {
 
           <div className="space-y-6 mt-4">
             {/* Appointments Section */}
-            {selectedDayData?.appts.length ? (
-              <div className="space-y-3">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
                 <h4 className="text-sm font-bold flex items-center gap-2 text-blue-600">
                   <Clock className="w-4 h-4" />
-                  פגישות ({selectedDayData.appts.length})
+                  פגישות ({selectedDayData?.appts.length || 0})
                 </h4>
+                <CalendarAppointmentDialog 
+                  clients={clients} 
+                  profiles={profiles} 
+                  initialDate={selectedDay ?? undefined}
+                  onSuccess={() => setSelectedDay(null)}
+                />
+              </div>
+              {selectedDayData?.appts.length ? (
                 <div className="space-y-2">
                   {selectedDayData.appts.map((a, i) => (
                     <div key={i} className="p-3 rounded-lg bg-blue-50 border border-blue-100">
@@ -176,8 +187,10 @@ export function CalendarView({ tasks, income, expenses, appointments }: Props) {
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              ) : (
+                <p className="text-xs text-slate-500 italic">אין פגישות מתוכננות ליום זה</p>
+              )}
+            </div>
 
             {/* Tasks Section */}
             {selectedDayData?.tasks.length ? (

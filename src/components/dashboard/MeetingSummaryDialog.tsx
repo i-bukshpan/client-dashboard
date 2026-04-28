@@ -131,7 +131,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
             {/* Income */}
             <div className="space-y-2">
               <Label>תשלום שהתקבל (אופציונלי)</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Input
                   type="number"
                   placeholder="סכום ב-₪"
@@ -173,7 +173,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
               <div className="space-y-3">
                 {fields.map((field, index) => (
                   <div key={field.id} className="bg-muted/50 rounded-xl p-3 space-y-2">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <Input
                         placeholder="שם המשימה"
                         className="flex-1 bg-background"
@@ -189,7 +189,7 @@ export function MeetingSummaryDialog({ appointment, open, onClose }: Props) {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <Select
                         onValueChange={(v: any) => setValue(`action_items.${index}.priority`, v as any)}
                         defaultValue="medium"

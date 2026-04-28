@@ -28,14 +28,21 @@ export default async function EmployeeDashboard({ searchParams }: { searchParams
     { count: unreadMessages },
     { data: profile },
     { data: bonuses },
-    { data: payments }
+    { data: payments },
+    { data: announcements }
   ] = await Promise.all([
     supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('assigned_to', user!.id).neq('status', 'done'),
     supabase.from('tasks').select('*, clients(id, name)').eq('assigned_to', user!.id).neq('status', 'done').order('due_date', { ascending: true }).limit(5),
     supabase.from('chat_messages').select('*', { count: 'exact', head: true }).neq('sender_id', user!.id),
     supabase.from('profiles').select('*').eq('id', user!.id).single(),
     supabase.from('employee_bonuses').select('*').eq('employee_id', user!.id).gte('date', startOfMonth).lte('date', endOfMonth),
-    supabase.from('expenses').select('*').eq('category', 'משכורות').ilike('notes', `%[EMP:${user!.id}]%`).gte('date', startOfMonth).lte('date', endOfMonth)
+    supabase.from('expenses').select('*').eq('category', 'משכורות').ilike('notes', `%[EMP:${user!.id}]%`).gte('date', startOfMonth).lte('date', endOfMonth),
+    supabase.from('employee_announcements')
+      .select('*')
+      .eq('is_active', true)
+      .or(`target_employee_id.is.null,target_employee_id.eq.${user!.id}`)
+      .order('created_at', { ascending: false })
+      .limit(5)
   ])
 
   return (
@@ -46,36 +53,36 @@ export default async function EmployeeDashboard({ searchParams }: { searchParams
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-border/50">
+        <Card className="border-border/50 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300">
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-inner">
               <CheckSquare className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">משימות פתוחות</p>
-              <p className="text-2xl font-black">{myTasks ?? 0}</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">משימות פתוחות</p>
+              <p className="text-3xl font-black text-slate-900 leading-tight">{myTasks ?? 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/50">
+        <Card className="border-border/50 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300">
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 shadow-inner">
               <MessageSquare className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">הודעות חדשות</p>
-              <p className="text-2xl font-black">{unreadMessages ?? 0}</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">הודעות חדשות</p>
+              <p className="text-3xl font-black text-slate-900 leading-tight">{unreadMessages ?? 0}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/50">
+        <Card className="border-border/50 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300">
           <CardContent className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shadow-inner">
               <Clock className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground font-medium">פגישות היום</p>
-              <p className="text-2xl font-black">0</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">פגישות היום</p>
+              <p className="text-3xl font-black text-slate-900 leading-tight">0</p>
             </div>
           </CardContent>
         </Card>
@@ -95,8 +102,24 @@ export default async function EmployeeDashboard({ searchParams }: { searchParams
             <CardHeader>
               <CardTitle className="text-base">הודעות מהנהלה</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground italic">אין הודעות מערכת חדשות</p>
+            <CardContent className="p-0">
+              {!(announcements as any[]) || (announcements as any[]).length === 0 ? (
+                <div className="p-6 text-center">
+                  <p className="text-sm text-muted-foreground italic">אין הודעות מערכת חדשות</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {(announcements as any[]).map(ann => (
+                    <div key={ann.id} className="p-4 hover:bg-slate-50/50 transition-colors">
+                      <h4 className="font-bold text-sm text-slate-900">{ann.title}</h4>
+                      <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{ann.content}</p>
+                      <p className="text-[10px] text-muted-foreground mt-2">
+                        {new Date(ann.created_at).toLocaleDateString('he-IL')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

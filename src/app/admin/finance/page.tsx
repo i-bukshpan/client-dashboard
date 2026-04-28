@@ -3,8 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin'
 import { FinanceCharts } from '@/components/finance/FinanceCharts'
 import { FinanceTables } from '@/components/finance/FinanceTables'
 import { FinanceActions } from '@/components/finance/FinanceActions'
+import { RecurringFinances } from '@/components/finance/RecurringFinances'
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export const metadata = { title: 'פיננסים | Nehemiah OS' }
 
@@ -19,10 +21,11 @@ export default async function FinancePage() {
   const lastDay = new Date(currentYear, currentMonth, 0).getDate()
   const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-  const [{ data: income }, { data: expenses }, { data: clients }] = await Promise.all([
+  const [{ data: income }, { data: expenses }, { data: clients }, { data: recurring }] = await Promise.all([
     supabaseAdmin.from('income').select('*, clients(id, name)').order('date', { ascending: false }),
     supabaseAdmin.from('expenses').select('*').order('date', { ascending: false }),
     supabase.from('clients').select('id, name').order('name'),
+    supabaseAdmin.from('recurring_finances').select('*, clients(id, name)').order('category'),
   ])
 
   console.log('Finance Data:', { 
@@ -82,8 +85,42 @@ export default async function FinancePage() {
       {/* Charts */}
       <FinanceCharts income={(income as any[]) ?? []} expenses={(expenses as any[]) ?? []} />
 
-      {/* History Tables */}
-      <FinanceTables income={(income as any[]) ?? []} expenses={(expenses as any[]) ?? []} />
+      <Tabs defaultValue="income" className="w-full">
+        <div className="bg-white border border-border/50 rounded-2xl p-1 mb-6 shadow-sm max-w-fit">
+          <TabsList className="bg-transparent gap-1">
+            <TabsTrigger 
+              value="income" 
+              className="rounded-xl px-6 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:shadow-none font-bold transition-all"
+            >
+              הכנסות
+            </TabsTrigger>
+            <TabsTrigger 
+              value="expenses" 
+              className="rounded-xl px-6 data-[state=active]:bg-red-50 data-[state=active]:text-red-700 data-[state=active]:shadow-none font-bold transition-all"
+            >
+              הוצאות
+            </TabsTrigger>
+            <TabsTrigger 
+              value="recurring" 
+              className="rounded-xl px-6 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none font-bold transition-all"
+            >
+              קבועות
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        
+        <TabsContent value="income" className="mt-0 focus-visible:outline-none">
+          <FinanceTables type="income" data={(income as any[]) ?? []} />
+        </TabsContent>
+        
+        <TabsContent value="expenses" className="mt-0 focus-visible:outline-none">
+          <FinanceTables type="expenses" data={(expenses as any[]) ?? []} />
+        </TabsContent>
+        
+        <TabsContent value="recurring" className="mt-0 focus-visible:outline-none">
+          <RecurringFinances recurring={(recurring as any[]) ?? []} clients={(clients as any[]) ?? []} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
