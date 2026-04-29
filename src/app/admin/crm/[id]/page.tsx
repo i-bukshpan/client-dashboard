@@ -24,6 +24,8 @@ import { cn } from '@/lib/utils'
 import { ClientNotes } from '@/components/crm/ClientNotes'
 import { MeetingSummaryDialog } from '@/components/crm/MeetingSummaryDialog'
 import { InviteClientButton } from '@/components/crm/InviteClientButton'
+import { ClientActions } from '@/components/crm/ClientActions'
+import { ClientProfile } from '@/components/crm/ClientProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,10 +58,13 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
   return (
     <div className="space-y-6">
       {/* Header / Breadcrumbs */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/admin/crm" className="hover:text-primary transition-colors">ניהול לקוחות</Link>
-        <ArrowRight className="w-4 h-4 rotate-180" />
-        <span className="text-foreground font-medium">{clientObj.name}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link href="/admin/crm" className="hover:text-primary transition-colors">ניהול לקוחות</Link>
+          <ArrowRight className="w-4 h-4 rotate-180" />
+          <span className="text-foreground font-medium">{clientObj.name}</span>
+        </div>
+        <ClientActions client={clientObj} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -144,6 +149,9 @@ export default async function ClientProfilePage({ params }: { params: { id: stri
               </CardContent>
             </Card>
           )}
+
+          {/* Advisory & Personal Details */}
+          <ClientProfile client={clientObj} />
 
           {/* Client Notes Widget */}
           <ClientNotes clientId={clientObj.id} initialNotes={clientObj.notes} />

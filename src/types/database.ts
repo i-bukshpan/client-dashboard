@@ -23,6 +23,15 @@ export interface Client {
   address: string | null
   notes: string | null
   drive_folder_id: string | null
+  user_id: string | null
+  birth_date: string | null
+  portfolio_value: number | null
+  client_since: string | null
+  meeting_frequency: string | null
+  risk_level: string | null
+  advisory_goal: string | null
+  advisory_track: string | null
+  status: string | null
   created_by: string
   created_at: string
 }

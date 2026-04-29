@@ -17,6 +17,7 @@ import {
   Target,
   ChevronRight,
   ChevronLeft,
+  Building2,
 } from 'lucide-react'
 import { SidebarUnreadBadge } from './SidebarUnreadBadge'
 
@@ -107,6 +108,24 @@ export function SidebarContent({
           )
         })}
       </nav>
+
+      {/* Moshe Portal shortcut — admin only */}
+      {role === 'admin' && (
+        <div className={cn('border-t border-[var(--sidebar-border)]', collapsed ? 'p-2' : 'px-3 py-2')}>
+          <Link
+            href="/moshe"
+            title="פורטל משה פרוש"
+            className={cn(
+              'flex items-center rounded-xl text-sm font-medium transition-all duration-150 group',
+              collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+              'text-amber-400 hover:bg-amber-500/20 hover:text-amber-300'
+            )}
+          >
+            <Building2 className="w-5 h-5 shrink-0 text-amber-400 group-hover:text-amber-300" />
+            {!collapsed && <span className="flex-1">פורטל משה פרוש</span>}
+          </Link>
+        </div>
+      )}
 
       {/* Urgent Alerts Widget */}
       {urgentCount > 0 && (
