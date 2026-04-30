@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { usePathname } from 'next/navigation'
@@ -10,68 +10,68 @@ interface Props {
   initialCount: number
 }
 
+async function getUnreadCount(supabase: ReturnType<typeof createClient>, currentUserId: string) {
+  const { data: messages } = await (supabase.from('chat_messages') as any)
+    .select('id')
+    .neq('sender_id', currentUserId)
+
+  if (!messages || messages.length === 0) return 0
+
+  const { data: receipts } = await (supabase.from('chat_read_receipts') as any)
+    .select('message_id')
+    .eq('user_id', currentUserId)
+    .in('message_id', messages.map((m: any) => m.id))
+
+  const readIds = new Set(receipts?.map((r: any) => r.message_id) || [])
+  return (messages as any[]).filter(m => !readIds.has(m.id)).length
+}
+
 export function SidebarUnreadBadge({ currentUserId, initialCount }: Props) {
   const [count, setCount] = useState(initialCount)
-  const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
   const pathname = usePathname()
-
-  const fetchCount = useCallback(async () => {
-    // All messages not sent by current user
-    const { data: messages } = await (supabase.from('chat_messages') as any)
-      .select('id')
-      .neq('sender_id', currentUserId)
-
-    if (!messages || messages.length === 0) {
-      setCount(0)
-      return
-    }
-
-    // Which ones have a read receipt by us
-    const { data: receipts } = await (supabase.from('chat_read_receipts') as any)
-      .select('message_id')
-      .eq('user_id', currentUserId)
-      .in('message_id', messages.map((m: any) => m.id))
-
-    const readIds = new Set(receipts?.map((r: any) => r.message_id) || [])
-    const unread = (messages as any[]).filter(m => !readIds.has(m.id))
-    setCount(unread.length)
-  }, [currentUserId])
-
-  // When user navigates to the chat page, immediately re-fetch
-  // The chat interface handles marking messages as read, so we just need to re-count
-  useEffect(() => {
-    const isChatPage = pathname?.includes('/chat')
-    if (isChatPage) {
-      // Delay slightly to allow read receipts to be written by ChatInterface
-      const timer = setTimeout(() => fetchCount(), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [pathname, fetchCount])
 
   useEffect(() => {
     if (!currentUserId) return
 
-    fetchCount()
+    // Fresh client per mount — avoids "cannot add postgres_changes after subscribe()"
+    // when the mobile sidebar unmounts/remounts with the same channel name
+    const supabase = createClient()
+    let cancelled = false
+
+    getUnreadCount(supabase, currentUserId).then(n => {
+      if (!cancelled) setCount(n)
+    })
 
     const channel = supabase
       .channel(`sidebar-unread-${currentUserId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages' },
-        () => fetchCount()
+        () => getUnreadCount(supabase, currentUserId).then(n => { if (!cancelled) setCount(n) })
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_read_receipts', filter: `user_id=eq.${currentUserId}` },
-        () => fetchCount()
+        () => getUnreadCount(supabase, currentUserId).then(n => { if (!cancelled) setCount(n) })
       )
       .subscribe()
 
     return () => {
+      cancelled = true
       supabase.removeChannel(channel)
     }
-  }, [currentUserId, fetchCount])
+  }, [currentUserId])
+
+  // Re-fetch when navigating to/from chat (read receipts may have been written)
+  useEffect(() => {
+    if (!pathname?.includes('/chat') || !currentUserId) return
+    const timer = setTimeout(async () => {
+      const supabase = createClient()
+      const n = await getUnreadCount(supabase, currentUserId)
+      setCount(n)
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [pathname, currentUserId])
 
   if (count === 0) return null
 
