@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { usePathname } from 'next/navigation'
@@ -12,7 +12,8 @@ interface Props {
 
 export function SidebarUnreadBadge({ currentUserId, initialCount }: Props) {
   const [count, setCount] = useState(initialCount)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const pathname = usePathname()
 
   const fetchCount = useCallback(async () => {
