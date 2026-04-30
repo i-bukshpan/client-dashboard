@@ -14,24 +14,6 @@ interface Props {
 
 export function TopBarBell({ currentUserId, initialUnread, urgentCount, onClick }: Props) {
   const [unread, setUnread] = useState(initialUnread)
-  const supabase = createClient()
-
-  const fetchUnread = async () => {
-    const { data: messages } = await supabase
-      .from('chat_messages')
-      .select('id')
-      .neq('sender_id', currentUserId)
-
-    if (!messages) return
-
-    const { data: receipts } = await supabase
-      .from('chat_read_receipts')
-      .select('message_id')
-      .eq('user_id', currentUserId)
-
-    const readIds = new Set((receipts as any[])?.map((r: any) => r.message_id) || [])
-    setUnread((messages as any[]).filter((m: any) => !readIds.has(m.id)).length)
-  }
 
   useEffect(() => {
     setUnread(initialUnread)
@@ -40,13 +22,36 @@ export function TopBarBell({ currentUserId, initialUnread, urgentCount, onClick 
   useEffect(() => {
     if (!currentUserId) return
 
+    const supabase = createClient()
+    let cancelled = false
+
+    async function fetchUnread() {
+      const { data: messages } = await (supabase.from('chat_messages') as any)
+        .select('id')
+        .neq('sender_id', currentUserId)
+
+      if (!messages) return
+
+      const { data: receipts } = await (supabase.from('chat_read_receipts') as any)
+        .select('message_id')
+        .eq('user_id', currentUserId)
+
+      const readIds = new Set((receipts as any[])?.map((r: any) => r.message_id) || [])
+      if (!cancelled) setUnread((messages as any[]).filter((m: any) => !readIds.has(m.id)).length)
+    }
+
+    fetchUnread()
+
     const channel = supabase
       .channel(`topbar-bell-${currentUserId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, fetchUnread)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_read_receipts', filter: `user_id=eq.${currentUserId}` }, fetchUnread)
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+    }
   }, [currentUserId])
 
   const total = unread + urgentCount

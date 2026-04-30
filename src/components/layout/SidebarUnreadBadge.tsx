@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { usePathname } from 'next/navigation'
@@ -29,12 +29,13 @@ async function getUnreadCount(supabase: ReturnType<typeof createClient>, current
 export function SidebarUnreadBadge({ currentUserId, initialCount }: Props) {
   const [count, setCount] = useState(initialCount)
   const pathname = usePathname()
+  // useId() is stable per instance and consistent across SSR/CSR — avoids channel
+  // name collision when both desktop sidebar and mobile sheet render this component
+  const instanceId = useId().replace(/:/g, '')
 
   useEffect(() => {
     if (!currentUserId) return
 
-    // Fresh client per mount — avoids "cannot add postgres_changes after subscribe()"
-    // when the mobile sidebar unmounts/remounts with the same channel name
     const supabase = createClient()
     let cancelled = false
 
@@ -43,7 +44,7 @@ export function SidebarUnreadBadge({ currentUserId, initialCount }: Props) {
     })
 
     const channel = supabase
-      .channel(`sidebar-unread-${currentUserId}`)
+      .channel(`sidebar-unread-${currentUserId}-${instanceId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages' },
@@ -60,7 +61,7 @@ export function SidebarUnreadBadge({ currentUserId, initialCount }: Props) {
       cancelled = true
       supabase.removeChannel(channel)
     }
-  }, [currentUserId])
+  }, [currentUserId, instanceId])
 
   // Re-fetch when navigating to/from chat (read receipts may have been written)
   useEffect(() => {
