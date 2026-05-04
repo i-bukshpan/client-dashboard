@@ -1,22 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { Loader2, Save, MapPin, Phone, User, DollarSign, CalendarIcon } from 'lucide-react'
-import { PaymentScheduleForm, type PaymentRow } from '@/components/moshe/PaymentScheduleForm'
-import { createProject } from '@/app/moshe/actions'
+import { Loader2, Save, MapPin, Phone, User, DollarSign, CalendarIcon, ArrowRight, Trash2 } from 'lucide-react'
+import { updateProject, deleteProject } from '@/app/moshe/actions'
 import { toast } from 'sonner'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
-export default function NewProjectPage() {
+export default function EditProjectPage() {
   const router = useRouter()
+  const { id } = useParams() as { id: string }
   const [loading, setLoading] = useState(false)
-  const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [deleting, setDeleting] = useState(false)
+  const [fetching, setFetching] = useState(true)
 
   const [form, setForm] = useState({
     name: '',
@@ -29,6 +31,30 @@ export default function NewProjectPage() {
     notes: '',
   })
 
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('moshe_projects' as any)
+      .select('*')
+      .eq('id', id)
+      .single()
+      .then(({ data }: { data: any }) => {
+        if (data) {
+          setForm({
+            name: data.name ?? '',
+            address: data.address ?? '',
+            contact_name: data.contact_name ?? '',
+            contact_phone: data.contact_phone ?? '',
+            total_project_cost: data.total_project_cost ? String(data.total_project_cost) : '',
+            start_date: data.start_date ?? '',
+            status: data.status ?? 'active',
+            notes: data.notes ?? '',
+          })
+        }
+        setFetching(false)
+      })
+  }, [id])
+
   function set(k: keyof typeof form, v: string) {
     setForm(f => ({ ...f, [k]: v }))
   }
@@ -37,10 +63,10 @@ export default function NewProjectPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      const result = await createProject({ ...form, payments })
+      const result = await updateProject(id, form)
       if (result.error) { toast.error(result.error); return }
-      toast.success('הפרויקט נוצר בהצלחה!')
-      router.push(`/moshe/projects/${result.id}`)
+      toast.success('הפרויקט עודכן בהצלחה!')
+      router.push(`/moshe/projects/${id}`)
     } catch {
       toast.error('אירעה שגיאה בלתי צפויה')
     } finally {
@@ -48,15 +74,58 @@ export default function NewProjectPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!confirm(`למחוק את הפרויקט "${form.name}"? פעולה זו לא ניתנת לביטול.`)) return
+    setDeleting(true)
+    try {
+      const result = await deleteProject(id)
+      if (result.error) { toast.error(result.error); return }
+      toast.success('הפרויקט נמחק')
+      router.push('/moshe/projects')
+    } catch {
+      toast.error('שגיאה במחיקה')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (fetching) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-slate-900">פרויקט חדש</h1>
-        <p className="text-sm text-slate-500 mt-0.5">מלא את פרטי הפרויקט ולוח התשלומים שלו</p>
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+        <Link href="/moshe/projects" className="hover:text-slate-600 transition-colors">פרויקטים</Link>
+        <ArrowRight className="w-4 h-4 rotate-180" />
+        <Link href={`/moshe/projects/${id}`} className="hover:text-slate-600 transition-colors">{form.name}</Link>
+        <ArrowRight className="w-4 h-4 rotate-180" />
+        <span className="text-slate-700 font-medium">עריכה</span>
+      </div>
+
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">עריכת פרויקט</h1>
+          <p className="text-sm text-slate-500 mt-0.5">עדכן את פרטי הפרויקט</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 gap-2"
+        >
+          {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          מחק פרויקט
+        </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* פרטי הפרויקט */}
         <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">פרטי הפרויקט</p>
 
@@ -168,22 +237,6 @@ export default function NewProjectPage() {
           </div>
         </div>
 
-        {/* לוח תשלומים הפרויקט */}
-        <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
-            לוח תשלומים — הוצאות הפרויקט
-          </p>
-          <p className="text-xs text-slate-400 mb-4">
-            הוצאות שהפרויקט צריך לשלם (לקבלנים, רישומים וכד׳). תאריך אופציונלי — ניתן להוסיף לאחר מכן.
-          </p>
-          <PaymentScheduleForm
-            rows={payments}
-            onChange={setPayments}
-            label="תשלומי הפרויקט"
-            colorClass="border-red-100 bg-red-50/20"
-          />
-        </div>
-
         <div className="flex gap-3">
           <Button type="button" variant="outline" onClick={() => router.back()} className="flex-1">
             ביטול
@@ -194,7 +247,7 @@ export default function NewProjectPage() {
             className="flex-1 bg-amber-500 hover:bg-amber-400 text-white font-bold gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {loading ? 'שומר...' : 'צור פרויקט'}
+            {loading ? 'שומר...' : 'שמור שינויים'}
           </Button>
         </div>
       </form>

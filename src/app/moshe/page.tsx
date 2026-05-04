@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { format, isBefore, addDays } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { TrendingUp, TrendingDown, Wallet, AlertTriangle, Calendar, ArrowLeft } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, AlertTriangle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { CashFlowChart } from '@/components/moshe/CashFlowChart'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -134,7 +135,7 @@ export default async function MosheDashboard() {
   ]
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-black text-slate-900">דשבורד</h1>
         <p className="text-sm text-slate-500 mt-0.5">
@@ -315,6 +316,9 @@ export default async function MosheDashboard() {
           )}
         </div>
       </div>
+
+      {/* Cash flow chart */}
+      <CashFlowChart projPayments={pp} buyerPayments={bp} transactions={tx} />
 
       {/* Insights */}
       {proj.length > 0 && (

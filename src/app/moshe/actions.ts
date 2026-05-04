@@ -418,6 +418,87 @@ export async function updateTransaction(id: string, raw: unknown) {
   return { success: true }
 }
 
+// ─── Activity Log ──────────────────────────────────────────────────
+
+export async function addLog(projectId: string, action: string, details?: string, actor?: string) {
+  const { error } = await db.from('moshe_project_logs').insert({
+    project_id: projectId,
+    actor: actor || 'משה',
+    action,
+    details: details || null,
+  })
+  if (error) return { error: `שגיאה בכתיבת לוג: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function deleteLog(id: string, projectId: string) {
+  const { error } = await db.from('moshe_project_logs').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת רשומה: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+// ─── Drive link ────────────────────────────────────────────────────
+
+export async function updateDriveLink(projectId: string, url: string) {
+  const { error } = await db
+    .from('moshe_projects')
+    .update({ drive_folder_url: url || null })
+    .eq('id', projectId)
+
+  if (error) return { error: `שגיאה בעדכון קישור דרייב: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+// ─── Documents ─────────────────────────────────────────────────────
+
+export async function addDocument(raw: unknown) {
+  const schema = z.object({
+    project_id: z.string().uuid(),
+    name: z.string().min(1, 'שם הקובץ נדרש'),
+    url: z.string().url('כתובת URL לא תקינה'),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('moshe_project_documents').insert({
+    project_id: d.project_id,
+    name: d.name,
+    url: d.url,
+  })
+
+  if (error) return { error: `שגיאה בהוספת מסמך: ${error.message}` }
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function deleteDocument(id: string, projectId: string) {
+  const { error } = await db.from('moshe_project_documents').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת מסמך: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function updateDocument(id: string, raw: unknown) {
+  const schema = z.object({
+    name: z.string().min(1, 'שם נדרש'),
+    url: z.string().url('כתובת URL לא תקינה'),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: doc } = await db.from('moshe_project_documents').select('project_id').eq('id', id).single()
+  const { error } = await db.from('moshe_project_documents').update({ name: d.name, url: d.url }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון מסמך: ${error.message}` }
+  revalidatePath(`/moshe/projects/${(doc as any)?.project_id}`)
+  return { success: true }
+}
+
 export async function updateCalendarEvent(id: string, raw: unknown) {
   const schema = z.object({
     title: z.string().min(1, 'כותרת נדרשת'),

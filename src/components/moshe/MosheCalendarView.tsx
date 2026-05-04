@@ -176,7 +176,7 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
   const sortedAll = [...filtered].sort((a, b) => a.date.getTime() - b.date.getTime())
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black text-slate-900">יומן תשלומים</h1>
         <div className="flex items-center gap-2">

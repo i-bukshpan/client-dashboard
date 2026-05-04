@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, MapPin, Phone, User, CalendarDays, DollarSign } from 'lucide-react'
+import { ArrowRight, MapPin, Phone, User, CalendarDays, DollarSign, Pencil } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
@@ -9,6 +9,9 @@ import { cn } from '@/lib/utils'
 import { ProjectPaymentsTab } from '@/components/moshe/ProjectPaymentsTab'
 import { BuyersTab } from '@/components/moshe/BuyersTab'
 import { TransactionsTab } from '@/components/moshe/TransactionsTab'
+import { DocumentsTab } from '@/components/moshe/DocumentsTab'
+import { ProjectPrintButton } from '@/components/moshe/ProjectPrintView'
+import { ActivityLogTab } from '@/components/moshe/ActivityLogTab'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,12 +39,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     { data: buyers },
     { data: buyerPayments },
     { data: transactions },
+    { data: documents },
+    { data: activityLogs },
   ] = await Promise.all([
     db.from('moshe_projects').select('*').eq('id', id).single(),
     db.from('moshe_project_payments').select('*').eq('project_id', id).order('due_date', { ascending: true, nullsFirst: false }),
     db.from('moshe_buyers').select('*').eq('project_id', id).order('created_at'),
     db.from('moshe_buyer_payments').select('*').eq('project_id', id),
     db.from('moshe_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
+    db.from('moshe_project_documents').select('*').eq('project_id', id).order('created_at'),
+    db.from('moshe_project_logs').select('*').eq('project_id', id).order('created_at', { ascending: false }),
   ])
 
   if (!project) notFound()
@@ -51,6 +58,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const buyersArr = (buyers as any[]) ?? []
   const bp = (buyerPayments as any[]) ?? []
   const tx = (transactions as any[]) ?? []
+  const docs = (documents as any[]) ?? []
+  const logs = (activityLogs as any[]) ?? []
 
   // Enrich buyers with their payments
   const buyersWithPayments = buyersArr.map((b: any) => ({
@@ -72,7 +81,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-400">
         <Link href="/moshe/projects" className="hover:text-slate-600 transition-colors">פרויקטים</Link>
@@ -86,7 +95,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <div className="p-5">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1 className="text-xl font-black text-slate-900">{p.name}</h1>
                 <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', st.color)}>{st.label}</span>
               </div>
@@ -97,6 +106,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 {p.start_date && <span className="flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" />מ-{format(new Date(p.start_date), 'dd/MM/yyyy')}</span>}
                 {p.total_project_cost && <span className="flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" />תקציב: {fmt(Number(p.total_project_cost))}</span>}
               </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <ProjectPrintButton
+                project={p}
+                payments={pp}
+                buyers={buyersWithPayments}
+                realBalance={realBalance}
+                totalReceived={totalReceived + txIncome}
+                totalPaid={totalPaid + txExpense}
+                totalExpected={totalExpected}
+                totalScheduled={totalScheduled}
+              />
+              <Link
+                href={`/moshe/projects/${id}/edit`}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-amber-600 border border-slate-200 hover:border-amber-300 rounded-xl px-3 py-2 transition-all"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                עריכה
+              </Link>
             </div>
           </div>
 
@@ -120,11 +148,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       {/* Tabs */}
       <Tabs defaultValue="payments">
         <div className="bg-white border border-border/50 rounded-2xl p-1 mb-4 shadow-sm max-w-fit">
-          <TabsList className="bg-transparent gap-1">
+          <TabsList className="bg-transparent gap-1 flex-wrap">
             {[
-              { value: 'payments', label: 'לוח תשלומים' },
-              { value: 'buyers',   label: `קונים (${buyersArr.length})` },
-              { value: 'finance',  label: 'הוצאות/הכנסות' },
+              { value: 'payments',  label: 'לוח תשלומים' },
+              { value: 'buyers',    label: `קונים (${buyersArr.length})` },
+              { value: 'finance',   label: 'הוצאות/הכנסות' },
+              { value: 'documents', label: `מסמכים (${docs.length})` },
+              { value: 'log',       label: `לוג (${logs.length})` },
             ].map(tab => (
               <TabsTrigger key={tab.value} value={tab.value}
                 className="rounded-xl px-5 text-sm data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-none font-bold transition-all">
@@ -144,6 +174,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         <TabsContent value="finance" className="focus-visible:outline-none">
           <TransactionsTab projectId={id} transactions={tx} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="focus-visible:outline-none">
+          <DocumentsTab projectId={id} documents={docs} driveFolderUrl={p.drive_folder_url} />
+        </TabsContent>
+
+        <TabsContent value="log" className="focus-visible:outline-none">
+          <ActivityLogTab projectId={id} logs={logs} />
         </TabsContent>
       </Tabs>
     </div>
