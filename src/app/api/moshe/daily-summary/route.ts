@@ -18,28 +18,29 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   // ── Auth: validate x-api-key header ──
   const authHeader = request.headers.get('x-api-key')?.trim()
+  const expectedKey = (process.env.API_AUTH_TOKEN || '').trim()
   
   if (!authHeader) {
     return NextResponse.json({ 
       error: 'Unauthorized',
-      message: 'Missing x-api-key header. Send your API key as: x-api-key: <your-key>',
+      message: 'Missing x-api-key header.',
+      expected_env_var: 'API_AUTH_TOKEN'
     }, { status: 401 })
   }
 
-  const expectedKey = (process.env.MOSHE_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-  
   if (!expectedKey) {
     return NextResponse.json({
       error: 'Server configuration error',
-      message: 'Neither MOSHE_API_KEY nor SUPABASE_SERVICE_ROLE_KEY is configured on the server.',
+      message: 'API_AUTH_TOKEN is not configured on the server.',
     }, { status: 500 })
   }
 
   if (authHeader !== expectedKey) {
     return NextResponse.json({
       error: 'Unauthorized',
-      message: 'Invalid API key. Make sure x-api-key matches SUPABASE_SERVICE_ROLE_KEY or MOSHE_API_KEY.',
-      hint: `Key received starts with: ${authHeader.substring(0, 10)}... (${authHeader.length} chars)`,
+      received_key: authHeader,
+      expected_key: expectedKey,
+      match: false
     }, { status: 401 })
   }
 
