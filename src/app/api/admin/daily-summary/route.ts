@@ -59,7 +59,18 @@ export async function GET(request: Request) {
     }, { status: 401 })
   }
 
-  const today = new Date()
+  // ── Date Logic: use ?date=YYYY-MM-DD or default to today ──
+  const { searchParams } = new URL(request.url)
+  const dateParam = searchParams.get('date')
+  
+  let today = new Date()
+  if (dateParam) {
+    const parsed = new Date(dateParam)
+    if (!isNaN(parsed.getTime())) {
+      today = parsed
+    }
+  }
+
   const todayStr = today.toISOString().split('T')[0]
   const todayStart = `${todayStr}T00:00:00+00:00`
   const todayEnd = `${todayStr}T23:59:59+00:00`
