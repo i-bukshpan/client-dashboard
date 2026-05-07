@@ -314,12 +314,12 @@ export async function GET(request: Request) {
       whatsapp_message: formatMosheWhatsApp({
         todayStr, realBalance, overdueExpenses, overdueIncome, overdueLoanPayments,
         upcoming7Expenses, upcoming7Income, projectInsights, proj, calendarEvents: calendarEvents ?? [],
-        todayExpenses, todayIncome, weeklySummary
+        todayExpenses, todayIncome, weeklySummary, projectMap
       }),
       email_message: formatMosheEmail({
         todayStr, realBalance, overdueExpenses, overdueIncome, overdueLoanPayments,
         upcoming7Expenses, upcoming7Income, projectInsights, proj, calendarEvents: calendarEvents ?? [],
-        todayExpenses, todayIncome, weeklySummary, loanSummary, partnerSummary
+        todayExpenses, todayIncome, weeklySummary, loanSummary, partnerSummary, projectMap
       }),
     }
 
@@ -457,12 +457,12 @@ function formatMosheEmail(data: any) {
     html += `<h3 style="color: #4b5563;">💳 תשלומים להיום</h3>`
     if (data.todayIncome.length > 0) {
       html += `<p style="color: #059669; font-weight: bold;">✅ לגבייה:</p><ul>`
-      data.todayIncome.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.moshe_buyers?.name} (${projectMap[p.project_id]})</li>`)
+      data.todayIncome.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.moshe_buyers?.name} (${data.projectMap[p.project_id]})</li>`)
       html += `</ul>`
     }
     if (data.todayExpenses.length > 0) {
       html += `<p style="color: #dc2626; font-weight: bold;">💸 לתשלום:</p><ul>`
-      data.todayExpenses.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.notes || 'הוצאה'} (${projectMap[p.project_id]})</li>`)
+      data.todayExpenses.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.notes || 'הוצאה'} (${data.projectMap[p.project_id]})</li>`)
       html += `</ul>`
     }
   }
