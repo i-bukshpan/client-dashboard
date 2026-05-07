@@ -281,7 +281,7 @@ export async function GET(request: Request) {
       // Goals
       goals,
 
-      // Pre-formatted WhatsApp message
+      // Pre-formatted messages
       whatsapp_message: formatAdminWhatsApp({
         todayStr, incomeTotal, expensesTotal, profit,
         allAppointments: allAppointments ?? [],
@@ -291,6 +291,17 @@ export async function GET(request: Request) {
         activeClients: activeClients,
         goals: goals,
         weeklySummary: weeklySummary
+      }),
+      email_message: formatAdminEmail({
+        todayStr, incomeTotal, expensesTotal, profit,
+        allAppointments: allAppointments ?? [],
+        urgentTasks, overdueTasks, dueTodayTasks,
+        todayIncome: todayIncome ?? [],
+        todayExpenses: todayExpenses,
+        activeClients: activeClients,
+        goals: goals,
+        weeklySummary: weeklySummary,
+        incomeByCategory, expensesByCategory
       }),
     }
 
@@ -314,16 +325,16 @@ function formatAdminWhatsApp(data: any) {
 
   const isSunday = new Date(data.todayStr).getDay() === 0
 
-  lines.push(`${isSunday ? '📅 *מבט שבועי — ייעוץ*' : '📊 *סיכום יומי — ייעוץ*'} | ${data.todayStr}`)
+  lines.push(`${isSunday ? '📅 *מבט שבועי וסיכום יומי — ייעוץ*' : '📊 *סיכום יומי — ייעוץ*'} | ${data.todayStr}`)
   lines.push('')
 
-  // Financial snapshot
+  // 1. Financial snapshot
   lines.push(`📈 *הכנסות החודש:* ${fmt(data.incomeTotal)}`)
   lines.push(`📉 *הוצאות החודש:* ${fmt(data.expensesTotal)}`)
   lines.push(`💰 *רווח נקי:* ${fmt(data.profit)}`)
   lines.push('')
 
-  // Weekly Overview (If Sunday)
+  // 2. Weekly Overview (If Sunday)
   if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
     lines.push('🗓️ *פגישות ומשימות לשבוע הקרוב:*')
     data.weeklySummary.forEach((day: any) => {
@@ -334,7 +345,7 @@ function formatAdminWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Today's financial activity
+  // 3. Today's financial activity
   const todayIn = data.todayIncome.reduce((s: number, r: any) => s + Number(r.amount), 0)
   const todayEx = data.todayExpenses.reduce((s: number, r: any) => s + Number(r.amount), 0)
   if (todayIn > 0 || todayEx > 0) {
@@ -344,7 +355,7 @@ function formatAdminWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Appointments
+  // 4. Appointments
   if (data.allAppointments.length > 0) {
     lines.push(`📅 *${data.allAppointments.length} פגישות היום:*`)
     data.allAppointments.forEach((a: any) => {
@@ -354,7 +365,7 @@ function formatAdminWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Tasks
+  // 5. Tasks
   const taskAlerts = []
   if (data.urgentTasks.length > 0) taskAlerts.push(`🔴 ${data.urgentTasks.length} דחופות`)
   if (data.overdueTasks.length > 0) taskAlerts.push(`⚠️ ${data.overdueTasks.length} באיחור`)
@@ -370,7 +381,7 @@ function formatAdminWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Goals progress
+  // 6. Goals progress
   if (data.goals.length > 0) {
     const topGoals = data.goals.sort((a: any, b: any) => b.progress - a.progress).slice(0, 3)
     lines.push('🎯 *יעדים:*')
@@ -384,4 +395,79 @@ function formatAdminWhatsApp(data: any) {
   lines.push(`👥 *${data.activeClients.length} לקוחות פעילים*`)
 
   return lines.join('\n')
+}
+
+function formatAdminEmail(data: any) {
+  const fmt = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
+  const isSunday = new Date(data.todayStr).getDay() === 0
+
+  let html = `
+    <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+      <h2 style="color: #2563eb; border-bottom: 2px solid #3b82f6; padding-bottom: 10px;">
+        ${isSunday ? '📅 מבט שבועי וסיכום יומי — פורטל ייעוץ' : '📊 סיכום יומי — פורטל ייעוץ'}
+      </h2>
+      <p style="font-size: 14px; color: #666;">תאריך: ${data.todayStr}</p>
+      
+      <div style="display: flex; gap: 10px; margin: 20px 0;">
+        <div style="flex: 1; background: #eff6ff; padding: 15px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: #1e40af;">הכנסות החודש</div>
+          <div style="font-size: 18px; font-weight: bold; color: #1e40af;">${fmt(data.incomeTotal)}</div>
+        </div>
+        <div style="flex: 1; background: #fef2f2; padding: 15px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: #991b1b;">הוצאות החודש</div>
+          <div style="font-size: 18px; font-weight: bold; color: #991b1b;">${fmt(data.expensesTotal)}</div>
+        </div>
+        <div style="flex: 1; background: #f0fdf4; padding: 15px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 12px; color: #166534;">רווח נקי</div>
+          <div style="font-size: 18px; font-weight: bold; color: #166534;">${fmt(data.profit)}</div>
+        </div>
+      </div>
+  `
+
+  if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
+    html += `<h3 style="color: #4b5563;">🗓️ לו"ז שבועי (פגישות ומשימות)</h3><table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">`
+    data.weeklySummary.forEach((day: any) => {
+      html += `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>${day.day_name}</strong></td>
+               <td style="padding: 8px; border-bottom: 1px solid #eee;">📅 ${day.appointments.length} פגישות</td>
+               <td style="padding: 8px; border-bottom: 1px solid #eee;">📋 ${day.tasks_count} משימות</td></tr>`
+    })
+    html += `</table>`
+  }
+
+  if (data.allAppointments.length > 0) {
+    html += `<h3 style="color: #4b5563;">📅 פגישות היום</h3><ul style="padding-right: 20px;">`
+    data.allAppointments.forEach((a: any) => {
+      const time = new Date(a.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      html += `<li><strong>${time}</strong> — ${a.clients?.name || 'לקוח'}${a.notes ? ` (${a.notes})` : ''}</li>`
+    })
+    html += `</ul>`
+  }
+
+  const taskAlerts = []
+  if (data.urgentTasks.length > 0) taskAlerts.push(`<span style="color: #dc2626;">🔴 ${data.urgentTasks.length} דחופות</span>`)
+  if (data.overdueTasks.length > 0) taskAlerts.push(`<span style="color: #92400e;">⚠️ ${data.overdueTasks.length} באיחור</span>`)
+  if (data.dueTodayTasks.length > 0) taskAlerts.push(`<span style="color: #2563eb;">📌 ${data.dueTodayTasks.length} להיום</span>`)
+
+  if (taskAlerts.length > 0) {
+    html += `<h3 style="color: #4b5563;">📋 משימות</h3><p>${taskAlerts.join(' | ')}</p>`
+    if (data.urgentTasks.length > 0) {
+      html += `<ul style="padding-right: 20px;">`
+      data.urgentTasks.slice(0, 5).forEach((t: any) => html += `<li>${t.title}${t.clients?.name ? ` (${t.clients.name})` : ''}</li>`)
+      html += `</ul>`
+    }
+  }
+
+  if (data.goals.length > 0) {
+    html += `<h3 style="color: #4b5563;">🎯 התקדמות יעדים</h3>`
+    data.goals.slice(0, 3).forEach((g: any) => {
+      html += `<div style="margin-bottom: 10px;"><div style="font-size: 13px;">${g.title} (${g.progress}%)</div>
+               <div style="background: #eee; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 4px;">
+                 <div style="background: #3b82f6; width: ${g.progress}%; height: 100%;"></div>
+               </div></div>`
+    })
+  }
+
+  html += `<p style="margin-top: 30px; padding-top: 10px; border-top: 1px solid #eee; color: #666; font-size: 13px;">👥 ${data.activeClients.length} לקוחות פעילים</p>`
+  html += `</div>`
+  return html
 }

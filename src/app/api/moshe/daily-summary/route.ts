@@ -310,11 +310,16 @@ export async function GET(request: Request) {
       loans: loanSummary,
       partners: partnerSummary,
 
-      // Pre-formatted WhatsApp message
+      // Pre-formatted messages
       whatsapp_message: formatMosheWhatsApp({
         todayStr, realBalance, overdueExpenses, overdueIncome, overdueLoanPayments,
         upcoming7Expenses, upcoming7Income, projectInsights, proj, calendarEvents: calendarEvents ?? [],
-        todayExpenses, todayIncome,
+        todayExpenses, todayIncome, weeklySummary
+      }),
+      email_message: formatMosheEmail({
+        todayStr, realBalance, overdueExpenses, overdueIncome, overdueLoanPayments,
+        upcoming7Expenses, upcoming7Income, projectInsights, proj, calendarEvents: calendarEvents ?? [],
+        todayExpenses, todayIncome, weeklySummary, loanSummary, partnerSummary
       }),
     }
 
@@ -338,13 +343,13 @@ function formatMosheWhatsApp(data: any) {
 
   const isSunday = new Date(data.todayStr).getDay() === 0
 
-  lines.push(`${isSunday ? '📅 *מבט שבועי — נדל"ן*' : '🏗️ *סיכום יומי — נדל"ן*'} | ${data.todayStr}`)
+  lines.push(`${isSunday ? '📅 *מבט שבועי וסיכום יומי — נדל"ן*' : '🏗️ *סיכום יומי — נדל"ן*'} | ${data.todayStr}`)
   lines.push('')
   lines.push(`💰 *מאזן פרויקטים:* ${fmt(data.realBalance)}`)
   lines.push(`📁 *${data.proj.length} פרויקטים פעילים*`)
   lines.push('')
 
-  // Weekly Overview (If Sunday)
+  // 1. Weekly Overview (If Sunday)
   if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
     lines.push('🗓️ *לו"ז פיננסי לשבוע הקרוב:*')
     data.weeklySummary.forEach((day: any) => {
@@ -357,7 +362,7 @@ function formatMosheWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Calendar events
+  // 2. Calendar events
   if (data.calendarEvents.length > 0) {
     lines.push('📅 *אירועים היום:*')
     data.calendarEvents.forEach((e: any) => {
@@ -367,7 +372,7 @@ function formatMosheWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Today's payments
+  // 3. Today's payments
   if (data.todayExpenses.length > 0 || data.todayIncome.length > 0) {
     lines.push('💳 *תשלומים להיום:*')
     data.todayExpenses.forEach((p: any) => {
@@ -379,7 +384,7 @@ function formatMosheWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Overdue
+  // 4. Overdue
   const totalOverdue = data.overdueExpenses.length + data.overdueIncome.length + data.overdueLoanPayments.length
   if (totalOverdue > 0) {
     lines.push(`⚠️ *${totalOverdue} תשלומים באיחור!*`)
@@ -398,17 +403,7 @@ function formatMosheWhatsApp(data: any) {
     lines.push('')
   }
 
-  // Next 7 days
-  const next7In = data.upcoming7Income.reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const next7Ex = data.upcoming7Expenses.reduce((s: number, p: any) => s + Number(p.amount), 0)
-  if (next7In + next7Ex > 0) {
-    lines.push('📅 *7 ימים קרובים:*')
-    if (next7In > 0) lines.push(`  ✅ לגבייה: ${fmt(next7In)}`)
-    if (next7Ex > 0) lines.push(`  💸 לתשלום: ${fmt(next7Ex)}`)
-    lines.push('')
-  }
-
-  // Projects at risk
+  // 5. Projects at risk
   const atRisk = data.projectInsights.filter((p: any) => p.is_at_risk)
   if (atRisk.length > 0) {
     lines.push('🚨 *פרויקטים בסיכון:*')
@@ -418,4 +413,79 @@ function formatMosheWhatsApp(data: any) {
   }
 
   return lines.join('\n')
+}
+
+function formatMosheEmail(data: any) {
+  const fmt = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
+  const isSunday = new Date(data.todayStr).getDay() === 0
+
+  let html = `
+    <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+      <h2 style="color: #d97706; border-bottom: 2px solid #fbbf24; padding-bottom: 10px;">
+        ${isSunday ? '📅 מבט שבועי וסיכום יומי — פורטל נדל"ן' : '🏗️ סיכום יומי — פורטל נדל"ן'}
+      </h2>
+      <p style="font-size: 14px; color: #666;">תאריך: ${data.todayStr}</p>
+      
+      <div style="background: #fffbeb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #92400e;">💰 מאזן פרויקטים: ${fmt(data.realBalance)}</h3>
+        <p style="margin-bottom: 0;"><strong>פרויקטים פעילים:</strong> ${data.proj.length}</p>
+      </div>
+  `
+
+  if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
+    html += `<h3 style="color: #4b5563;">🗓️ לו"ז פיננסי שבועי</h3><table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">`
+    data.weeklySummary.forEach((day: any) => {
+      const exp = day.expenses.reduce((s: number, e: any) => s + e.amount, 0)
+      const inc = day.income.reduce((s: number, e: any) => s + e.amount, 0)
+      html += `<tr><td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>${day.day_name}</strong></td>
+               <td style="padding: 8px; border-bottom: 1px solid #eee; color: #059669;">גבייה: ${fmt(inc)}</td>
+               <td style="padding: 8px; border-bottom: 1px solid #eee; color: #dc2626;">תשלום: ${fmt(exp)}</td></tr>`
+    })
+    html += `</table>`
+  }
+
+  if (data.calendarEvents.length > 0) {
+    html += `<h3 style="color: #4b5563;">📅 אירועים היום</h3><ul>`
+    data.calendarEvents.forEach((e: any) => {
+      const time = new Date(e.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      html += `<li><strong>${time}</strong> — ${e.title}</li>`
+    })
+    html += `</ul>`
+  }
+
+  if (data.todayExpenses.length > 0 || data.todayIncome.length > 0) {
+    html += `<h3 style="color: #4b5563;">💳 תשלומים להיום</h3>`
+    if (data.todayIncome.length > 0) {
+      html += `<p style="color: #059669; font-weight: bold;">✅ לגבייה:</p><ul>`
+      data.todayIncome.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.moshe_buyers?.name} (${projectMap[p.project_id]})</li>`)
+      html += `</ul>`
+    }
+    if (data.todayExpenses.length > 0) {
+      html += `<p style="color: #dc2626; font-weight: bold;">💸 לתשלום:</p><ul>`
+      data.todayExpenses.forEach((p: any) => html += `<li>${fmt(p.amount)} — ${p.notes || 'הוצאה'} (${projectMap[p.project_id]})</li>`)
+      html += `</ul>`
+    }
+  }
+
+  const totalOverdue = data.overdueExpenses.length + data.overdueIncome.length + data.overdueLoanPayments.length
+  if (totalOverdue > 0) {
+    html += `<div style="background: #fef2f2; padding: 15px; border-radius: 8px; border: 1px solid #fee2e2; margin-top: 20px;">
+      <h3 style="margin-top: 0; color: #991b1b;">⚠️ התראות איחור (${totalOverdue})</h3>`
+    if (data.overdueIncome.length > 0) html += `<p>איחורי גבייה: <strong>${fmt(data.overdueIncome.reduce((s:any,x:any)=>s+Number(x.amount),0))}</strong></p>`
+    if (data.overdueExpenses.length > 0) html += `<p>איחורי תשלום: <strong>${fmt(data.overdueExpenses.reduce((s:any,x:any)=>s+Number(x.amount),0))}</strong></p>`
+    html += `</div>`
+  }
+
+  html += `<h3 style="color: #4b5563; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px;">🚨 פרויקטים בסיכון</h3>`
+  const atRisk = data.projectInsights.filter((p: any) => p.is_at_risk)
+  if (atRisk.length > 0) {
+    atRisk.forEach((p: any) => {
+      html += `<div style="margin-bottom: 10px;"><strong>${p.name}:</strong> גבייה ${p.collection_pct}% | איחור ${fmt(p.overdue_amount)}</div>`
+    })
+  } else {
+    html += `<p>אין פרויקטים בסיכון כרגע. ✅</p>`
+  }
+
+  html += `</div>`
+  return html
 }
