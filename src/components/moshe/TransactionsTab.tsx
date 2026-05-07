@@ -217,7 +217,7 @@ export function TransactionsTab({ projectId, transactions }: Props) {
                   {t.type === 'income' ? '+' : '-'}{fmt(Number(t.amount))}
                 </p>
                 <button onClick={() => startEdit(t)} disabled={pending}
-                  className="w-7 h-7 rounded-lg text-slate-200 hover:text-amber-500 hover:bg-amber-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  className="w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-amber-500 hover:bg-amber-50 hover:border-amber-200 flex items-center justify-center shrink-0 transition-colors">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => remove(t.id)} disabled={pending}

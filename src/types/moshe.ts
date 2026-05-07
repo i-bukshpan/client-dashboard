@@ -82,6 +82,52 @@ export interface ProjectWithStats extends MosheProject {
   buyers_count: number
 }
 
+export interface MoshePartner {
+  id: string
+  project_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface MoshePartnerTransaction {
+  id: string
+  partner_id: string
+  project_id: string
+  type: 'investment' | 'withdrawal'
+  amount: number
+  date: string
+  notes: string | null
+  created_at: string
+}
+
+export interface MosheLoan {
+  id: string
+  project_id: string
+  lender: string
+  arranged_by: string | null
+  total_amount: number
+  interest_rate: number | null
+  num_payments: number
+  start_date: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface MosheLoanPayment {
+  id: string
+  loan_id: string
+  project_id: string
+  amount: number
+  due_date: string | null
+  is_paid: boolean
+  paid_at: string | null
+  notes: string | null
+  created_at: string
+}
+
 export interface PaymentRow {
   amount: string
   due_date: string

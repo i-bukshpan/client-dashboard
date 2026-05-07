@@ -1,0 +1,906 @@
+{
+  "_meta": {
+    "description": "Nehemiah OS database schema knowledge base for Text-to-SQL. Use this to generate accurate PostgreSQL queries against a Supabase database.",
+    "generated_at": "2026-05-06T07:20:55.022Z",
+    "database": "Supabase PostgreSQL",
+    "schema": "public",
+    "important_notes": [
+      "All tables are in the 'public' schema.",
+      "All primary keys are UUID type.",
+      "Timestamps are TIMESTAMPTZ (ISO 8601 with timezone).",
+      "Dates are DATE type (YYYY-MM-DD).",
+      "Hebrew text is used for some values (e.g., income.category = 'ייעוץ').",
+      "Use service_role key to bypass RLS when querying.",
+      "For JOIN queries, match UUID foreign keys to the referenced table's 'id' column."
+    ]
+  },
+  "tables": {
+    "profiles": {
+      "row_count": 3,
+      "schema": {
+        "id": "UUID (PK)",
+        "full_name": "TEXT",
+        "role": "TEXT — CHECK ('admin', 'employee')",
+        "avatar_url": "TEXT",
+        "email": "TEXT",
+        "salary_base": "NUMERIC(12,2)",
+        "created_at": "TIMESTAMPTZ",
+        "updated_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "full_name": "שרוליק בוקשפן",
+          "role": "employee",
+          "email": "nb123069@gmail.com",
+          "salary_base": 1500
+        }
+      ],
+      "distinct_values": {
+        "role": [
+          "admin",
+          "employee"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "profiles",
+          "column": "id",
+          "references_table": "auth.users",
+          "references_column": "id"
+        }
+      ]
+    },
+    "clients": {
+      "row_count": 13,
+      "schema": {
+        "id": "UUID (PK)",
+        "name": "TEXT",
+        "email": "TEXT",
+        "phone": "TEXT",
+        "id_number": "TEXT",
+        "address": "TEXT",
+        "notes": "TEXT",
+        "drive_folder_id": "TEXT",
+        "created_by": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ",
+        "birth_date": "DATE",
+        "portfolio_value": "NUMERIC(15,2)",
+        "client_since": "DATE",
+        "meeting_frequency": "TEXT",
+        "risk_level": "TEXT — CHECK ('low', 'medium', 'high', 'very_high')",
+        "advisory_goal": "TEXT",
+        "advisory_track": "TEXT",
+        "status": "TEXT — CHECK ('active', 'inactive', 'prospect', 'archived') — DEFAULT 'active'",
+        "user_id": "UUID (FK → auth.users.id)",
+        "updated_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "name": "אהרון ריבל",
+          "email": "af0583222299@gmail.com",
+          "phone": "0537708880",
+          "id_number": "206240160",
+          "address": "בר אילן 1",
+          "notes": null,
+          "status": "active",
+          "birth_date": null,
+          "advisory_track": null,
+          "advisory_goal": null,
+          "risk_level": null,
+          "portfolio_value": null,
+          "client_since": null,
+          "meeting_frequency": null
+        }
+      ],
+      "distinct_values": {
+        "status": [
+          "active"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "clients",
+          "column": "created_by",
+          "references_table": "profiles",
+          "references_column": "id"
+        },
+        {
+          "table": "clients",
+          "column": "user_id",
+          "references_table": "auth.users",
+          "references_column": "id"
+        }
+      ]
+    },
+    "appointments": {
+      "row_count": 3,
+      "schema": {
+        "id": "UUID (PK)",
+        "client_id": "UUID (FK → clients.id)",
+        "employee_id": "UUID (FK → profiles.id)",
+        "start_time": "TIMESTAMPTZ",
+        "end_time": "TIMESTAMPTZ",
+        "title": "TEXT",
+        "status": "TEXT — CHECK ('scheduled', 'done', 'cancelled') — DEFAULT 'scheduled'",
+        "notes": "TEXT",
+        "created_at": "TIMESTAMPTZ",
+        "updated_at": "TIMESTAMPTZ",
+        "google_event_id": "TEXT (UNIQUE)"
+      },
+      "sample_data": [
+        {
+          "start_time": "2026-04-30T10:00:00+00:00",
+          "end_time": "2026-04-30T22:57:00+00:00",
+          "title": "ניסוי ענעעעעהנ עיהמנהה",
+          "status": "scheduled",
+          "notes": null
+        }
+      ],
+      "distinct_values": {
+        "status": [
+          "scheduled"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "appointments",
+          "column": "client_id",
+          "references_table": "clients",
+          "references_column": "id"
+        },
+        {
+          "table": "appointments",
+          "column": "employee_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "meeting_summaries": {
+      "row_count": 0,
+      "schema": {
+        "id": "UUID (PK)",
+        "appointment_id": "UUID (FK → appointments.id)",
+        "notes": "TEXT",
+        "action_items": "JSONB — DEFAULT '[]'",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "foreign_keys": [
+        {
+          "table": "meeting_summaries",
+          "column": "appointment_id",
+          "references_table": "appointments",
+          "references_column": "id"
+        }
+      ]
+    },
+    "tasks": {
+      "row_count": 0,
+      "schema": {
+        "id": "UUID (PK)",
+        "title": "TEXT",
+        "description": "TEXT",
+        "status": "TEXT — CHECK ('todo', 'in_progress', 'done') — DEFAULT 'todo'",
+        "priority": "TEXT — CHECK ('low', 'medium', 'high', 'urgent') — DEFAULT 'medium'",
+        "due_date": "DATE",
+        "assigned_to": "UUID (FK → profiles.id)",
+        "client_id": "UUID (FK → clients.id)",
+        "created_by": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ",
+        "updated_at": "TIMESTAMPTZ",
+        "archived": "BOOLEAN"
+      },
+      "foreign_keys": [
+        {
+          "table": "tasks",
+          "column": "assigned_to",
+          "references_table": "profiles",
+          "references_column": "id"
+        },
+        {
+          "table": "tasks",
+          "column": "client_id",
+          "references_table": "clients",
+          "references_column": "id"
+        },
+        {
+          "table": "tasks",
+          "column": "created_by",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "income": {
+      "row_count": 1,
+      "schema": {
+        "id": "UUID (PK)",
+        "amount": "NUMERIC(12,2) — CHECK (amount > 0)",
+        "category": "TEXT — DEFAULT 'ייעוץ'",
+        "date": "DATE",
+        "client_id": "UUID (FK → clients.id)",
+        "notes": "TEXT",
+        "created_by": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "amount": 3000,
+          "category": "הנחה",
+          "date": "2026-04-23",
+          "notes": null
+        }
+      ],
+      "distinct_values": {
+        "category": [
+          "הנחה"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "income",
+          "column": "client_id",
+          "references_table": "clients",
+          "references_column": "id"
+        },
+        {
+          "table": "income",
+          "column": "created_by",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "expenses": {
+      "row_count": 3,
+      "schema": {
+        "id": "UUID (PK)",
+        "amount": "NUMERIC(12,2) — CHECK (amount > 0)",
+        "category": "TEXT — DEFAULT 'כללי'",
+        "date": "DATE",
+        "notes": "TEXT",
+        "created_by": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "amount": 1500,
+          "category": "שיווק",
+          "date": "2026-04-23",
+          "notes": null
+        }
+      ],
+      "distinct_values": {
+        "category": [
+          "העברת אינטרנט",
+          "משכורות",
+          "שיווק"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "expenses",
+          "column": "created_by",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "conversations": {
+      "row_count": 1,
+      "schema": {
+        "id": "UUID (PK)",
+        "admin_id": "UUID (FK → profiles.id)",
+        "employee_id": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "admin_id": "309f6a27-63ab-456f-ac40-24457ccbff27"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "conversations",
+          "column": "admin_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        },
+        {
+          "table": "conversations",
+          "column": "employee_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "chat_messages": {
+      "row_count": 12,
+      "schema": {
+        "id": "UUID (PK)",
+        "conversation_id": "UUID (FK → conversations.id)",
+        "sender_id": "UUID (FK → profiles.id)",
+        "content": "TEXT",
+        "metadata": "JSONB",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "content": "היי שרוליק, מה קורה?"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "chat_messages",
+          "column": "conversation_id",
+          "references_table": "conversations",
+          "references_column": "id"
+        },
+        {
+          "table": "chat_messages",
+          "column": "sender_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "employee_bonuses": {
+      "row_count": 1,
+      "schema": {
+        "id": "UUID (PK)",
+        "employee_id": "UUID (FK → profiles.id)",
+        "amount": "NUMERIC(12,2)",
+        "reason": "TEXT",
+        "date": "DATE",
+        "created_by": "UUID (FK → profiles.id)",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "amount": 2000,
+          "reason": "עבודה מקסימה!!!",
+          "date": "2026-05-06"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "employee_bonuses",
+          "column": "employee_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        },
+        {
+          "table": "employee_bonuses",
+          "column": "created_by",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "goals": {
+      "row_count": 0,
+      "schema": {
+        "id": "UUID (PK)",
+        "title": "TEXT",
+        "description": "TEXT",
+        "target_amount": "DECIMAL",
+        "current_amount": "DECIMAL — DEFAULT 0",
+        "target_date": "DATE",
+        "assigned_employee": "UUID (FK → profiles.id)",
+        "assigned_client": "UUID (FK → clients.id)",
+        "is_completed": "BOOLEAN — DEFAULT false",
+        "created_at": "TIMESTAMPTZ",
+        "created_by": "UUID (FK → auth.users.id)"
+      },
+      "foreign_keys": [
+        {
+          "table": "goals",
+          "column": "assigned_employee",
+          "references_table": "profiles",
+          "references_column": "id"
+        },
+        {
+          "table": "goals",
+          "column": "assigned_client",
+          "references_table": "clients",
+          "references_column": "id"
+        },
+        {
+          "table": "goals",
+          "column": "created_by",
+          "references_table": "auth.users",
+          "references_column": "id"
+        }
+      ]
+    },
+    "recurring_finances": {
+      "row_count": 0,
+      "schema": {
+        "id": "UUID (PK)",
+        "type": "TEXT — CHECK ('income', 'expense')",
+        "amount": "DECIMAL",
+        "category": "TEXT",
+        "description": "TEXT",
+        "client_id": "UUID (FK → clients.id)",
+        "active": "BOOLEAN — DEFAULT true",
+        "created_at": "TIMESTAMPTZ",
+        "created_by": "UUID (FK → auth.users.id)"
+      },
+      "foreign_keys": [
+        {
+          "table": "recurring_finances",
+          "column": "client_id",
+          "references_table": "clients",
+          "references_column": "id"
+        },
+        {
+          "table": "recurring_finances",
+          "column": "created_by",
+          "references_table": "auth.users",
+          "references_column": "id"
+        }
+      ]
+    },
+    "employee_announcements": {
+      "row_count": 0,
+      "schema": {
+        "id": "UUID (PK)",
+        "title": "TEXT",
+        "content": "TEXT",
+        "is_active": "BOOLEAN — DEFAULT true",
+        "created_at": "TIMESTAMPTZ",
+        "created_by": "UUID (FK → auth.users.id)",
+        "target_employee_id": "UUID (FK → profiles.id)"
+      },
+      "foreign_keys": [
+        {
+          "table": "employee_announcements",
+          "column": "created_by",
+          "references_table": "auth.users",
+          "references_column": "id"
+        },
+        {
+          "table": "employee_announcements",
+          "column": "target_employee_id",
+          "references_table": "profiles",
+          "references_column": "id"
+        }
+      ]
+    },
+    "moshe_projects": {
+      "row_count": 4,
+      "schema": {
+        "id": "UUID (PK)",
+        "name": "TEXT",
+        "address": "TEXT",
+        "contact_name": "TEXT",
+        "contact_phone": "TEXT",
+        "total_project_cost": "NUMERIC(15,2)",
+        "notes": "TEXT",
+        "status": "TEXT — CHECK ('active', 'pending', 'closed') — DEFAULT 'active'",
+        "start_date": "DATE",
+        "created_at": "TIMESTAMPTZ",
+        "drive_folder_url": "TEXT"
+      },
+      "sample_data": [
+        {
+          "name": "עמוס",
+          "address": "עמוס",
+          "contact_name": "עמוס",
+          "contact_phone": "1234567890",
+          "total_project_cost": 2000000,
+          "notes": "מוס",
+          "status": "active",
+          "start_date": "2026-04-15",
+          "drive_folder_url": null
+        }
+      ],
+      "distinct_values": {
+        "status": [
+          "active"
+        ]
+      }
+    },
+    "moshe_project_payments": {
+      "row_count": 7,
+      "schema": {
+        "id": "UUID (PK)",
+        "project_id": "UUID (FK → moshe_projects.id)",
+        "amount": "NUMERIC(15,2)",
+        "due_date": "DATE",
+        "notes": "TEXT",
+        "is_paid": "BOOLEAN — DEFAULT false",
+        "paid_at": "TIMESTAMPTZ",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "amount": 500000,
+          "due_date": "2026-11-15",
+          "notes": "שלישי",
+          "is_paid": false,
+          "paid_at": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "moshe_project_payments",
+          "column": "project_id",
+          "references_table": "moshe_projects",
+          "references_column": "id"
+        }
+      ]
+    },
+    "moshe_buyers": {
+      "row_count": 3,
+      "schema": {
+        "id": "UUID (PK)",
+        "project_id": "UUID (FK → moshe_projects.id)",
+        "name": "TEXT",
+        "phone": "TEXT",
+        "email": "TEXT",
+        "id_number": "TEXT",
+        "unit_description": "TEXT",
+        "contract_date": "DATE",
+        "total_amount": "NUMERIC(15,2)",
+        "notes": "TEXT",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "name": "חיים",
+          "phone": "1234123456",
+          "email": null,
+          "id_number": "312556186",
+          "unit_description": "1",
+          "contract_date": "2026-04-29",
+          "total_amount": 1500000,
+          "notes": "יחתום מחר"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "moshe_buyers",
+          "column": "project_id",
+          "references_table": "moshe_projects",
+          "references_column": "id"
+        }
+      ]
+    },
+    "moshe_buyer_payments": {
+      "row_count": 9,
+      "schema": {
+        "id": "UUID (PK)",
+        "buyer_id": "UUID (FK → moshe_buyers.id)",
+        "project_id": "UUID (FK → moshe_projects.id)",
+        "amount": "NUMERIC(15,2)",
+        "due_date": "DATE",
+        "notes": "TEXT",
+        "is_received": "BOOLEAN — DEFAULT false",
+        "received_at": "TIMESTAMPTZ",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "amount": 200000,
+          "due_date": "2026-07-30",
+          "notes": "2",
+          "is_received": false,
+          "received_at": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "moshe_buyer_payments",
+          "column": "buyer_id",
+          "references_table": "moshe_buyers",
+          "references_column": "id"
+        },
+        {
+          "table": "moshe_buyer_payments",
+          "column": "project_id",
+          "references_table": "moshe_projects",
+          "references_column": "id"
+        }
+      ]
+    },
+    "moshe_transactions": {
+      "row_count": 1,
+      "schema": {
+        "id": "UUID (PK)",
+        "project_id": "UUID (FK → moshe_projects.id)",
+        "type": "TEXT — CHECK ('income', 'expense')",
+        "amount": "NUMERIC(15,2)",
+        "date": "DATE — DEFAULT CURRENT_DATE",
+        "category": "TEXT",
+        "notes": "TEXT",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "type": "expense",
+          "amount": 25000,
+          "date": "2026-04-29",
+          "category": "עורך דין",
+          "notes": null
+        }
+      ],
+      "distinct_values": {
+        "type": [
+          "expense"
+        ],
+        "category": [
+          "עורך דין"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "table": "moshe_transactions",
+          "column": "project_id",
+          "references_table": "moshe_projects",
+          "references_column": "id"
+        }
+      ]
+    },
+    "moshe_calendar_events": {
+      "row_count": 2,
+      "schema": {
+        "id": "UUID (PK)",
+        "title": "TEXT",
+        "start_time": "TIMESTAMPTZ",
+        "end_time": "TIMESTAMPTZ",
+        "notes": "TEXT",
+        "type": "TEXT — CHECK ('meeting', 'reminder', 'other') — DEFAULT 'meeting'",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "title": "חיים דוד",
+          "start_time": "2026-04-30T18:06:00+00:00",
+          "end_time": null,
+          "notes": null,
+          "type": "meeting"
+        }
+      ],
+      "distinct_values": {
+        "type": [
+          "meeting"
+        ]
+      }
+    },
+    "moshe_project_documents": {
+      "row_count": 1,
+      "schema": {
+        "id": "UUID (PK)",
+        "project_id": "UUID (FK → moshe_projects.id)",
+        "name": "TEXT",
+        "url": "TEXT",
+        "created_at": "TIMESTAMPTZ"
+      },
+      "sample_data": [
+        {
+          "name": "הסכם מכר",
+          "url": "https://drive.google.com/file/d/10eijYOElz79Lk1mvmrHRztY5RU-v3eoN/view?usp=drive_link"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "table": "moshe_project_documents",
+          "column": "project_id",
+          "references_table": "moshe_projects",
+          "references_column": "id"
+        }
+      ]
+    }
+  },
+  "relationships": [
+    {
+      "table": "profiles",
+      "column": "id",
+      "references_table": "auth.users",
+      "references_column": "id"
+    },
+    {
+      "table": "clients",
+      "column": "created_by",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "clients",
+      "column": "user_id",
+      "references_table": "auth.users",
+      "references_column": "id"
+    },
+    {
+      "table": "appointments",
+      "column": "client_id",
+      "references_table": "clients",
+      "references_column": "id"
+    },
+    {
+      "table": "appointments",
+      "column": "employee_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "meeting_summaries",
+      "column": "appointment_id",
+      "references_table": "appointments",
+      "references_column": "id"
+    },
+    {
+      "table": "tasks",
+      "column": "assigned_to",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "tasks",
+      "column": "client_id",
+      "references_table": "clients",
+      "references_column": "id"
+    },
+    {
+      "table": "tasks",
+      "column": "created_by",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "income",
+      "column": "client_id",
+      "references_table": "clients",
+      "references_column": "id"
+    },
+    {
+      "table": "income",
+      "column": "created_by",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "expenses",
+      "column": "created_by",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "conversations",
+      "column": "admin_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "conversations",
+      "column": "employee_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "chat_messages",
+      "column": "conversation_id",
+      "references_table": "conversations",
+      "references_column": "id"
+    },
+    {
+      "table": "chat_messages",
+      "column": "sender_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "employee_bonuses",
+      "column": "employee_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "employee_bonuses",
+      "column": "created_by",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "goals",
+      "column": "assigned_employee",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "goals",
+      "column": "assigned_client",
+      "references_table": "clients",
+      "references_column": "id"
+    },
+    {
+      "table": "goals",
+      "column": "created_by",
+      "references_table": "auth.users",
+      "references_column": "id"
+    },
+    {
+      "table": "recurring_finances",
+      "column": "client_id",
+      "references_table": "clients",
+      "references_column": "id"
+    },
+    {
+      "table": "recurring_finances",
+      "column": "created_by",
+      "references_table": "auth.users",
+      "references_column": "id"
+    },
+    {
+      "table": "employee_announcements",
+      "column": "created_by",
+      "references_table": "auth.users",
+      "references_column": "id"
+    },
+    {
+      "table": "employee_announcements",
+      "column": "target_employee_id",
+      "references_table": "profiles",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_project_payments",
+      "column": "project_id",
+      "references_table": "moshe_projects",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_buyers",
+      "column": "project_id",
+      "references_table": "moshe_projects",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_buyer_payments",
+      "column": "buyer_id",
+      "references_table": "moshe_buyers",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_buyer_payments",
+      "column": "project_id",
+      "references_table": "moshe_projects",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_transactions",
+      "column": "project_id",
+      "references_table": "moshe_projects",
+      "references_column": "id"
+    },
+    {
+      "table": "moshe_project_documents",
+      "column": "project_id",
+      "references_table": "moshe_projects",
+      "references_column": "id"
+    }
+  ],
+  "join_examples": [
+    {
+      "description": "Get appointments with client names",
+      "sql": "SELECT a.*, c.name AS client_name FROM appointments a LEFT JOIN clients c ON a.client_id = c.id"
+    },
+    {
+      "description": "Get tasks assigned to employees with their names",
+      "sql": "SELECT t.*, p.full_name AS assigned_name FROM tasks t LEFT JOIN profiles p ON t.assigned_to = p.id"
+    },
+    {
+      "description": "Get income with client names",
+      "sql": "SELECT i.*, c.name AS client_name FROM income i LEFT JOIN clients c ON i.client_id = c.id"
+    },
+    {
+      "description": "Get all buyer payments for a specific project",
+      "sql": "SELECT bp.*, b.name AS buyer_name, mp.name AS project_name FROM moshe_buyer_payments bp JOIN moshe_buyers b ON bp.buyer_id = b.id JOIN moshe_projects mp ON bp.project_id = mp.id"
+    },
+    {
+      "description": "Get project financial summary (total payments vs total received)",
+      "sql": "SELECT mp.name, COALESCE(SUM(pp.amount) FILTER (WHERE pp.is_paid), 0) AS total_paid_expenses, COALESCE(SUM(bp.amount) FILTER (WHERE bp.is_received), 0) AS total_received_income FROM moshe_projects mp LEFT JOIN moshe_project_payments pp ON pp.project_id = mp.id LEFT JOIN moshe_buyer_payments bp ON bp.project_id = mp.id GROUP BY mp.id, mp.name"
+    }
+  ]
+}

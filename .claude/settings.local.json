@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const z = require\\('zod'\\); const r = z.string\\(\\).safeParse\\(1\\); console.log\\(Object.keys\\(r.error\\)\\)\")",
+      "Bash(node -e \"const z = require\\('zod'\\); const schema = z.object\\({name: z.string\\(\\)}\\); const r = schema.safeParse\\({name: 1}\\); console.log\\(JSON.stringify\\(r.error?.issues?.[0]\\)\\)\")",
+      "Bash(npx shadcn@latest add alert-dialog --yes)",
+      "Bash(npx shadcn@latest add alert-dialog)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx supabase *)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; console.log\\('recharts:', deps.recharts||'not found', 'jspdf:', deps.jspdf||'not found', 'html2canvas:', deps['html2canvas']||'not found', 'react-pdf:', deps['@react-pdf/renderer']||'not found'\\)\")"
     ]
   }
 }

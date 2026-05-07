@@ -12,6 +12,8 @@ import { TransactionsTab } from '@/components/moshe/TransactionsTab'
 import { DocumentsTab } from '@/components/moshe/DocumentsTab'
 import { ProjectPrintButton } from '@/components/moshe/ProjectPrintView'
 import { ActivityLogTab } from '@/components/moshe/ActivityLogTab'
+import { PartnersTab } from '@/components/moshe/PartnersTab'
+import { LoansTab } from '@/components/moshe/LoansTab'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,6 +43,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     { data: transactions },
     { data: documents },
     { data: activityLogs },
+    { data: partners },
+    { data: partnerTransactions },
+    { data: loans },
+    { data: loanPayments },
   ] = await Promise.all([
     db.from('moshe_projects').select('*').eq('id', id).single(),
     db.from('moshe_project_payments').select('*').eq('project_id', id).order('due_date', { ascending: true, nullsFirst: false }),
@@ -49,6 +55,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     db.from('moshe_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
     db.from('moshe_project_documents').select('*').eq('project_id', id).order('created_at'),
     db.from('moshe_project_logs').select('*').eq('project_id', id).order('created_at', { ascending: false }),
+    db.from('moshe_partners').select('*').eq('project_id', id).order('created_at'),
+    db.from('moshe_partner_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
+    db.from('moshe_loans').select('*').eq('project_id', id).order('created_at'),
+    db.from('moshe_loan_payments').select('*').eq('project_id', id),
   ])
 
   if (!project) notFound()
@@ -60,11 +70,27 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const tx = (transactions as any[]) ?? []
   const docs = (documents as any[]) ?? []
   const logs = (activityLogs as any[]) ?? []
+  const partnersArr = (partners as any[]) ?? []
+  const ptx = (partnerTransactions as any[]) ?? []
+  const loansArr = (loans as any[]) ?? []
+  const lp = (loanPayments as any[]) ?? []
 
   // Enrich buyers with their payments
   const buyersWithPayments = buyersArr.map((b: any) => ({
     ...b,
     payments: bp.filter((pay: any) => pay.buyer_id === b.id),
+  }))
+
+  // Enrich partners with their transactions
+  const partnersWithTx = partnersArr.map((partner: any) => ({
+    ...partner,
+    transactions: ptx.filter((t: any) => t.partner_id === partner.id),
+  }))
+
+  // Enrich loans with their payments
+  const loansWithPayments = loansArr.map((loan: any) => ({
+    ...loan,
+    payments: lp.filter((pay: any) => pay.loan_id === loan.id),
   }))
 
   // KPIs
@@ -75,8 +101,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const txIncome       = tx.filter((x: any) => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txExpense      = tx.filter((x: any) => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
 
-  const realBalance    = (totalReceived + txIncome) - (totalPaid + txExpense)
-  const expectedBalance = (totalExpected + txIncome) - (totalScheduled + txExpense)
+  // Partner investments count as project income, withdrawals as expense
+  const partnerInvestments = ptx.filter((t: any) => t.type === 'investment').reduce((s: number, t: any) => s + Number(t.amount), 0)
+  const partnerWithdrawals = ptx.filter((t: any) => t.type === 'withdrawal').reduce((s: number, t: any) => s + Number(t.amount), 0)
+
+  const realBalance    = (totalReceived + txIncome + partnerInvestments) - (totalPaid + txExpense + partnerWithdrawals)
+  const expectedBalance = (totalExpected + txIncome + partnerInvestments) - (totalScheduled + txExpense + partnerWithdrawals)
 
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 
@@ -112,9 +142,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 project={p}
                 payments={pp}
                 buyers={buyersWithPayments}
+                transactions={tx}
+                partners={partnersWithTx}
+                loans={loansWithPayments}
                 realBalance={realBalance}
-                totalReceived={totalReceived + txIncome}
-                totalPaid={totalPaid + txExpense}
+                totalReceived={totalReceived + txIncome + partnerInvestments}
+                totalPaid={totalPaid + txExpense + partnerWithdrawals}
                 totalExpected={totalExpected}
                 totalScheduled={totalScheduled}
               />
@@ -133,8 +166,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             {[
               { label: 'מאזן אמיתי',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
               { label: 'מאזן צפוי',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
-              { label: 'הכנסות בפועל', value: fmt(totalReceived + txIncome),  color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-              { label: 'הוצאות בפועל', value: fmt(totalPaid + txExpense),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
+              { label: 'הכנסות בפועל', value: fmt(totalReceived + txIncome + partnerInvestments),  color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+              { label: 'הוצאות בפועל', value: fmt(totalPaid + txExpense + partnerWithdrawals),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
             ].map(kpi => (
               <div key={kpi.label} className={cn('rounded-xl border p-3 text-center', kpi.bg)}>
                 <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{kpi.label}</p>
@@ -153,6 +186,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               { value: 'payments',  label: 'לוח תשלומים' },
               { value: 'buyers',    label: `קונים (${buyersArr.length})` },
               { value: 'finance',   label: 'הוצאות/הכנסות' },
+              { value: 'partners',  label: `שותפים (${partnersArr.length})` },
+              { value: 'loans',     label: `הלוואות (${loansArr.length})` },
               { value: 'documents', label: `מסמכים (${docs.length})` },
               { value: 'log',       label: `לוג (${logs.length})` },
             ].map(tab => (
@@ -169,11 +204,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </TabsContent>
 
         <TabsContent value="buyers" className="focus-visible:outline-none">
-          <BuyersTab projectId={id} buyers={buyersWithPayments} />
+          <BuyersTab projectId={id} buyers={buyersWithPayments} project={p} />
         </TabsContent>
 
         <TabsContent value="finance" className="focus-visible:outline-none">
           <TransactionsTab projectId={id} transactions={tx} />
+        </TabsContent>
+
+        <TabsContent value="partners" className="focus-visible:outline-none">
+          <PartnersTab projectId={id} partners={partnersWithTx} />
+        </TabsContent>
+
+        <TabsContent value="loans" className="focus-visible:outline-none">
+          <LoansTab projectId={id} loans={loansWithPayments} partners={partnersArr} />
         </TabsContent>
 
         <TabsContent value="documents" className="focus-visible:outline-none">

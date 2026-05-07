@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Check, Plus, Trash2, CalendarDays, Pencil, X } from 'lucide-react'
-import { toggleProjectPayment, deleteProjectPayment, addProjectPayment, updateProjectPayment } from '@/app/moshe/actions'
+import { Check, Plus, Trash2, CalendarDays, Pencil, X, Scissors } from 'lucide-react'
+import { toggleProjectPayment, deleteProjectPayment, addProjectPayment, updateProjectPayment, makePartialProjectPayment } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
@@ -26,6 +26,8 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
   const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editRow, setEditRow] = useState({ amount: '', due_date: '', notes: '' })
+  const [partialId, setPartialId] = useState<string | null>(null)
+  const [partialForm, setPartialForm] = useState({ amount: '', date: '', notes: '' })
 
   const totalPaid = payments.filter(p => p.is_paid).reduce((s, p) => s + Number(p.amount), 0)
   const totalScheduled = payments.reduce((s, p) => s + Number(p.amount), 0)
@@ -58,6 +60,22 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
   function startEdit(p: MosheProjectPayment) {
     setEditingId(p.id)
     setEditRow({ amount: String(p.amount), due_date: p.due_date ?? '', notes: p.notes ?? '' })
+  }
+
+  function submitPartial(id: string) {
+    const amt = parseFloat(partialForm.amount)
+    if (!amt || amt <= 0) return toast.error('סכום חלקי חייב להיות גדול מ-0')
+    startTransition(async () => {
+      const r = await makePartialProjectPayment(
+        id, projectId, amt,
+        partialForm.date || undefined,
+        partialForm.notes || undefined
+      )
+      if (r.error) { toast.error(r.error); return }
+      toast.success('תשלום חלקי נרשם')
+      setPartialId(null)
+      setPartialForm({ amount: '', date: '', notes: '' })
+    })
   }
 
   function saveEdit(id: string) {
@@ -167,7 +185,8 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
             }
 
             return (
-              <div key={p.id} className={cn(
+              <div key={p.id}>
+              <div className={cn(
                 'flex items-center gap-4 px-4 py-3 transition-colors group',
                 p.is_paid ? 'bg-slate-50/50' : overdue ? 'bg-red-50/30' : 'hover:bg-slate-50/50'
               )}>
@@ -220,8 +239,17 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                   {fmt(Number(p.amount))}
                 </p>
 
+                {!p.is_paid && (
+                  <button onClick={() => { setPartialId(partialId === p.id ? null : p.id); setPartialForm({ amount: '', date: new Date().toISOString().split('T')[0], notes: '' }) }} disabled={pending}
+                    title="תשלום חלקי"
+                    className={cn('w-7 h-7 rounded-lg border flex items-center justify-center transition-colors shrink-0',
+                      partialId === p.id ? 'border-purple-300 text-purple-500 bg-purple-50' : 'border-slate-200 text-slate-400 hover:text-purple-500 hover:bg-purple-50 hover:border-purple-200')}>
+                    <Scissors className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
                 <button onClick={() => startEdit(p)} disabled={pending}
-                  className="w-7 h-7 rounded-lg text-slate-200 hover:text-amber-500 hover:bg-amber-50 flex items-center justify-center transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                  className="w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-amber-500 hover:bg-amber-50 hover:border-amber-200 flex items-center justify-center transition-colors shrink-0">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
 
@@ -229,6 +257,45 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                   className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center transition-colors shrink-0">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+              </div>
+              {partialId === p.id && (
+                <div className="mx-4 mb-3 mt-1 rounded-xl border border-purple-200 bg-purple-50/50 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-purple-600">תשלום חלקי עבור: <span className="text-purple-800">{p.notes || 'תשלום'}</span></p>
+                    <button onClick={() => setPartialId(null)}
+                      className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-md hover:bg-white">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-purple-400">סכום מקורי: {fmt(Number(p.amount))} | הסכום החלקי יירשם כשולם, והיתרה תישאר בתשלום המקורי</p>
+                  <div className="grid grid-cols-[1fr_1fr_2fr] gap-2">
+                    <div>
+                      <p className="text-[10px] text-purple-500 font-medium mb-0.5">סכום חלקי (₪) *</p>
+                      <Input type="number" dir="ltr" placeholder="0" value={partialForm.amount}
+                        onChange={e => setPartialForm(f => ({ ...f, amount: e.target.value }))}
+                        className="h-8 text-xs border-purple-200 bg-white" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-purple-500 font-medium mb-0.5">תאריך תשלום</p>
+                      <Input type="date" value={partialForm.date}
+                        onChange={e => setPartialForm(f => ({ ...f, date: e.target.value }))}
+                        className="h-8 text-xs border-purple-200 bg-white" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-purple-500 font-medium mb-0.5">הערות</p>
+                      <Input placeholder="תיאור התשלום החלקי..." value={partialForm.notes}
+                        onChange={e => setPartialForm(f => ({ ...f, notes: e.target.value }))}
+                        className="h-8 text-xs border-purple-200 bg-white" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-1">
+                    <Button size="sm" variant="ghost" onClick={() => setPartialId(null)}
+                      className="h-7 text-[11px] text-slate-500">ביטול</Button>
+                    <Button size="sm" onClick={() => submitPartial(p.id)} disabled={pending}
+                      className="h-7 text-[11px] bg-purple-500 hover:bg-purple-400 text-white px-4">שמור תשלום חלקי</Button>
+                  </div>
+                </div>
+              )}
               </div>
             )
           })}

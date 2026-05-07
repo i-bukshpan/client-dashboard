@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2 } from 'lucide-react'
+import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { addDocument, deleteDocument, updateDocument, updateDriveLink } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 
@@ -29,6 +30,8 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
   const [driveUrl, setDriveUrl] = useState(driveFolderUrl ?? '')
   const [editingDrive, setEditingDrive] = useState(false)
   const [driveSaving, setDriveSaving] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewName, setPreviewName] = useState('')
 
   async function handleAddDoc() {
     if (!newDoc.name.trim()) return toast.error('שם הקובץ נדרש')
@@ -74,6 +77,47 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
       setDriveSaving(false)
     }
   }
+
+  function getPreviewUrl(url: string): string | null {
+    // Google Drive file URL patterns
+    // https://drive.google.com/file/d/{id}/view
+    const driveFileMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/)
+    if (driveFileMatch) {
+      return `https://drive.google.com/file/d/${driveFileMatch[1]}/preview`
+    }
+    // Google Docs
+    const docsMatch = url.match(/docs\.google\.com\/document\/d\/([^/]+)/)
+    if (docsMatch) {
+      return `https://docs.google.com/document/d/${docsMatch[1]}/preview`
+    }
+    // Google Sheets
+    const sheetsMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([^/]+)/)
+    if (sheetsMatch) {
+      return `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/preview`
+    }
+    // Google Slides
+    const slidesMatch = url.match(/docs\.google\.com\/presentation\/d\/([^/]+)/)
+    if (slidesMatch) {
+      return `https://docs.google.com/presentation/d/${slidesMatch[1]}/preview`
+    }
+    // Direct PDF URL (use Google Docs Viewer)
+    if (url.match(/\.pdf(\?|$)/i)) {
+      return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
+    }
+    return null
+  }
+
+  function openPreview(doc: Document) {
+    const preview = getPreviewUrl(doc.url)
+    if (!preview) {
+      toast.error('\u05ea\u05e6\u05d5\u05d2\u05d4 \u05de\u05e7\u05d3\u05d9\u05de\u05d4 \u05d0\u05d9\u05e0\u05d4 \u05e0\u05ea\u05de\u05db\u05ea \u05dc\u05e7\u05d9\u05e9\u05d5\u05e8 \u05d6\u05d4. \u05e0\u05ea\u05de\u05da \u05e2\u05dd Google Drive, Docs, Sheets, Slides \u05d0\u05d5 PDF.')
+      return
+    }
+    setPreviewUrl(preview)
+    setPreviewName(doc.name)
+  }
+
+  const canPreview = (url: string) => getPreviewUrl(url) !== null
 
   return (
     <div className="space-y-4">
@@ -243,8 +287,15 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+                {canPreview(doc.url) && (
+                  <button onClick={() => openPreview(doc)}
+                    title="\u05ea\u05e6\u05d5\u05d2\u05d4 \u05de\u05e7\u05d3\u05d9\u05de\u05d4"
+                    className="w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 flex items-center justify-center transition-colors shrink-0">
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button onClick={() => startEdit(doc)} disabled={pending}
-                  className="w-7 h-7 rounded-lg text-slate-200 hover:text-amber-500 hover:bg-amber-50 flex items-center justify-center transition-colors shrink-0 opacity-0 group-hover:opacity-100">
+                  className="w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-amber-500 hover:bg-amber-50 hover:border-amber-200 flex items-center justify-center transition-colors shrink-0">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => handleDelete(doc.id, doc.name)} disabled={pending}
@@ -256,6 +307,25 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
           })}
         </div>
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewUrl} onOpenChange={open => !open && setPreviewUrl(null)}>
+        <DialogContent className="max-w-4xl w-[90vw] h-[85vh] p-0 overflow-hidden">
+          <DialogHeader className="px-5 py-3 border-b border-slate-100">
+            <DialogTitle className="text-sm font-bold text-slate-700">{previewName}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 w-full h-full min-h-0">
+            {previewUrl && (
+              <iframe
+                src={previewUrl}
+                className="w-full h-[calc(85vh-56px)] border-0"
+                allow="autoplay"
+                title={previewName}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
