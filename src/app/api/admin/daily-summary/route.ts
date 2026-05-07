@@ -229,7 +229,6 @@ export async function GET(request: Request) {
         expenses_total: (todayExpenses ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0),
       },
 
-      },
 
       // Weekly Overview (only on Sundays)
       weekly_overview: weeklySummary,

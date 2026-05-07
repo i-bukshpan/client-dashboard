@@ -252,7 +252,6 @@ export async function GET(request: Request) {
         notes: e.notes,
       })),
 
-      },
 
       // Weekly Breakdown (only on Sundays)
       weekly_overview: weeklySummary,
