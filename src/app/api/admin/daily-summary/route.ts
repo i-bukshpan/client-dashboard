@@ -170,6 +170,11 @@ export async function GET(request: Request) {
       const cat = r.category || 'אחר'
       expensesByCategory[cat] = (expensesByCategory[cat] || 0) + Number(r.amount)
     })
+    // Recurring summary
+    const recurringIncome = (recurringFinances ?? []).filter((r: any) => r.type === 'income')
+      .reduce((s: number, r: any) => s + Number(r.amount), 0)
+    const recurringExpense = (recurringFinances ?? []).filter((r: any) => r.type === 'expense')
+      .reduce((s: number, r: any) => s + Number(r.amount), 0)
 
     // Sunday Weekly Breakdown
     const isSunday = today.getDay() === 0
