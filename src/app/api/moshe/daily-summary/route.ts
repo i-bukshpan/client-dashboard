@@ -16,31 +16,46 @@ const db = createClient(
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  // ── Auth: validate x-api-key header ──
-  const authHeader = request.headers.get('x-api-key')?.trim()
-  const expectedKey = (process.env.API_AUTH_TOKEN || '').trim()
+  // ── Forgiving Auth Logic ──
+  const authHeader = request.headers.get('Authorization')
+  const apiKeyHeader = request.headers.get('x-api-key')
   
-  if (!authHeader) {
+  // Extract token from Bearer or use x-api-key
+  let providedToken = ''
+  if (authHeader?.startsWith('Bearer ')) {
+    providedToken = authHeader.substring(7)
+  } else if (authHeader) {
+    providedToken = authHeader
+  } else if (apiKeyHeader) {
+    providedToken = apiKeyHeader
+  }
+
+  providedToken = providedToken.trim()
+  const expectedKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  
+  if (!providedToken) {
     return NextResponse.json({ 
       error: 'Unauthorized',
-      message: 'Missing x-api-key header.',
-      expected_env_var: 'API_AUTH_TOKEN'
+      message: 'Missing authentication. Use Authorization header (Bearer) or x-api-key.',
     }, { status: 401 })
   }
 
   if (!expectedKey) {
     return NextResponse.json({
       error: 'Server configuration error',
-      message: 'API_AUTH_TOKEN is not configured on the server.',
+      message: 'SUPABASE_SERVICE_ROLE_KEY is not configured on the server.',
     }, { status: 500 })
   }
 
-  if (authHeader !== expectedKey) {
+  if (providedToken !== expectedKey) {
     return NextResponse.json({
       error: 'Unauthorized',
-      received_key: authHeader,
-      expected_key: expectedKey,
-      match: false
+      message: 'Invalid API key.',
+      received_token_length: providedToken.length,
+      expected_token_length: expectedKey.length,
+      received_start: providedToken.substring(0, 15) + '...',
+      expected_start: expectedKey.substring(0, 15) + '...',
+      debug_info: 'Comparison failed. Ensure your token in n8n exactly matches SUPABASE_SERVICE_ROLE_KEY in Vercel/Supabase.'
     }, { status: 401 })
   }
 
