@@ -158,12 +158,41 @@ export async function GET(request: Request) {
       return {
         name: p.name,
         status: p.status,
+        address: p.address,
+        total_cost: Number(p.total_project_cost),
         collection_pct: collectionPct,
         real_balance: bRecv - pPaid,
         overdue_amount: overdue,
-        is_at_risk: overdue > 0 || collectionPct < 50,
+        is_at_risk: overdue > (Number(p.total_project_cost) * 0.05) || (collectionPct < 30 && p.status === 'active'),
+        stats: {
+          received: bRecv,
+          paid: pPaid,
+          expected_total: bTotal,
+        }
       }
     })
+
+    // Sunday Weekly Breakdown
+    const isSunday = today.getDay() === 0
+    let weeklySummary: any = null
+    if (isSunday) {
+      weeklySummary = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(today)
+        d.setDate(d.getDate() + i)
+        const dStr = d.toISOString().split('T')[0]
+        const dayExpenses = pp.filter((p: any) => !p.is_paid && p.due_date === dStr)
+        const dayIncome = bp.filter((p: any) => !p.is_received && p.due_date === dStr)
+        if (dayExpenses.length > 0 || dayIncome.length > 0) {
+          weeklySummary.push({
+            date: dStr,
+            day_name: d.toLocaleDateString('he-IL', { weekday: 'long' }),
+            expenses: dayExpenses.map(x => ({ amount: Number(x.amount), project: projectMap[x.project_id], notes: x.notes })),
+            income: dayIncome.map(x => ({ amount: Number(x.amount), buyer: x.moshe_buyers?.name, project: projectMap[x.project_id] }))
+          })
+        }
+      }
+    }
 
     // Loan summary
     const loanSummary = (loans ?? []).map((l: any) => {
@@ -222,6 +251,11 @@ export async function GET(request: Request) {
         time: new Date(e.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
         notes: e.notes,
       })),
+
+      },
+
+      // Weekly Breakdown (only on Sundays)
+      weekly_overview: weeklySummary,
 
       // Payments due today
       today: {
@@ -303,11 +337,26 @@ function formatMosheWhatsApp(data: any) {
   const fmt = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
   const lines: string[] = []
 
-  lines.push(`🏗️ *סיכום יומי — נדל"ן | ${data.todayStr}*`)
+  const isSunday = new Date(data.todayStr).getDay() === 0
+
+  lines.push(`${isSunday ? '📅 *מבט שבועי — נדל"ן*' : '🏗️ *סיכום יומי — נדל"ן*'} | ${data.todayStr}`)
   lines.push('')
-  lines.push(`💰 *מאזן נדל"ן:* ${fmt(data.realBalance)}`)
+  lines.push(`💰 *מאזן פרויקטים:* ${fmt(data.realBalance)}`)
   lines.push(`📁 *${data.proj.length} פרויקטים פעילים*`)
   lines.push('')
+
+  // Weekly Overview (If Sunday)
+  if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
+    lines.push('🗓️ *לו"ז פיננסי לשבוע הקרוב:*')
+    data.weeklySummary.forEach((day: any) => {
+      const expTotal = day.expenses.reduce((s: number, e: any) => s + e.amount, 0)
+      const incTotal = day.income.reduce((s: number, e: any) => s + e.amount, 0)
+      lines.push(`  • *${day.day_name}* (${day.date.split('-').reverse().slice(0, 2).join('/')}):`)
+      if (incTotal > 0) lines.push(`    ✅ לגבייה: ${fmt(incTotal)}`)
+      if (expTotal > 0) lines.push(`    💸 לתשלום: ${fmt(expTotal)}`)
+    })
+    lines.push('')
+  }
 
   // Calendar events
   if (data.calendarEvents.length > 0) {

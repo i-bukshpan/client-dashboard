@@ -171,11 +171,27 @@ export async function GET(request: Request) {
       expensesByCategory[cat] = (expensesByCategory[cat] || 0) + Number(r.amount)
     })
 
-    // Recurring summary
-    const recurringIncome = (recurringFinances ?? []).filter((r: any) => r.type === 'income')
-      .reduce((s: number, r: any) => s + Number(r.amount), 0)
-    const recurringExpense = (recurringFinances ?? []).filter((r: any) => r.type === 'expense')
-      .reduce((s: number, r: any) => s + Number(r.amount), 0)
+    // Sunday Weekly Breakdown
+    const isSunday = today.getDay() === 0
+    let weeklySummary: any = null
+    if (isSunday) {
+      weeklySummary = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(today)
+        d.setDate(d.getDate() + i)
+        const dStr = d.toISOString().split('T')[0]
+        const dayAppointments = (allAppointments ?? []).filter((a: any) => a.start_time.startsWith(dStr))
+        const dayTasks = tasks.filter((t: any) => t.due_date === dStr)
+        if (dayAppointments.length > 0 || dayTasks.length > 0) {
+          weeklySummary.push({
+            date: dStr,
+            day_name: d.toLocaleDateString('he-IL', { weekday: 'long' }),
+            appointments: dayAppointments.map(a => ({ time: new Date(a.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }), client: a.clients?.name })),
+            tasks_count: dayTasks.length
+          })
+        }
+      }
+    }
 
     const summary = {
       date: todayStr,
@@ -213,9 +229,16 @@ export async function GET(request: Request) {
         expenses_total: (todayExpenses ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0),
       },
 
+      },
+
+      // Weekly Overview (only on Sundays)
+      weekly_overview: weeklySummary,
+
       // Appointments
       appointments: (allAppointments ?? []).map((a: any) => ({
         client: a.clients?.name ?? 'לא ידוע',
+        phone: a.clients?.phone,
+        email: a.clients?.email,
         time: new Date(a.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
         end_time: a.end_time ? new Date(a.end_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : null,
         status: a.status,
@@ -260,8 +283,10 @@ export async function GET(request: Request) {
         allAppointments: allAppointments ?? [],
         urgentTasks, overdueTasks, dueTodayTasks,
         todayIncome: todayIncome ?? [],
-        todayExpenses: todayExpenses ?? [],
-        activeClients, goals,
+        todayExpenses: todayExpenses,
+        activeClients: activeClients,
+        goals: goals,
+        weeklySummary: weeklySummary
       }),
     }
 
@@ -283,7 +308,9 @@ function formatAdminWhatsApp(data: any) {
   const fmt = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
   const lines: string[] = []
 
-  lines.push(`📊 *סיכום יומי — ייעוץ | ${data.todayStr}*`)
+  const isSunday = new Date(data.todayStr).getDay() === 0
+
+  lines.push(`${isSunday ? '📅 *מבט שבועי — ייעוץ*' : '📊 *סיכום יומי — ייעוץ*'} | ${data.todayStr}`)
   lines.push('')
 
   // Financial snapshot
@@ -291,6 +318,17 @@ function formatAdminWhatsApp(data: any) {
   lines.push(`📉 *הוצאות החודש:* ${fmt(data.expensesTotal)}`)
   lines.push(`💰 *רווח נקי:* ${fmt(data.profit)}`)
   lines.push('')
+
+  // Weekly Overview (If Sunday)
+  if (isSunday && data.weeklySummary && data.weeklySummary.length > 0) {
+    lines.push('🗓️ *פגישות ומשימות לשבוע הקרוב:*')
+    data.weeklySummary.forEach((day: any) => {
+      lines.push(`  • *${day.day_name}* (${day.date.split('-').reverse().slice(0, 2).join('/')}):`)
+      if (day.appointments.length > 0) lines.push(`    📅 ${day.appointments.length} פגישות`)
+      if (day.tasks_count > 0) lines.push(`    📋 ${day.tasks_count} משימות`)
+    })
+    lines.push('')
+  }
 
   // Today's financial activity
   const todayIn = data.todayIncome.reduce((s: number, r: any) => s + Number(r.amount), 0)
