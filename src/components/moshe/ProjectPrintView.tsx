@@ -67,10 +67,10 @@ interface Buyer {
   payments: BuyerPayment[]
 }
 interface Payment { id: string; amount: number; due_date?: string; notes?: string; is_paid: boolean }
-interface Transaction { id: string; type: 'income' | 'expense'; amount: number; date: string; category?: string; notes?: string }
-interface Partner { id: string; name: string; phone?: string; transactions: PartnerTx[] }
+interface Transaction { id: string; type: 'income' | 'expense'; amount: number; date: string; category?: string; notes?: string; partner_id?: string | null }
+interface Partner { id: string; name: string; phone?: string; email?: string; notes?: string; transactions: PartnerTx[] }
 interface PartnerTx { id: string; type: 'investment' | 'withdrawal'; amount: number; date: string; notes?: string }
-interface Loan { id: string; lender: string; total_amount: number; interest_rate?: number; num_payments: number; payments: LoanPayment[] }
+interface Loan { id: string; lender: string; arranged_by?: string | null; total_amount: number; interest_rate?: number; num_payments: number; payments: LoanPayment[] }
 interface LoanPayment { id: string; amount: number; due_date?: string; is_paid: boolean; notes?: string }
 
 interface Props {
@@ -198,10 +198,12 @@ export function ProjectPrintButton({
     if (transactions.length > 0) {
       const incomeTotal = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
       const expenseTotal = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+      const partnerMap: Record<string, string> = {}
+      partners.forEach(p => { partnerMap[p.id] = p.name })
       html += `<h2>תנועות (${transactions.length}) — הכנסות: ${fmt(incomeTotal)} | הוצאות: ${fmt(expenseTotal)}</h2>`
       html += `
         <table>
-          <thead><tr><th>תאריך</th><th>סוג</th><th>קטגוריה</th><th>הערות</th><th>סכום</th></tr></thead>
+          <thead><tr><th>תאריך</th><th>סוג</th><th>קטגוריה</th><th>הערות</th><th>שותף אחראי</th><th>סכום</th></tr></thead>
           <tbody>
             ${transactions.map(t => `
               <tr>
@@ -209,6 +211,7 @@ export function ProjectPrintButton({
                 <td>${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</td>
                 <td>${t.category ?? '—'}</td>
                 <td>${t.notes ?? '—'}</td>
+                <td>${t.partner_id ? (partnerMap[t.partner_id] ?? '—') : '—'}</td>
                 <td class="${t.type === 'income' ? 'green' : 'red'}">${t.type === 'income' ? '+' : '-'}${fmt(Number(t.amount))}</td>
               </tr>
             `).join('')}
@@ -219,21 +222,38 @@ export function ProjectPrintButton({
 
     // ── Partners ──
     if (partners.length > 0) {
-      const totalInvested = partners.reduce((s, p) => s + p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0), 0)
-      const totalWithdrawn = partners.reduce((s, p) => s + p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0), 0)
-      html += `<h2>שותפים (${partners.length}) — השקעות: ${fmt(totalInvested)} | משיכות: ${fmt(totalWithdrawn)} | מאזן: ${fmt(totalInvested - totalWithdrawn)}</h2>`
+      // Combined balance including linked transactions
+      const totalIn = partners.reduce((s, p) => {
+        const personal = p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0)
+        const linked   = transactions.filter(t => t.partner_id === p.id && t.type === 'income').reduce((ss, t) => ss + Number(t.amount), 0)
+        return s + personal + linked
+      }, 0)
+      const totalOut = partners.reduce((s, p) => {
+        const personal = p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0)
+        const linked   = transactions.filter(t => t.partner_id === p.id && t.type === 'expense').reduce((ss, t) => ss + Number(t.amount), 0)
+        return s + personal + linked
+      }, 0)
+      html += `<h2>שותפים (${partners.length}) — סה"כ הכנסות: ${fmt(totalIn)} | סה"כ הוצאות: ${fmt(totalOut)} | מאזן: ${fmt(totalIn - totalOut)}</h2>`
 
       partners.forEach(p => {
-        const inv = p.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
-        const wd = p.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
+        const personalInv = p.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
+        const personalWd  = p.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
+        const linkedTx    = transactions.filter(t => t.partner_id === p.id)
+        const linkedInc   = linkedTx.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+        const linkedExp   = linkedTx.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+        const inv = personalInv + linkedInc
+        const wd  = personalWd  + linkedExp
+        const arrangedLoans = loans.filter(l => l.arranged_by === p.id)
         html += `
           <h3>
             ${p.name}${p.phone ? ` · ${p.phone}` : ''}
-            · <span class="blue">השקעות: ${fmt(inv)}</span>
-            · <span class="red">משיכות: ${fmt(wd)}</span>
+            · <span class="blue">הכנסות: ${fmt(inv)}</span>
+            · <span class="red">הוצאות/משיכות: ${fmt(wd)}</span>
             · <span class="${(inv - wd) >= 0 ? 'green' : 'red'}">מאזן: ${fmt(inv - wd)}</span>
+            ${arrangedLoans.length > 0 ? ` · <span class="purple">הלוואות שדאג: ${arrangedLoans.length}</span>` : ''}
           </h3>
         `
+        // Personal transactions
         if (p.transactions.length > 0) {
           html += `
             <table>
@@ -245,6 +265,26 @@ export function ProjectPrintButton({
                     <td>${t.type === 'investment' ? 'השקעה' : 'משיכה'}</td>
                     <td>${t.notes ?? '—'}</td>
                     <td class="${t.type === 'investment' ? 'blue' : 'red'}">${t.type === 'investment' ? '+' : '-'}${fmt(Number(t.amount))}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `
+        }
+        // Linked income/expense transactions
+        if (linkedTx.length > 0) {
+          html += `
+            <p style="font-size:11px;color:#64748b;margin:6px 0 4px;font-weight:700">עסקאות משויכות (${linkedTx.length}):</p>
+            <table>
+              <thead><tr><th>תאריך</th><th>סוג</th><th>קטגוריה</th><th>הערות</th><th>סכום</th></tr></thead>
+              <tbody>
+                ${linkedTx.map(t => `
+                  <tr>
+                    <td>${fmtDate(t.date)}</td>
+                    <td>${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</td>
+                    <td>${t.category ?? '—'}</td>
+                    <td>${t.notes ?? '—'}</td>
+                    <td class="${t.type === 'income' ? 'green' : 'red'}">${t.type === 'income' ? '+' : '-'}${fmt(Number(t.amount))}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -431,3 +471,172 @@ export function BuyerPrintButton({ project, buyer }: BuyerReportProps) {
     </button>
   )
 }
+
+// ─── Partner-specific Report ───────────────────────────────────────
+
+interface PartnerReportProps {
+  project: any
+  partner: Partner
+  allTransactions: Transaction[]   // all project transactions — we filter by partner_id
+  loans: Loan[]                    // all project loans — we filter by arranged_by
+}
+
+export function PartnerPrintButton({ project, partner, allTransactions, loans }: PartnerReportProps) {
+  const today = new Date()
+
+  function handlePrint() {
+    const fmtDate = (d: string | undefined | null) => d ? format(new Date(d), 'dd/MM/yyyy') : 'לא נקבע'
+
+    // Personal partner transactions (investments/withdrawals)
+    const personalInvested = partner.transactions
+      .filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
+    const personalWithdrawn = partner.transactions
+      .filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
+
+    // Linked income/expense transactions attributed to this partner
+    const linkedTx = allTransactions.filter(t => t.partner_id === partner.id)
+    const linkedIncome = linkedTx.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+    const linkedExpense = linkedTx.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+
+    // Loans arranged by this partner
+    const arrangedLoans = loans.filter(l => l.arranged_by === partner.id)
+    const arrangedTotal = arrangedLoans.reduce((s, l) => s + Number(l.total_amount), 0)
+
+    // Combined balance: investments + linked-income − withdrawals − linked-expense
+    const totalIn  = personalInvested + linkedIncome
+    const totalOut = personalWithdrawn + linkedExpense
+    const netBalance = totalIn - totalOut
+
+    let html = `
+      <h1>דוח שותף — ${partner.name}</h1>
+      <div class="subtitle">פרויקט: ${project.name}${project.address ? ` · ${project.address}` : ''}</div>
+      <div class="meta">
+        ${partner.phone  ? `טלפון: ${partner.phone} · ` : ''}
+        ${partner.email  ? `אימייל: ${partner.email} · ` : ''}
+        ${partner.notes  ? `הערות: ${partner.notes} · ` : ''}
+        הופק: ${format(today, 'dd/MM/yyyy HH:mm', { locale: he })}
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-label">סה"כ הכנסות לשותף</div>
+          <div class="kpi-val green">${fmt(totalIn)}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">סה"כ הוצאות / משיכות</div>
+          <div class="kpi-val red">${fmt(totalOut)}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">מאזן נטו</div>
+          <div class="kpi-val ${netBalance >= 0 ? 'green' : 'red'}">${fmt(netBalance)}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">הלוואות שדאג להן</div>
+          <div class="kpi-val purple">${fmt(arrangedTotal)}</div>
+        </div>
+      </div>
+    `
+
+    // ── Personal transactions (investment / withdrawal) ──
+    html += `<h2>תנועות כספיות אישיות (${partner.transactions.length})</h2>`
+    if (partner.transactions.length > 0) {
+      const sorted = [...partner.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      html += `
+        <table>
+          <thead><tr><th>תאריך</th><th>סוג</th><th>הערות</th><th>סכום</th></tr></thead>
+          <tbody>
+            ${sorted.map(t => `
+              <tr>
+                <td>${fmtDate(t.date)}</td>
+                <td>${t.type === 'investment' ? 'השקעה' : 'משיכה'}</td>
+                <td>${t.notes ?? '—'}</td>
+                <td class="${t.type === 'investment' ? 'green' : 'red'}">${t.type === 'investment' ? '+' : '-'}${fmt(Number(t.amount))}</td>
+              </tr>
+            `).join('')}
+            <tr class="total-row">
+              <td colspan="2">סה"כ</td>
+              <td></td>
+              <td>השקעות: <span class="green">${fmt(personalInvested)}</span> | משיכות: <span class="red">${fmt(personalWithdrawn)}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      `
+    } else {
+      html += `<p style="color:#94a3b8;font-size:12px;margin-bottom:16px">אין תנועות אישיות</p>`
+    }
+
+    // ── Linked income/expense transactions ──
+    if (linkedTx.length > 0) {
+      const sortedTx = [...linkedTx].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      html += `<h2>עסקאות משויכות (${linkedTx.length}) — הכנסות: ${fmt(linkedIncome)} | הוצאות: ${fmt(linkedExpense)}</h2>`
+      html += `
+        <table>
+          <thead><tr><th>תאריך</th><th>סוג</th><th>קטגוריה</th><th>הערות</th><th>סכום</th></tr></thead>
+          <tbody>
+            ${sortedTx.map(t => `
+              <tr>
+                <td>${fmtDate(t.date)}</td>
+                <td>${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</td>
+                <td>${t.category ?? '—'}</td>
+                <td>${t.notes ?? '—'}</td>
+                <td class="${t.type === 'income' ? 'green' : 'red'}">${t.type === 'income' ? '+' : '-'}${fmt(Number(t.amount))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `
+    }
+
+    // ── Arranged loans ──
+    if (arrangedLoans.length > 0) {
+      html += `<h2>הלוואות שדאג להן (${arrangedLoans.length}) — סה"כ: ${fmt(arrangedTotal)}</h2>`
+      arrangedLoans.forEach(l => {
+        const paid = l.payments.filter(p => p.is_paid).reduce((s, p) => s + Number(p.amount), 0)
+        const remaining = l.payments.filter(p => !p.is_paid).reduce((s, p) => s + Number(p.amount), 0)
+        const paidCount = l.payments.filter(p => p.is_paid).length
+        html += `
+          <h3>
+            ${l.lender} — ${fmt(Number(l.total_amount))}
+            ${l.interest_rate ? ` · ${l.interest_rate}% ריבית` : ''}
+            · <span class="green">${fmt(paid)} שולם</span>
+            · <span class="red">${fmt(remaining)} נותר</span>
+            · ${paidCount}/${l.num_payments} תשלומים
+          </h3>
+        `
+        if (l.payments.length > 0) {
+          html += `
+            <table>
+              <thead><tr><th>תאריך</th><th>סכום</th><th>הערות</th><th>סטטוס</th></tr></thead>
+              <tbody>
+                ${l.payments.map(p => `
+                  <tr>
+                    <td>${fmtDate(p.due_date)}</td>
+                    <td class="purple">${fmt(Number(p.amount))}</td>
+                    <td>${p.notes ?? '—'}</td>
+                    <td><span class="badge ${p.is_paid ? 'badge-green' : 'badge-gray'}">${p.is_paid ? 'שולם' : 'ממתין'}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `
+        }
+      })
+    }
+
+    html += `<div class="footer">דוח שותף הופק מתוך פורטל ניהול — משה פרוש · ${format(today, 'dd/MM/yyyy HH:mm', { locale: he })}</div>`
+
+    openPrintWindow(`דוח שותף — ${partner.name} — ${project.name}`, html)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handlePrint}
+      title="הפק דוח שותף"
+      className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+    >
+      <Printer className="w-3.5 h-3.5" />
+    </button>
+  )
+}
+

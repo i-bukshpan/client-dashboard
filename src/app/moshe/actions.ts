@@ -49,6 +49,7 @@ const transactionSchema = z.object({
   date: z.string().min(1, 'תאריך נדרש'),
   category: z.string().optional(),
   notes: z.string().optional(),
+  partner_id: z.string().uuid().optional().or(z.literal('')),
 })
 
 const eventSchema = z.object({
@@ -404,6 +405,7 @@ export async function createTransaction(raw: unknown) {
     date: d.date,
     category: d.category || null,
     notes: d.notes || null,
+    partner_id: d.partner_id || null,
   })
 
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
@@ -505,6 +507,7 @@ export async function updateTransaction(id: string, raw: unknown) {
     date: z.string().min(1, 'תאריך נדרש'),
     category: z.string().optional(),
     notes: z.string().optional(),
+    partner_id: z.string().uuid().optional().or(z.literal('')),
   })
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
@@ -517,6 +520,7 @@ export async function updateTransaction(id: string, raw: unknown) {
     date: d.date,
     category: d.category || null,
     notes: d.notes || null,
+    partner_id: d.partner_id || null,
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
@@ -859,4 +863,56 @@ export async function deleteLoanPayment(id: string, projectId: string) {
   if (error) return { error: `שגיאה במחיקת תשלום: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }
+}
+
+export async function updateLoan(id: string, raw: unknown) {
+  const schema = z.object({
+    project_id: z.string().uuid(),
+    lender: z.string().min(1, 'שם המלווה נדרש'),
+    arranged_by: z.string().uuid().optional().or(z.literal('')),
+    total_amount: z.string().min(1, 'סכום נדרש'),
+    interest_rate: z.string().optional(),
+    num_payments: z.string().optional(),
+    start_date: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('moshe_loans').update({
+    lender: d.lender,
+    arranged_by: d.arranged_by || null,
+    total_amount: parseFloat(d.total_amount),
+    interest_rate: d.interest_rate ? parseFloat(d.interest_rate) : null,
+    num_payments: d.num_payments ? parseInt(d.num_payments) : 1,
+    start_date: d.start_date || null,
+    notes: d.notes || null,
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון הלוואה: ${error.message}` }
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function ensureDefaultPartner(projectId: string) {
+  // Check if Moshe Parush partner already exists for this project
+  const { data: existing } = await db
+    .from('moshe_partners')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('name', 'משה פרוש')
+    .single()
+
+  if (existing) return { success: true, id: existing.id }
+
+  const { data: partner, error } = await db.from('moshe_partners').insert({
+    project_id: projectId,
+    name: 'משה פרוש',
+    notes: 'בעל האתר - שותף ברירת מחדל',
+  }).select('id').single()
+
+  if (error) return { error: `שגיאה ביצירת שותף ברירת מחדל: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true, id: partner.id }
 }

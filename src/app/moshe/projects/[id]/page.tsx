@@ -47,6 +47,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     { data: partnerTransactions },
     { data: loans },
     { data: loanPayments },
+    { data: categories },
   ] = await Promise.all([
     db.from('moshe_projects').select('*').eq('id', id).single(),
     db.from('moshe_project_payments').select('*').eq('project_id', id).order('due_date', { ascending: true, nullsFirst: false }),
@@ -59,6 +60,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     db.from('moshe_partner_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
     db.from('moshe_loans').select('*').eq('project_id', id).order('created_at'),
     db.from('moshe_loan_payments').select('*').eq('project_id', id),
+    db.from('moshe_transaction_categories').select('name').order('name'),
   ])
 
   if (!project) notFound()
@@ -74,6 +76,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const ptx = (partnerTransactions as any[]) ?? []
   const loansArr = (loans as any[]) ?? []
   const lp = (loanPayments as any[]) ?? []
+  const categoryNames = ((categories as any[]) ?? []).map((c: any) => c.name)
 
   // Enrich buyers with their payments
   const buyersWithPayments = buyersArr.map((b: any) => ({
@@ -208,11 +211,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </TabsContent>
 
         <TabsContent value="finance" className="focus-visible:outline-none">
-          <TransactionsTab projectId={id} transactions={tx} />
+          <TransactionsTab
+            projectId={id}
+            transactions={tx}
+            partners={partnersArr}
+            categories={categoryNames}
+          />
         </TabsContent>
 
         <TabsContent value="partners" className="focus-visible:outline-none">
-          <PartnersTab projectId={id} partners={partnersWithTx} />
+          <PartnersTab
+            projectId={id}
+            project={p}
+            partners={partnersWithTx}
+            loans={loansWithPayments}
+            allTransactions={tx}
+          />
         </TabsContent>
 
         <TabsContent value="loans" className="focus-visible:outline-none">

@@ -60,6 +60,7 @@ export interface MosheTransaction {
   date: string
   category: string | null
   notes: string | null
+  partner_id: string | null
   created_at: string
 }
 

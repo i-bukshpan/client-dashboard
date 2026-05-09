@@ -90,10 +90,10 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
     if (docsMatch) {
       return `https://docs.google.com/document/d/${docsMatch[1]}/preview`
     }
-    // Google Sheets
+    // Google Sheets - use htmlview for horizontal scroll
     const sheetsMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([^/]+)/)
     if (sheetsMatch) {
-      return `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/preview`
+      return `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/htmlview?rm=minimal`
     }
     // Google Slides
     const slidesMatch = url.match(/docs\.google\.com\/presentation\/d\/([^/]+)/)
@@ -310,15 +310,16 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
 
       {/* Preview Dialog */}
       <Dialog open={!!previewUrl} onOpenChange={open => !open && setPreviewUrl(null)}>
-        <DialogContent className="max-w-4xl w-[90vw] h-[85vh] p-0 overflow-hidden">
-          <DialogHeader className="px-5 py-3 border-b border-slate-100">
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[92vh] p-0 overflow-hidden">
+          <DialogHeader className="px-5 py-3 border-b border-slate-100 shrink-0">
             <DialogTitle className="text-sm font-bold text-slate-700">{previewName}</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 w-full h-full min-h-0">
+          <div className="flex-1 w-full h-full min-h-0 overflow-auto">
             {previewUrl && (
               <iframe
                 src={previewUrl}
-                className="w-full h-[calc(85vh-56px)] border-0"
+                className="w-full h-[calc(92vh-56px)] border-0"
+                style={{ minWidth: '100%' }}
                 allow="autoplay"
                 title={previewName}
               />

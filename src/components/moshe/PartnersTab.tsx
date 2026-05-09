@@ -11,7 +11,8 @@ import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { createPartner, deletePartner, createPartnerTransaction, deletePartnerTransaction } from '@/app/moshe/actions'
 import { toast } from 'sonner'
-import type { MoshePartner, MoshePartnerTransaction } from '@/types/moshe'
+import { PartnerPrintButton } from '@/components/moshe/ProjectPrintView'
+import type { MoshePartner, MoshePartnerTransaction, MosheLoan, MosheLoanPayment, MosheTransaction } from '@/types/moshe'
 
 function fmt(n: number) {
   return '₪' + Number(n).toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -19,10 +20,13 @@ function fmt(n: number) {
 
 interface Props {
   projectId: string
+  project?: any
   partners: (MoshePartner & { transactions: MoshePartnerTransaction[] })[]
+  loans?: (MosheLoan & { payments: MosheLoanPayment[] })[]
+  allTransactions?: MosheTransaction[]
 }
 
-export function PartnersTab({ projectId, partners }: Props) {
+export function PartnersTab({ projectId, project, partners, loans = [], allTransactions = [] }: Props) {
   const [pending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null)
@@ -39,9 +43,7 @@ export function PartnersTab({ projectId, partners }: Props) {
       toast.success('שותף נוסף בהצלחה')
       setAddOpen(false)
       setForm({ name: '', phone: '', email: '', notes: '' })
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   function removePartner(id: string) {
@@ -53,15 +55,20 @@ export function PartnersTab({ projectId, partners }: Props) {
     })
   }
 
-  // Overall partner stats
-  const totalInvested = partners.reduce((s, p) =>
-    s + p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0), 0)
-  const totalWithdrawn = partners.reduce((s, p) =>
-    s + p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0), 0)
+  const totalInvested = partners.reduce((s, p) => {
+    const personal = p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0)
+    const linked   = allTransactions.filter(t => (t as any).partner_id === p.id && t.type === 'income').reduce((ss, t) => ss + Number(t.amount), 0)
+    return s + personal + linked
+  }, 0)
+  const totalWithdrawn = partners.reduce((s, p) => {
+    const personal = p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0)
+    const linked   = allTransactions.filter(t => (t as any).partner_id === p.id && t.type === 'expense').reduce((ss, t) => ss + Number(t.amount), 0)
+    return s + personal + linked
+  }, 0)
+
 
   return (
     <div className="space-y-4">
-      {/* Summary KPIs */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-center">
           <p className="text-[10px] text-indigo-500 font-bold uppercase">סה&quot;כ השקעות שותפים</p>
@@ -94,27 +101,34 @@ export function PartnersTab({ projectId, partners }: Props) {
         <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200">
           <Users className="w-10 h-10 text-slate-200 mx-auto mb-2" />
           <p className="text-slate-400 text-sm">אין שותפים עדיין</p>
-          <button onClick={() => setAddOpen(true)} className="text-indigo-500 text-xs mt-1 hover:underline">
-            + הוסף שותף ראשון
-          </button>
+          <button onClick={() => setAddOpen(true)} className="text-indigo-500 text-xs mt-1 hover:underline">+ הוסף שותף ראשון</button>
         </div>
       )}
 
       <div className="space-y-3">
         {partners.map(partner => {
-          const invested = partner.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
-          const withdrawn = partner.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
+          const personal_invested = partner.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
+          const personal_withdrawn = partner.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
+          const linked_income  = allTransactions.filter(t => (t as any).partner_id === partner.id && t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+          const linked_expense = allTransactions.filter(t => (t as any).partner_id === partner.id && t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+          const invested = personal_invested + linked_income
+          const withdrawn = personal_withdrawn + linked_expense
           const balance = invested - withdrawn
           const isExpanded = expandedPartner === partner.id
+          const isDefault = partner.name === 'משה פרוש'
 
           return (
             <div key={partner.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="px-5 py-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-black text-sm shrink-0">
+                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0',
+                  isDefault ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-indigo-400 to-purple-500')}>
                   {partner.name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-900 text-sm truncate">{partner.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-slate-900 text-sm truncate">{partner.name}</p>
+                    {isDefault && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">ברירת מחדל</span>}
+                  </div>
                   <div className="flex items-center gap-3 text-[10px] text-slate-400">
                     {partner.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{partner.phone}</span>}
                     {partner.email && <span className="flex items-center gap-0.5"><Mail className="w-2.5 h-2.5" />{partner.email}</span>}
@@ -122,16 +136,22 @@ export function PartnersTab({ projectId, partners }: Props) {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className={cn('text-sm font-black', balance >= 0 ? 'text-indigo-700' : 'text-red-600')}>
-                    {fmt(balance)}
-                  </p>
+                  <p className={cn('text-sm font-black', balance >= 0 ? 'text-indigo-700' : 'text-red-600')}>{fmt(balance)}</p>
                   <p className="text-[10px] text-slate-400">מאזן</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={() => removePartner(partner.id)} disabled={pending}
-                    className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <PartnerPrintButton
+                    project={project ?? { name: '', address: null }}
+                    partner={partner as any}
+                    allTransactions={allTransactions as any}
+                    loans={loans as any}
+                  />
+                  {!isDefault && (
+                    <button onClick={() => removePartner(partner.id)} disabled={pending}
+                      className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button onClick={() => setExpandedPartner(v => v === partner.id ? null : partner.id)}
                     className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -139,20 +159,16 @@ export function PartnersTab({ projectId, partners }: Props) {
                 </div>
               </div>
 
-              {/* Balance bar */}
               <div className="px-5 pb-3">
                 <div className="flex gap-2 text-[10px]">
-                  <span className="text-indigo-500 font-medium">השקעות: {fmt(invested)}</span>
+                  <span className="text-indigo-500 font-medium">הכנסות (כולל משויכות): {fmt(invested)}</span>
                   <span className="text-slate-300">|</span>
-                  <span className="text-orange-500 font-medium">משיכות: {fmt(withdrawn)}</span>
+                  <span className="text-orange-500 font-medium">הוצאות / משיכות: {fmt(withdrawn)}</span>
                 </div>
               </div>
 
               {isExpanded && (
-                <PartnerTransactionsList
-                  partner={partner}
-                  projectId={projectId}
-                />
+                <PartnerTransactionsList partner={partner} projectId={projectId} />
               )}
             </div>
           )
@@ -163,9 +179,7 @@ export function PartnersTab({ projectId, partners }: Props) {
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
-            <SheetHeader>
-              <SheetTitle className="text-lg font-bold">הוספת שותף חדש</SheetTitle>
-            </SheetHeader>
+            <SheetHeader><SheetTitle className="text-lg font-bold">הוספת שותף חדש</SheetTitle></SheetHeader>
           </div>
           <form onSubmit={handleAdd} className="p-6 space-y-4">
             <div className="space-y-2">
@@ -188,8 +202,7 @@ export function PartnersTab({ projectId, partners }: Props) {
             </div>
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setAddOpen(false)} className="flex-1">ביטול</Button>
-              <Button type="submit" disabled={saving || !form.name.trim()}
-                className="flex-1 bg-indigo-500 hover:bg-indigo-400 text-white font-bold">
+              <Button type="submit" disabled={saving || !form.name.trim()} className="flex-1 bg-indigo-500 hover:bg-indigo-400 text-white font-bold">
                 {saving ? 'שומר...' : 'הוסף שותף'}
               </Button>
             </div>
@@ -217,11 +230,7 @@ function PartnerTransactionsList({ partner, projectId }: {
 
   async function handleAdd() {
     if (!form.amount) return toast.error('סכום נדרש')
-    const r = await createPartnerTransaction({
-      partner_id: partner.id,
-      project_id: projectId,
-      ...form,
-    })
+    const r = await createPartnerTransaction({ partner_id: partner.id, project_id: projectId, ...form })
     if (r.error) { toast.error(r.error); return }
     toast.success('תנועה נוספה')
     setForm(f => ({ ...f, amount: '', notes: '' }))
@@ -236,12 +245,13 @@ function PartnerTransactionsList({ partner, projectId }: {
     })
   }
 
+  const TYPE_LABELS: Record<string, string> = { investment: 'השקעה', withdrawal: 'משיכה' }
+
   return (
     <div className="border-t border-slate-100">
       <div className="px-4 py-2 bg-slate-50/50 flex items-center justify-between">
         <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">תנועות כספיות</p>
-        <button onClick={() => setShowAdd(v => !v)}
-          className="text-[11px] text-indigo-600 font-bold hover:text-indigo-700 flex items-center gap-1">
+        <button onClick={() => setShowAdd(v => !v)} className="text-[11px] text-indigo-600 font-bold hover:text-indigo-700 flex items-center gap-1">
           <Plus className="w-3 h-3" /> הוסף תנועה
         </button>
       </div>
@@ -253,7 +263,7 @@ function PartnerTransactionsList({ partner, projectId }: {
               <p className="text-[10px] text-slate-400 mb-1">סוג</p>
               <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v as any }))}>
                 <SelectTrigger className="h-8 text-xs border-slate-200 bg-white">
-                  <SelectValue>{form.type === 'investment' ? 'השקעה' : 'משיכה'}</SelectValue>
+                  <SelectValue>{TYPE_LABELS[form.type]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="investment">השקעה</SelectItem>
@@ -293,29 +303,16 @@ function PartnerTransactionsList({ partner, projectId }: {
 
       {sorted.map(t => (
         <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 group">
-          <div className={cn(
-            'w-7 h-7 rounded-lg flex items-center justify-center shrink-0',
-            t.type === 'investment' ? 'bg-indigo-100' : 'bg-orange-100'
-          )}>
-            {t.type === 'investment'
-              ? <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
-              : <TrendingDown className="w-3.5 h-3.5 text-orange-500" />}
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', t.type === 'investment' ? 'bg-indigo-100' : 'bg-orange-100')}>
+            {t.type === 'investment' ? <TrendingUp className="w-3.5 h-3.5 text-indigo-600" /> : <TrendingDown className="w-3.5 h-3.5 text-orange-500" />}
           </div>
-
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-slate-700 truncate">
-              {t.notes || (t.type === 'investment' ? 'השקעה' : 'משיכה')}
-            </p>
-            <p className="text-[10px] text-slate-400">
-              {format(new Date(t.date), 'dd/MM/yyyy')}
-            </p>
+            <p className="text-xs font-medium text-slate-700 truncate">{t.notes || (t.type === 'investment' ? 'השקעה' : 'משיכה')}</p>
+            <p className="text-[10px] text-slate-400">{format(new Date(t.date), 'dd/MM/yyyy')}</p>
           </div>
-
-          <p className={cn('font-bold text-xs shrink-0',
-            t.type === 'investment' ? 'text-indigo-700' : 'text-orange-600')}>
+          <p className={cn('font-bold text-xs shrink-0', t.type === 'investment' ? 'text-indigo-700' : 'text-orange-600')}>
             {t.type === 'investment' ? '+' : '-'}{fmt(Number(t.amount))}
           </p>
-
           <button onClick={() => remove(t.id)} disabled={pending}
             className="w-6 h-6 rounded text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0">
             <Trash2 className="w-3 h-3" />
