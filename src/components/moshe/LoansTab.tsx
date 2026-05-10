@@ -26,7 +26,58 @@ interface Props {
 
 const EMPTY_FORM = {
   lender: '', arranged_by: '', total_amount: '',
-  interest_rate: '', num_payments: '12', start_date: '', notes: '',
+  interest_rate: '', num_payments: '0', start_date: '', notes: '',
+}
+
+function LoanFormFields({ f, setF, partners, partnerMap }: { f: typeof EMPTY_FORM, setF: (fn: (prev: typeof EMPTY_FORM) => typeof EMPTY_FORM) => void, partners: MoshePartner[], partnerMap: Record<string, string> }) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label className="font-medium text-slate-700">שם המלווה / בנק <span className="text-red-400">*</span></Label>
+        <Input value={f.lender} onChange={e => setF(prev => ({ ...prev, lender: e.target.value }))} placeholder="לדוגמה: בנק לאומי" className="h-10" required />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">סכום הלוואה (₪) <span className="text-red-400">*</span></Label>
+          <Input type="number" dir="ltr" value={f.total_amount} onChange={e => setF(prev => ({ ...prev, total_amount: e.target.value }))} placeholder="0" className="h-10" required />
+        </div>
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">ריבית (%)</Label>
+          <Input type="number" dir="ltr" step="0.01" value={f.interest_rate} onChange={e => setF(prev => ({ ...prev, interest_rate: e.target.value }))} placeholder="3.5" className="h-10" />
+        </div>
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">מספר תשלומים</Label>
+          <Input type="number" dir="ltr" value={f.num_payments} onChange={e => setF(prev => ({ ...prev, num_payments: e.target.value }))} placeholder="0" className="h-10" />
+        </div>
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">תאריך התחלה</Label>
+          <Input type="date" value={f.start_date} onChange={e => setF(prev => ({ ...prev, start_date: e.target.value }))} className="h-10" />
+        </div>
+      </div>
+      {partners.length > 0 && (
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">מי דאג להלוואה (שותף)</Label>
+          <Select value={f.arranged_by || '__none__'} onValueChange={v => setF(prev => ({ ...prev, arranged_by: v === '__none__' ? '' : (v as string) }))}>
+            <SelectTrigger className="h-10 text-sm border-slate-200 bg-white">
+              <SelectValue placeholder="בחר שותף (אופציונלי)">
+                {f.arranged_by ? (partnerMap[f.arranged_by] ?? 'בחר שותף') : 'ללא'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">ללא</SelectItem>
+              {partners.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label className="font-medium text-slate-700">הערות</Label>
+        <Input value={f.notes} onChange={e => setF(prev => ({ ...prev, notes: e.target.value }))} className="h-10" />
+      </div>
+    </>
+  )
 }
 
 export function LoansTab({ projectId, loans, partners }: Props) {
@@ -99,59 +150,10 @@ export function LoansTab({ projectId, loans, partners }: Props) {
   const totalLoans = loans.reduce((s, l) => s + Number(l.total_amount), 0)
   const totalPaid = loans.reduce((s, l) =>
     s + l.payments.filter(p => p.is_paid).reduce((ss, p) => ss + Number(p.amount), 0), 0)
-  const totalRemaining = loans.reduce((s, l) =>
-    s + l.payments.filter(p => !p.is_paid).reduce((ss, p) => ss + Number(p.amount), 0), 0)
-
-  function LoanFormFields({ f, setF }: { f: typeof EMPTY_FORM, setF: (fn: (prev: typeof EMPTY_FORM) => typeof EMPTY_FORM) => void }) {
-    return (
-      <>
-        <div className="space-y-2">
-          <Label className="font-medium text-slate-700">שם המלווה / בנק <span className="text-red-400">*</span></Label>
-          <Input value={f.lender} onChange={e => setF(prev => ({ ...prev, lender: e.target.value }))} placeholder="לדוגמה: בנק לאומי" className="h-10" required />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="font-medium text-slate-700">סכום הלוואה (₪) <span className="text-red-400">*</span></Label>
-            <Input type="number" dir="ltr" value={f.total_amount} onChange={e => setF(prev => ({ ...prev, total_amount: e.target.value }))} placeholder="0" className="h-10" required />
-          </div>
-          <div className="space-y-2">
-            <Label className="font-medium text-slate-700">ריבית (%)</Label>
-            <Input type="number" dir="ltr" step="0.01" value={f.interest_rate} onChange={e => setF(prev => ({ ...prev, interest_rate: e.target.value }))} placeholder="3.5" className="h-10" />
-          </div>
-          <div className="space-y-2">
-            <Label className="font-medium text-slate-700">מספר תשלומים</Label>
-            <Input type="number" dir="ltr" value={f.num_payments} onChange={e => setF(prev => ({ ...prev, num_payments: e.target.value }))} placeholder="12" className="h-10" />
-          </div>
-          <div className="space-y-2">
-            <Label className="font-medium text-slate-700">תאריך התחלה</Label>
-            <Input type="date" value={f.start_date} onChange={e => setF(prev => ({ ...prev, start_date: e.target.value }))} className="h-10" />
-          </div>
-        </div>
-        {partners.length > 0 && (
-          <div className="space-y-2">
-            <Label className="font-medium text-slate-700">מי דאג להלוואה (שותף)</Label>
-            <Select value={f.arranged_by || '__none__'} onValueChange={v => setF(prev => ({ ...prev, arranged_by: v === '__none__' ? '' : (v as string) }))}>
-              <SelectTrigger className="h-10 text-sm border-slate-200 bg-white">
-                <SelectValue placeholder="בחר שותף (אופציונלי)">
-                  {f.arranged_by ? (partnerMap[f.arranged_by] ?? 'בחר שותף') : 'ללא'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">ללא</SelectItem>
-                {partners.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label className="font-medium text-slate-700">הערות</Label>
-          <Input value={f.notes} onChange={e => setF(prev => ({ ...prev, notes: e.target.value }))} className="h-10" />
-        </div>
-      </>
-    )
-  }
+  const totalRemaining = loans.reduce((s, l) => {
+    const paid = l.payments.filter(p => p.is_paid).reduce((ss, p) => ss + Number(p.amount), 0)
+    return s + (Number(l.total_amount) - paid)
+  }, 0)
 
   return (
     <div className="space-y-4">
@@ -192,11 +194,12 @@ export function LoansTab({ projectId, loans, partners }: Props) {
       <div className="space-y-3">
         {loans.map(loan => {
           const paid = loan.payments.filter(p => p.is_paid).reduce((s, p) => s + Number(p.amount), 0)
-          const total = loan.payments.reduce((s, p) => s + Number(p.amount), 0)
+          const total = Number(loan.total_amount)
           const pct = total > 0 ? Math.round((paid / total) * 100) : 0
           const paidCount = loan.payments.filter(p => p.is_paid).length
           const isExpanded = expandedLoan === loan.id
           const arrangerName = loan.arranged_by ? partnerMap[loan.arranged_by] : null
+          const annualInterest = loan.interest_rate ? total * (Number(loan.interest_rate) / 100) : 0
 
           return (
             <div key={loan.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -207,15 +210,15 @@ export function LoansTab({ projectId, loans, partners }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-900 text-sm truncate">{loan.lender}</p>
                   <div className="flex items-center gap-3 text-[10px] text-slate-400">
-                    <span>{fmt(Number(loan.total_amount))}</span>
-                    {loan.interest_rate && <span>{loan.interest_rate}% ריבית</span>}
+                    <span>{fmt(total)}</span>
+                    {loan.interest_rate && <span>{loan.interest_rate}% ריבית (שנתי: {fmt(annualInterest)})</span>}
                     <span>{paidCount}/{loan.num_payments} תשלומים</span>
                     {arrangerName && <span className="text-indigo-500">דאג: {arrangerName}</span>}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-black text-violet-700">{fmt(paid)}</p>
-                  <p className="text-[10px] text-slate-400">שולם מתוך {fmt(total)}</p>
+                  <p className="text-sm font-black text-violet-700">{fmt(total - paid)}</p>
+                  <p className="text-[10px] text-slate-400">יתרה מתוך {fmt(total)}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={() => openEdit(loan)} disabled={pending}
@@ -258,7 +261,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
             </SheetHeader>
           </div>
           <form onSubmit={handleAdd} className="p-6 space-y-4">
-            <LoanFormFields f={form} setF={setForm} />
+            <LoanFormFields f={form} setF={setForm} partners={partners} partnerMap={partnerMap} />
             <div className="bg-violet-50 rounded-xl p-3 text-xs text-violet-600">
               💡 לוח תשלומים ייווצר אוטומטית לפי מספר התשלומים שנקבע
             </div>
@@ -282,7 +285,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
             </SheetHeader>
           </div>
           <form onSubmit={handleEdit} className="p-6 space-y-4">
-            <LoanFormFields f={editForm} setF={setEditForm} />
+            <LoanFormFields f={editForm} setF={setEditForm} partners={partners} partnerMap={partnerMap} />
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setEditLoan(null)} className="flex-1">ביטול</Button>
               <Button type="submit" disabled={saving || !editForm.lender.trim() || !editForm.total_amount}

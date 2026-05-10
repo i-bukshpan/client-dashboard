@@ -102,17 +102,35 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     partner_id: '',
   })
 
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [filterPartner, setFilterPartner] = useState<string>('all')
+  const [filterStartDate, setFilterStartDate] = useState<string>('')
+  const [filterEndDate, setFilterEndDate] = useState<string>('')
+
   const partnerMap: Record<string, string> = {}
   partners.forEach(p => { partnerMap[p.id] = p.name })
 
-  // Collect all used categories from transactions plus prop categories
-  const allCategories = Array.from(new Set([
-    ...categories,
-    ...transactions.map(t => t.category).filter(Boolean) as string[],
-  ])).sort()
+  // Collect all used categories from transactions ONLY
+  const allCategories = Array.from(new Set(
+    transactions.map(t => t.category).filter(Boolean) as string[]
+  )).sort()
 
-  const totalIncome  = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+  const filteredTransactions = transactions.filter(t => {
+    if (filterCategory !== 'all') {
+      const c = t.category || 'none'
+      if (filterCategory === 'none' ? c !== 'none' : c !== filterCategory) return false
+    }
+    if (filterPartner !== 'all') {
+      const pId = (t as any).partner_id || 'none'
+      if (filterPartner !== pId) return false
+    }
+    if (filterStartDate && t.date < filterStartDate) return false
+    if (filterEndDate && t.date > filterEndDate) return false
+    return true
+  })
+
+  const totalIncome  = filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+  const totalExpense = filteredTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -153,7 +171,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     })
   }
 
-  const sorted = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const sorted = [...filteredTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <div className="space-y-4">
@@ -246,6 +264,44 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
             </div>
           </form>
         )}
+
+        {/* Filters */}
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-2 items-center">
+          <div className="flex-1 min-w-[120px]">
+            <Select value={filterCategory} onValueChange={v => setFilterCategory(v as string)}>
+              <SelectTrigger className="h-8 text-xs bg-white">
+                <SelectValue placeholder="כל הקטגוריות">
+                  {filterCategory === 'all' ? 'כל הקטגוריות' : filterCategory === 'none' ? 'ללא קטגוריה' : filterCategory}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">כל הקטגוריות</SelectItem>
+                <SelectItem value="none">ללא קטגוריה</SelectItem>
+                {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {partners.length > 0 && (
+            <div className="flex-1 min-w-[120px]">
+              <Select value={filterPartner} onValueChange={v => setFilterPartner(v as string)}>
+                <SelectTrigger className="h-8 text-xs bg-white">
+                  <SelectValue placeholder="כל השותפים">
+                    {filterPartner === 'all' ? 'כל השותפים' : filterPartner === 'none' ? 'ללא שיוך' : partnerMap[filterPartner] ?? 'לא ידוע'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">כל השותפים</SelectItem>
+                  <SelectItem value="none">ללא שיוך</SelectItem>
+                  {partners.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="h-8 text-xs bg-white w-[110px]" title="מתאריך" />
+            <Input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} className="h-8 text-xs bg-white w-[110px]" title="עד תאריך" />
+          </div>
+        </div>
 
         <div className="divide-y divide-slate-50">
           {sorted.length === 0 && (
