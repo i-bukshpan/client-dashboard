@@ -26,7 +26,7 @@ interface Props {
 
 const EMPTY_FORM = {
   lender: '', arranged_by: '', total_amount: '',
-  interest_rate: '', num_payments: '0', start_date: '', notes: '',
+  interest_rate: '', num_payments: '0', start_date: '', end_date: '', notes: '',
 }
 
 function LoanFormFields({ f, setF, partners, partnerMap }: { f: typeof EMPTY_FORM, setF: (fn: (prev: typeof EMPTY_FORM) => typeof EMPTY_FORM) => void, partners: MoshePartner[], partnerMap: Record<string, string> }) {
@@ -52,6 +52,10 @@ function LoanFormFields({ f, setF, partners, partnerMap }: { f: typeof EMPTY_FOR
         <div className="space-y-2">
           <Label className="font-medium text-slate-700">תאריך התחלה</Label>
           <Input type="date" value={f.start_date} onChange={e => setF(prev => ({ ...prev, start_date: e.target.value }))} className="h-10" />
+        </div>
+        <div className="space-y-2">
+          <Label className="font-medium text-slate-700">תאריך פירעון</Label>
+          <Input type="date" value={f.end_date} onChange={e => setF(prev => ({ ...prev, end_date: e.target.value }))} className="h-10" />
         </div>
       </div>
       {partners.length > 0 && (
@@ -117,6 +121,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
       interest_rate: loan.interest_rate ? String(loan.interest_rate) : '',
       num_payments: String(loan.num_payments),
       start_date: loan.start_date ?? '',
+      end_date: loan.end_date ?? '',
       notes: loan.notes ?? '',
     })
   }
@@ -199,7 +204,17 @@ export function LoansTab({ projectId, loans, partners }: Props) {
           const paidCount = loan.payments.filter(p => p.is_paid).length
           const isExpanded = expandedLoan === loan.id
           const arrangerName = loan.arranged_by ? partnerMap[loan.arranged_by] : null
-          const annualInterest = loan.interest_rate ? total * (Number(loan.interest_rate) / 100) : 0
+          let calculatedInterest = loan.interest_rate ? total * (Number(loan.interest_rate) / 100) : 0
+          let interestLabel = 'שנתי'
+          if (loan.start_date && loan.end_date && loan.interest_rate) {
+            const start = new Date(loan.start_date).getTime()
+            const end = new Date(loan.end_date).getTime()
+            if (end > start) {
+              const years = (end - start) / (1000 * 60 * 60 * 24 * 365.25)
+              calculatedInterest = total * (Number(loan.interest_rate) / 100) * years
+              interestLabel = 'סך הכל'
+            }
+          }
 
           return (
             <div key={loan.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -211,7 +226,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
                   <p className="font-bold text-slate-900 text-sm truncate">{loan.lender}</p>
                   <div className="flex items-center gap-3 text-[10px] text-slate-400">
                     <span>{fmt(total)}</span>
-                    {loan.interest_rate && <span>{loan.interest_rate}% ריבית (שנתי: {fmt(annualInterest)})</span>}
+                    {loan.interest_rate && <span>{loan.interest_rate}% ריבית ({interestLabel}: {fmt(calculatedInterest)})</span>}
                     <span>{paidCount}/{loan.num_payments} תשלומים</span>
                     {arrangerName && <span className="text-indigo-500">דאג: {arrangerName}</span>}
                   </div>

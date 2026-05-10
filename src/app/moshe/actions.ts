@@ -770,6 +770,7 @@ export async function createLoan(raw: unknown) {
     interest_rate: z.string().optional(),
     num_payments: z.string().optional(),
     start_date: z.string().optional(),
+    end_date: z.string().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
@@ -787,6 +788,7 @@ export async function createLoan(raw: unknown) {
     interest_rate: d.interest_rate ? parseFloat(d.interest_rate) : null,
     num_payments: numPayments,
     start_date: d.start_date || null,
+    end_date: d.end_date || null,
     notes: d.notes || null,
   }).select('id').single()
 
@@ -874,6 +876,7 @@ export async function updateLoan(id: string, raw: unknown) {
     interest_rate: z.string().optional(),
     num_payments: z.string().optional(),
     start_date: z.string().optional(),
+    end_date: z.string().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
@@ -887,6 +890,7 @@ export async function updateLoan(id: string, raw: unknown) {
     interest_rate: d.interest_rate ? parseFloat(d.interest_rate) : null,
     num_payments: d.num_payments ? parseInt(d.num_payments) : 1,
     start_date: d.start_date || null,
+    end_date: d.end_date || null,
     notes: d.notes || null,
   }).eq('id', id)
 

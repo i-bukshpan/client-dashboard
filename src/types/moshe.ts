@@ -113,6 +113,7 @@ export interface MosheLoan {
   interest_rate: number | null
   num_payments: number
   start_date: string | null
+  end_date: string | null
   notes: string | null
   created_at: string
 }
