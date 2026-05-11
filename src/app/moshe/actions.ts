@@ -1097,6 +1097,49 @@ export async function updatePartnerPermissions(partnerId: string, perms: {
 
 // ─── Portal user invite ────────────────────────────────────────────
 
+// ─── Worker tasks ─────────────────────────────────────────────────
+
+export async function createWorkerTask(data: {
+  worker_id: string
+  project_id?: string | null
+  title: string
+  notes?: string
+  due_date?: string
+}) {
+  const { error } = await db.from('moshe_worker_tasks').insert({
+    worker_id:  data.worker_id,
+    project_id: data.project_id || null,
+    title:      data.title,
+    notes:      data.notes || null,
+    due_date:   data.due_date || null,
+  })
+  if (error) return { error: `שגיאה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+export async function deleteWorkerTask(id: string) {
+  const { error } = await db.from('moshe_worker_tasks').delete().eq('id', id)
+  if (error) return { error: `שגיאה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+export async function toggleWorkerTask(id: string, isDone: boolean) {
+  const { error } = await db.from('moshe_worker_tasks').update({
+    is_done: isDone,
+    done_at: isDone ? new Date().toISOString() : null,
+  }).eq('id', id)
+  if (error) return { error: `שגיאה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+// ─── Portal user invite ────────────────────────────────────────────
+
 export async function invitePortalUser(email: string) {
   const h = await headers()
   const host = h.get('host') ?? 'localhost:3000'

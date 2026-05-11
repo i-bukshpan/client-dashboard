@@ -6,15 +6,24 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { HardHat, Plus, Trash2, ChevronDown, ChevronUp, Phone, Mail, ClipboardList, Shield, CalendarDays, Pencil, Send, ExternalLink } from 'lucide-react'
+import { HardHat, Plus, Trash2, ChevronDown, ChevronUp, Phone, Mail, ClipboardList, Shield, CalendarDays, Pencil, Send, ExternalLink, CheckSquare, Square, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { createWorker, updateWorker, deleteWorker, setWorkerPermissions, addWorkerLog, deleteWorkerLog, invitePortalUser } from '@/app/moshe/actions'
+import { createWorker, updateWorker, deleteWorker, setWorkerPermissions, addWorkerLog, deleteWorkerLog, invitePortalUser, createWorkerTask, deleteWorkerTask, toggleWorkerTask } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 
 function fmt(s: string) { return s }
 
 const ROLE_LABELS: Record<string, string> = { worker: 'עובד', foreman: 'ממונה' }
+
+interface WorkerTask {
+  id: string
+  title: string
+  notes: string | null
+  due_date: string | null
+  is_done: boolean
+  project_id: string | null
+}
 
 interface Worker {
   id: string
@@ -26,6 +35,7 @@ interface Worker {
   is_active: boolean
   permissions: { project_id: string; can_view: boolean; can_log: boolean }[]
   logs: { id: string; log_date: string; note: string; project_id: string | null }[]
+  tasks: WorkerTask[]
 }
 
 interface Project { id: string; name: string; status: string }
@@ -42,7 +52,7 @@ export function WorkersManager({ workers, projects }: Props) {
   const [addOpen, setAddOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<Record<string, 'logs' | 'perms'>>({})
+  const [activeTab, setActiveTab] = useState<Record<string, 'logs' | 'tasks' | 'perms'>>({})
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -177,8 +187,8 @@ export function WorkersManager({ workers, projects }: Props) {
 
 function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, onEdit, onDelete }: {
   worker: Worker; projects: Project[]
-  expanded: boolean; tab: 'logs' | 'perms'
-  onToggle: () => void; onTabChange: (t: 'logs' | 'perms') => void
+  expanded: boolean; tab: 'logs' | 'tasks' | 'perms'
+  onToggle: () => void; onTabChange: (t: 'logs' | 'tasks' | 'perms') => void
   onEdit: () => void; onDelete: () => void
 }) {
   const [inviting, setInviting] = useState(false)
@@ -212,7 +222,7 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
           <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
             {worker.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{worker.phone}</span>}
             {worker.email && <span className="flex items-center gap-0.5"><Mail className="w-2.5 h-2.5" />{worker.email}</span>}
-            <span>{worker.permissions.length} פרויקטים · {worker.logs.length} רשומות</span>
+            <span>{worker.permissions.length} פרויקטים · {worker.logs.length} רשומות · {worker.tasks.filter(t => !t.is_done).length} משימות</span>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -251,7 +261,11 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
         <div className="border-t border-slate-100">
           {/* Tab bar */}
           <div className="flex border-b border-slate-100">
-            {([['logs', 'יומן עובד', ClipboardList], ['perms', 'הרשאות פרויקטים', Shield]] as const).map(([t, label, Icon]) => (
+            {([
+              ['logs',  'יומן עובד',          ClipboardList],
+              ['tasks', `משימות (${worker.tasks.filter(t => !t.is_done).length})`, ListChecks],
+              ['perms', 'הרשאות פרויקטים',   Shield],
+            ] as const).map(([t, label, Icon]) => (
               <button key={t} onClick={() => onTabChange(t)}
                 className={cn('flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-colors',
                   tab === t ? 'text-orange-600 border-b-2 border-orange-500 -mb-px bg-orange-50/40' : 'text-slate-400 hover:text-slate-600')}>
@@ -260,7 +274,8 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
             ))}
           </div>
 
-          {tab === 'logs' && <WorkerLogPanel worker={worker} projects={projects} />}
+          {tab === 'logs'  && <WorkerLogPanel  worker={worker} projects={projects} />}
+          {tab === 'tasks' && <WorkerTaskPanel worker={worker} projects={projects} />}
           {tab === 'perms' && <WorkerPermPanel worker={worker} projects={projects} />}
         </div>
       )}
@@ -406,6 +421,139 @@ function WorkerPermPanel({ worker, projects }: { worker: Worker; projects: Proje
         className="h-8 bg-orange-500 hover:bg-orange-400 text-white text-xs w-full">
         {saving ? 'שומר...' : 'שמור הרשאות'}
       </Button>
+    </div>
+  )
+}
+
+function WorkerTaskPanel({ worker, projects }: { worker: Worker; projects: Project[] }) {
+  const [, startTransition] = useTransition()
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ title: '', notes: '', due_date: '', project_id: '' })
+  const [saving, setSaving] = useState(false)
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]))
+
+  async function handleAdd() {
+    if (!form.title.trim()) return toast.error('כותרת נדרשת')
+    setSaving(true)
+    const r = await createWorkerTask({
+      worker_id:  worker.id,
+      project_id: form.project_id || null,
+      title:      form.title,
+      notes:      form.notes || undefined,
+      due_date:   form.due_date || undefined,
+    })
+    setSaving(false)
+    if (r.error) { toast.error(r.error); return }
+    toast.success('משימה נוספה')
+    setForm({ title: '', notes: '', due_date: '', project_id: '' })
+    setShowAdd(false)
+  }
+
+  function handleToggle(id: string, isDone: boolean) {
+    startTransition(async () => {
+      const r = await toggleWorkerTask(id, !isDone)
+      if (r.error) toast.error(r.error)
+    })
+  }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      const r = await deleteWorkerTask(id)
+      if (r.error) toast.error(r.error)
+    })
+  }
+
+  const pending = worker.tasks.filter(t => !t.is_done)
+  const done    = worker.tasks.filter(t =>  t.is_done)
+
+  return (
+    <div>
+      <div className="px-4 py-2 flex items-center justify-between bg-slate-50/50">
+        <p className="text-[11px] font-bold text-slate-500 uppercase">משימות עובד</p>
+        <button onClick={() => setShowAdd(v => !v)}
+          className="text-[11px] text-orange-600 font-bold hover:text-orange-700 flex items-center gap-1">
+          <Plus className="w-3 h-3" /> הוסף משימה
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="px-4 py-3 bg-orange-50/30 border-b border-slate-100 space-y-2">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+            <div>
+              <p className="text-[10px] text-slate-400 mb-1">כותרת</p>
+              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="תיאור המשימה..." className="h-8 text-xs border-slate-200 bg-white" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 mb-1">תאריך יעד</p>
+              <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                className="h-8 text-xs border-slate-200 bg-white w-32" />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-400 mb-1">פרויקט</p>
+              <Select value={form.project_id} onValueChange={v => setForm(f => ({ ...f, project_id: v === '_none' ? '' : v }) as typeof f)}>
+                <SelectTrigger className="h-8 text-xs border-slate-200 bg-white w-32"><SelectValue placeholder="— ללא —" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">— ללא —</SelectItem>
+                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            placeholder="הערות נוספות (אופציונלי)..." className="h-8 text-xs border-slate-200 bg-white" />
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)} className="h-7 text-xs">ביטול</Button>
+            <Button size="sm" onClick={handleAdd} disabled={saving} className="h-7 text-xs bg-orange-500 hover:bg-orange-400 text-white px-3">
+              {saving ? 'שומר...' : 'הוסף'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {worker.tasks.length === 0 && !showAdd && (
+        <p className="text-center text-xs text-slate-400 py-6">אין משימות לעובד זה</p>
+      )}
+
+      {pending.map(task => (
+        <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 group">
+          <button onClick={() => handleToggle(task.id, task.is_done)}
+            className="text-slate-300 hover:text-emerald-500 transition-colors shrink-0">
+            <Square className="w-4 h-4" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-slate-700">{task.title}</p>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+              {task.due_date && <span className="text-amber-600">{format(new Date(task.due_date + 'T00:00:00'), 'dd/MM/yyyy')}</span>}
+              {task.project_id && projectMap[task.project_id] && <span className="text-indigo-500">{projectMap[task.project_id]}</span>}
+              {task.notes && <span>{task.notes}</span>}
+            </div>
+          </div>
+          <button onClick={() => handleDelete(task.id)}
+            className="w-6 h-6 rounded text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100">
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      ))}
+
+      {done.length > 0 && (
+        <div className="border-t border-slate-100">
+          <p className="text-[10px] text-slate-400 font-bold uppercase px-4 py-1.5 bg-slate-50/50">הושלמו ({done.length})</p>
+          {done.map(task => (
+            <div key={task.id} className="flex items-center gap-3 px-4 py-2 border-b border-slate-50 last:border-0 opacity-50 group">
+              <button onClick={() => handleToggle(task.id, task.is_done)}
+                className="text-emerald-400 hover:text-slate-300 transition-colors shrink-0">
+                <CheckSquare className="w-4 h-4" />
+              </button>
+              <p className="text-xs text-slate-500 line-through flex-1">{task.title}</p>
+              <button onClick={() => handleDelete(task.id)}
+                className="w-6 h-6 rounded text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
