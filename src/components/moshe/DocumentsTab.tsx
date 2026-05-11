@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye } from 'lucide-react'
+import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { addDocument, deleteDocument, updateDocument, updateDriveLink } from '@/app/moshe/actions'
 import { toast } from 'sonner'
@@ -25,6 +25,30 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
   const [pending, startTransition] = useTransition()
   const [showAdd, setShowAdd] = useState(false)
   const [newDoc, setNewDoc] = useState({ name: '', url: '' })
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef   = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (driveFolderUrl) fd.append('folderUrl', driveFolderUrl)
+      const res = await fetch('/api/moshe/upload-drive', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok || data.error) { toast.error(data.error ?? 'שגיאה בהעלאה'); return }
+      const r = await addDocument({ project_id: projectId, name: data.name ?? file.name, url: data.url })
+      if (r.error) { toast.error(r.error); return }
+      toast.success(`"${file.name}" הועלה לדרייב ונשמר`)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
+    }
+  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDoc, setEditDoc] = useState({ name: '', url: '' })
   const [driveUrl, setDriveUrl] = useState(driveFolderUrl ?? '')
@@ -183,10 +207,35 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
             <FileText className="w-4 h-4 text-slate-400" />
             <p className="text-sm font-bold text-slate-700">מסמכים ({documents.length})</p>
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowAdd(v => !v)}
-            className="text-xs gap-1.5 h-8 text-amber-600 hover:bg-amber-50">
-            <Plus className="w-3.5 h-3.5" /> הוסף מסמך
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {/* hidden: any file (for desktop / gallery pick) */}
+            <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleFileUpload} />
+            {/* hidden: camera capture (mobile) */}
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileUpload} />
+
+            {uploading ? (
+              <span className="flex items-center gap-1 text-xs text-blue-600 px-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> מעלה...
+              </span>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => cameraInputRef.current?.click()} disabled={uploading}
+                  className="text-xs gap-1.5 h-8 text-blue-500 hover:bg-blue-50"
+                  title="צלם תמונה (נייד)">
+                  <Camera className="w-3.5 h-3.5" /> צלם
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                  className="text-xs gap-1.5 h-8 text-blue-600 hover:bg-blue-50"
+                  title="העלה קובץ מהמכשיר">
+                  <FolderUp className="w-3.5 h-3.5" /> העלה
+                </Button>
+              </>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setShowAdd(v => !v)}
+              className="text-xs gap-1.5 h-8 text-amber-600 hover:bg-amber-50">
+              <Plus className="w-3.5 h-3.5" /> קישור
+            </Button>
+          </div>
         </div>
 
         {/* Add form */}

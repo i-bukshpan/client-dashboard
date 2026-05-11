@@ -8,7 +8,7 @@ import { addLog, deleteLog } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { Plus, Trash2, ClipboardList, User } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, User, CalendarDays } from 'lucide-react'
 
 interface LogEntry {
   id: string
@@ -17,6 +17,7 @@ interface LogEntry {
   action: string
   details: string | null
   created_at: string
+  log_date: string | null
 }
 
 interface Props {
@@ -27,14 +28,14 @@ interface Props {
 export function ActivityLogTab({ projectId, logs }: Props) {
   const [pending, startTransition] = useTransition()
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ action: '', details: '', actor: 'משה' })
+  const [form, setForm] = useState({ action: '', details: '', actor: 'משה', log_date: '' })
 
   async function handleAdd() {
     if (!form.action.trim()) return toast.error('תיאור הפעולה נדרש')
-    const r = await addLog(projectId, form.action.trim(), form.details.trim() || undefined, form.actor.trim() || 'משה')
+    const r = await addLog(projectId, form.action.trim(), form.details.trim() || undefined, form.actor.trim() || 'משה', form.log_date || undefined)
     if (r.error) { toast.error(r.error); return }
     toast.success('רשומה נוספה ללוג')
-    setForm({ action: '', details: '', actor: 'משה' })
+    setForm({ action: '', details: '', actor: 'משה', log_date: '' })
     setShowAdd(false)
   }
 
@@ -67,8 +68,8 @@ export function ActivityLogTab({ projectId, logs }: Props) {
         {/* Add form */}
         {showAdd && (
           <div className="px-4 py-4 bg-amber-50/40 border-b border-amber-100 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
                 <p className="text-[10px] text-slate-400 mb-1">תיאור הפעולה <span className="text-red-400">*</span></p>
                 <Input
                   placeholder='לדוגמה: "חתמנו על חוזה עם קבלן"'
@@ -87,6 +88,20 @@ export function ActivityLogTab({ projectId, logs }: Props) {
                     className="h-9 text-sm border-slate-200 bg-white pr-8"
                   />
                   <User className="absolute end-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">תאריך האירוע (אופציונלי)</p>
+                <div className="relative">
+                  <Input
+                    type="date"
+                    value={form.log_date}
+                    onChange={e => setForm(f => ({ ...f, log_date: e.target.value }))}
+                    className="h-9 text-sm border-slate-200 bg-white pr-8"
+                  />
+                  <CalendarDays className="absolute end-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 pointer-events-none" />
                 </div>
               </div>
             </div>
@@ -144,11 +159,18 @@ export function ActivityLogTab({ projectId, logs }: Props) {
                               <User className="w-3 h-3" />{log.actor}
                             </span>
                             <span>·</span>
-                            <span title={format(new Date(log.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}>
-                              {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: he })}
-                            </span>
+                            {log.log_date ? (
+                              <span className="flex items-center gap-0.5 text-amber-600 font-medium">
+                                <CalendarDays className="w-3 h-3" />
+                                {format(new Date(log.log_date + 'T00:00:00'), 'dd/MM/yyyy')}
+                              </span>
+                            ) : (
+                              <span title={format(new Date(log.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}>
+                                {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: he })}
+                              </span>
+                            )}
                             <span>·</span>
-                            <span>{format(new Date(log.created_at), 'dd/MM/yyyy')}</span>
+                            <span className="text-slate-300">נוצר: {format(new Date(log.created_at), 'dd/MM/yyyy')}</span>
                           </div>
                         </div>
                         <button

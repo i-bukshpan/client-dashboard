@@ -1,13 +1,44 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { z } from 'zod'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+async function getCurrentUserEmail(): Promise<string> {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.email ?? 'משה'
+  } catch {
+    return 'משה'
+  }
+}
+
+async function writeAudit(
+  projectId: string | null,
+  actionType: 'create' | 'update' | 'delete',
+  entityType: string,
+  description: string,
+  entityId?: string
+) {
+  const userEmail = await getCurrentUserEmail()
+  await db.from('moshe_audit_log').insert({
+    project_id: projectId,
+    user_email: userEmail,
+    user_name: userEmail,
+    action_type: actionType,
+    entity_type: entityType,
+    entity_id: entityId ?? null,
+    description,
+  })
+}
 
 // ─── Schemas ──────────────────────────────────────────────────────
 
@@ -84,6 +115,8 @@ export async function createProject(raw: unknown) {
 
   if (error) return { error: `שגיאה ביצירת הפרויקט: ${error.message}` }
 
+  void writeAudit(project.id, 'create', 'project', `פרויקט חדש נוצר: ${data.name}`, project.id)
+
   if (payments.length > 0) {
     const rows = payments
       .filter(p => p.amount)
@@ -125,12 +158,14 @@ export async function updateProject(id: string, raw: unknown) {
 
   if (error) return { error: `שגיאה בעדכון הפרויקט: ${error.message}` }
 
+  void writeAudit(id, 'update', 'project', `פרויקט עודכן: ${data.name}`, id)
   revalidatePath('/moshe/projects')
   revalidatePath(`/moshe/projects/${id}`)
   return { success: true }
 }
 
 export async function deleteProject(id: string) {
+  void writeAudit(id, 'delete', 'project', `פרויקט נמחק`, id)
   const { error } = await db.from('moshe_projects').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת הפרויקט: ${error.message}` }
   revalidatePath('/moshe/projects')
@@ -209,6 +244,8 @@ export async function createBuyer(raw: unknown) {
 
   if (error) return { error: `שגיאה בהוספת קונה: ${error.message}` }
 
+  void writeAudit(data.project_id, 'create', 'buyer', `קונה חדש נוסף: ${data.name}`, buyer.id)
+
   if (payments.length > 0) {
     const rows = payments
       .filter(p => p.amount)
@@ -231,6 +268,7 @@ export async function createBuyer(raw: unknown) {
 }
 
 export async function deleteBuyer(id: string, projectId: string) {
+  void writeAudit(projectId, 'delete', 'buyer', `קונה נמחק`, id)
   const { error } = await db.from('moshe_buyers').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת קונה: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -409,6 +447,8 @@ export async function createTransaction(raw: unknown) {
   })
 
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
+  void writeAudit(d.project_id, 'create', 'transaction',
+    `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} נרשמה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/finance')
   revalidatePath('/moshe')
@@ -416,6 +456,7 @@ export async function createTransaction(raw: unknown) {
 }
 
 export async function deleteTransaction(id: string, projectId: string) {
+  void writeAudit(projectId, 'delete', 'transaction', `עסקה נמחקה`, id)
   const { error } = await db.from('moshe_transactions').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת העסקה: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -531,12 +572,13 @@ export async function updateTransaction(id: string, raw: unknown) {
 
 // ─── Activity Log ──────────────────────────────────────────────────
 
-export async function addLog(projectId: string, action: string, details?: string, actor?: string) {
+export async function addLog(projectId: string, action: string, details?: string, actor?: string, logDate?: string) {
   const { error } = await db.from('moshe_project_logs').insert({
     project_id: projectId,
     actor: actor || 'משה',
     action,
     details: details || null,
+    log_date: logDate || null,
   })
   if (error) return { error: `שגיאה בכתיבת לוג: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -690,6 +732,7 @@ export async function createPartner(raw: unknown) {
   })
 
   if (error) return { error: `שגיאה בהוספת שותף: ${error.message}` }
+  void writeAudit(d.project_id, 'create', 'partner', `שותף חדש נוסף: ${d.name}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -719,6 +762,7 @@ export async function updatePartner(id: string, raw: unknown) {
 }
 
 export async function deletePartner(id: string, projectId: string) {
+  void writeAudit(projectId, 'delete', 'partner', `שותף נמחק`, id)
   const { error } = await db.from('moshe_partners').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת שותף: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -748,6 +792,8 @@ export async function createPartnerTransaction(raw: unknown) {
   })
 
   if (error) return { error: `שגיאה בהוספת תנועה: ${error.message}` }
+  void writeAudit(d.project_id, 'create', 'partner_transaction',
+    `${d.type === 'investment' ? 'השקעה' : 'משיכה'} של שותף: ₪${Number(d.amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -794,6 +840,8 @@ export async function createLoan(raw: unknown) {
 
   if (error) return { error: `שגיאה ביצירת הלוואה: ${error.message}` }
 
+  void writeAudit(d.project_id, 'create', 'loan', `הלוואה חדשה נרשמה מ-${d.lender}: ₪${totalAmount.toLocaleString('he-IL')}`, loan.id)
+
   // Auto-generate loan payment schedule
   if (numPayments > 0) {
     const paymentAmount = Math.round((totalAmount / numPayments) * 100) / 100
@@ -818,6 +866,7 @@ export async function createLoan(raw: unknown) {
 }
 
 export async function deleteLoan(id: string, projectId: string) {
+  void writeAudit(projectId, 'delete', 'loan', `הלוואה נמחקה`, id)
   const { error } = await db.from('moshe_loans').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת הלוואה: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -919,4 +968,142 @@ export async function ensureDefaultPartner(projectId: string) {
   if (error) return { error: `שגיאה ביצירת שותף ברירת מחדל: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true, id: partner.id }
+}
+
+// ─── Workers ───────────────────────────────────────────────────────
+
+export async function createWorker(raw: unknown) {
+  const schema = z.object({
+    name: z.string().min(1, 'שם העובד נדרש'),
+    phone: z.string().optional(),
+    email: z.string().email().optional().or(z.literal('')),
+    role: z.enum(['worker', 'foreman']).default('worker'),
+    notes: z.string().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: worker, error } = await db.from('moshe_workers').insert({
+    name: d.name,
+    phone: d.phone || null,
+    email: d.email || null,
+    role: d.role,
+    notes: d.notes || null,
+  }).select('id').single()
+
+  if (error) return { error: `שגיאה בהוספת עובד: ${error.message}` }
+  void writeAudit(null, 'create', 'worker', `עובד חדש נוסף: ${d.name}`, worker.id)
+  revalidatePath('/moshe/workers')
+  return { success: true, id: worker.id }
+}
+
+export async function updateWorker(id: string, raw: unknown) {
+  const schema = z.object({
+    name: z.string().min(1, 'שם נדרש'),
+    phone: z.string().optional(),
+    email: z.string().email().optional().or(z.literal('')),
+    role: z.enum(['worker', 'foreman']).default('worker'),
+    notes: z.string().optional(),
+    is_active: z.boolean().default(true),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('moshe_workers').update({
+    name: d.name, phone: d.phone || null, email: d.email || null,
+    role: d.role, notes: d.notes || null, is_active: d.is_active,
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון עובד: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  return { success: true }
+}
+
+export async function deleteWorker(id: string) {
+  const { error } = await db.from('moshe_workers').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת עובד: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  return { success: true }
+}
+
+export async function setWorkerPermissions(workerId: string, projectIds: string[], canLog: boolean) {
+  // Delete existing permissions for this worker
+  await db.from('moshe_worker_project_permissions').delete().eq('worker_id', workerId)
+  if (projectIds.length > 0) {
+    const rows = projectIds.map(pid => ({ worker_id: workerId, project_id: pid, can_view: true, can_log: canLog }))
+    const { error } = await db.from('moshe_worker_project_permissions').insert(rows)
+    if (error) return { error: `שגיאה בשמירת הרשאות: ${error.message}` }
+  }
+  revalidatePath('/moshe/workers')
+  return { success: true }
+}
+
+export async function addWorkerLog(raw: unknown) {
+  const schema = z.object({
+    worker_id: z.string().uuid(),
+    project_id: z.string().uuid().optional().or(z.literal('')),
+    log_date: z.string().min(1, 'תאריך נדרש'),
+    note: z.string().min(1, 'הערה נדרשת'),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('moshe_worker_logs').insert({
+    worker_id: d.worker_id,
+    project_id: d.project_id || null,
+    log_date: d.log_date,
+    note: d.note,
+  })
+
+  if (error) return { error: `שגיאה בהוספת רשומה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  return { success: true }
+}
+
+export async function deleteWorkerLog(id: string) {
+  const { error } = await db.from('moshe_worker_logs').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת רשומה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  return { success: true }
+}
+
+// ─── Partner portal access ─────────────────────────────────────────
+
+export async function togglePartnerPortalAccess(partnerId: string, enable: boolean) {
+  const { data: partner } = await db.from('moshe_partners').select('project_id').eq('id', partnerId).single()
+  const { error } = await db.from('moshe_partners').update({ portal_access: enable }).eq('id', partnerId)
+  if (error) return { error: `שגיאה בעדכון הרשאה: ${error.message}` }
+  revalidatePath(`/moshe/projects/${(partner as any)?.project_id}`)
+  return { success: true }
+}
+
+// ─── Partner portal permissions ───────────────────────────────────
+
+export async function updatePartnerPermissions(partnerId: string, perms: {
+  can_view_payments: boolean
+  can_view_buyers: boolean
+  can_view_transactions: boolean
+  can_view_loans: boolean
+}) {
+  const { error } = await db.from('moshe_partners').update(perms).eq('id', partnerId)
+  if (error) return { error: `שגיאה: ${error.message}` }
+  const { data: p } = await db.from('moshe_partners').select('project_id').eq('id', partnerId).single()
+  revalidatePath(`/moshe/projects/${(p as any)?.project_id}`)
+  return { success: true }
+}
+
+// ─── Portal user invite ────────────────────────────────────────────
+
+export async function invitePortalUser(email: string) {
+  const h = await headers()
+  const host = h.get('host') ?? 'localhost:3000'
+  const proto = h.get('x-forwarded-proto') ?? 'http'
+  const redirectTo = `${proto}://${host}/reset-password`
+
+  const { error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo })
+  if (error) return { error: `שגיאה בשליחת הזמנה: ${error.message}` }
+  return { success: true }
 }

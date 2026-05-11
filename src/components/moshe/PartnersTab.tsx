@@ -6,10 +6,10 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Plus, Trash2, ChevronDown, ChevronUp, Users, TrendingUp, TrendingDown, Phone, Mail } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, Users, TrendingUp, TrendingDown, Phone, Mail, Eye, EyeOff, Pencil, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { createPartner, deletePartner, createPartnerTransaction, deletePartnerTransaction } from '@/app/moshe/actions'
+import { createPartner, updatePartner, deletePartner, createPartnerTransaction, deletePartnerTransaction, togglePartnerPortalAccess, invitePortalUser, updatePartnerPermissions } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 import { PartnerPrintButton } from '@/components/moshe/ProjectPrintView'
 import type { MoshePartner, MoshePartnerTransaction, MosheLoan, MosheLoanPayment, MosheTransaction } from '@/types/moshe'
@@ -26,12 +26,31 @@ interface Props {
   allTransactions?: MosheTransaction[]
 }
 
+const EMPTY_FORM = { name: '', phone: '', email: '', notes: '' }
+
 export function PartnersTab({ projectId, project, partners, loans = [], allTransactions = [] }: Props) {
   const [pending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
+  const [editingPartner, setEditingPartner] = useState<string | null>(null)
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [invitingId, setInvitingId] = useState<string | null>(null)
+
+  async function handleInvite(partnerId: string, email: string) {
+    if (!confirm(`לשלוח הזמנה ל-${email}?`)) return
+    setInvitingId(partnerId)
+    const r = await invitePortalUser(email)
+    setInvitingId(null)
+    if (r.error) toast.error(r.error)
+    else toast.success('הזמנה נשלחה בהצלחה!')
+  }
+
+  function openAdd() { setForm(EMPTY_FORM); setAddOpen(true) }
+  function openEdit(p: MoshePartner) {
+    setForm({ name: p.name, phone: (p as any).phone ?? '', email: (p as any).email ?? '', notes: (p as any).notes ?? '' })
+    setEditingPartner(p.id)
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -42,7 +61,19 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
       if (r.error) { toast.error(r.error); return }
       toast.success('שותף נוסף בהצלחה')
       setAddOpen(false)
-      setForm({ name: '', phone: '', email: '', notes: '' })
+      setForm(EMPTY_FORM)
+    } finally { setSaving(false) }
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingPartner || !form.name.trim()) return toast.error('שם נדרש')
+    setSaving(true)
+    try {
+      const r = await updatePartner(editingPartner, form)
+      if (r.error) { toast.error(r.error); return }
+      toast.success('פרטי שותף עודכנו')
+      setEditingPartner(null)
     } finally { setSaving(false) }
   }
 
@@ -55,16 +86,10 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
     })
   }
 
-  const totalInvested = partners.reduce((s, p) => {
-    const personal = p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0)
-    const linked   = allTransactions.filter(t => (t as any).partner_id === p.id && t.type === 'income').reduce((ss, t) => ss + Number(t.amount), 0)
-    return s + personal + linked
-  }, 0)
-  const totalWithdrawn = partners.reduce((s, p) => {
-    const personal = p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0)
-    const linked   = allTransactions.filter(t => (t as any).partner_id === p.id && t.type === 'expense').reduce((ss, t) => ss + Number(t.amount), 0)
-    return s + personal + linked
-  }, 0)
+  const totalInvested = partners.reduce((s, p) =>
+    s + p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0), 0)
+  const totalWithdrawn = partners.reduce((s, p) =>
+    s + p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0), 0)
 
 
   return (
@@ -91,7 +116,7 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
 
       <div className="flex items-center justify-between">
         <p className="text-sm font-bold text-slate-700">{partners.length} שותפים בפרויקט</p>
-        <Button size="sm" onClick={() => setAddOpen(true)}
+        <Button size="sm" onClick={openAdd}
           className="gap-1.5 h-9 bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold">
           <Plus className="w-3.5 h-3.5" /> הוסף שותף
         </Button>
@@ -101,18 +126,14 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
         <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200">
           <Users className="w-10 h-10 text-slate-200 mx-auto mb-2" />
           <p className="text-slate-400 text-sm">אין שותפים עדיין</p>
-          <button onClick={() => setAddOpen(true)} className="text-indigo-500 text-xs mt-1 hover:underline">+ הוסף שותף ראשון</button>
+          <button onClick={openAdd} className="text-indigo-500 text-xs mt-1 hover:underline">+ הוסף שותף ראשון</button>
         </div>
       )}
 
       <div className="space-y-3">
         {partners.map(partner => {
-          const personal_invested = partner.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
-          const personal_withdrawn = partner.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
-          const linked_income  = allTransactions.filter(t => (t as any).partner_id === partner.id && t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-          const linked_expense = allTransactions.filter(t => (t as any).partner_id === partner.id && t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-          const invested = personal_invested + linked_income
-          const withdrawn = personal_withdrawn + linked_expense
+          const invested  = partner.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
+          const withdrawn = partner.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
           const balance = invested - withdrawn
           const isExpanded = expandedPartner === partner.id
           const isDefault = partner.name === 'משה פרוש'
@@ -140,12 +161,45 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
                   <p className="text-[10px] text-slate-400">מאזן</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => openEdit(partner)}
+                    className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  {(partner as any).email && (
+                    <button
+                      onClick={() => handleInvite(partner.id, (partner as any).email)}
+                      disabled={invitingId === partner.id}
+                      title="שלח הזמנה לפורטל"
+                      className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 transition-colors disabled:opacity-50"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <PartnerPrintButton
                     project={project ?? { name: '', address: null }}
                     partner={partner as any}
                     allTransactions={allTransactions as any}
                     loans={loans as any}
                   />
+                  {(partner as any).email && (
+                    <button
+                      title={(partner as any).portal_access ? 'בטל גישת פורטל' : 'הפעל גישת פורטל לשותף'}
+                      onClick={() => {
+                        startTransition(async () => {
+                          const r = await togglePartnerPortalAccess(partner.id, !(partner as any).portal_access)
+                          if (r.error) toast.error(r.error)
+                          else toast.success((partner as any).portal_access ? 'גישת פורטל בוטלה' : 'גישת פורטל הופעלה')
+                        })
+                      }}
+                      disabled={pending}
+                      className={cn('w-8 h-8 rounded-lg border flex items-center justify-center transition-colors',
+                        (partner as any).portal_access
+                          ? 'border-indigo-200 bg-indigo-50 text-indigo-500 hover:bg-red-50 hover:text-red-400 hover:border-red-200'
+                          : 'border-slate-100 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-200'
+                      )}>
+                      {(partner as any).portal_access ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
                   {!isDefault && (
                     <button onClick={() => removePartner(partner.id)} disabled={pending}
                       className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
@@ -161,27 +215,34 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
 
               <div className="px-5 pb-3">
                 <div className="flex gap-2 text-[10px]">
-                  <span className="text-indigo-500 font-medium">הכנסות (כולל משויכות): {fmt(invested)}</span>
+                  <span className="text-indigo-500 font-medium">השקעות: {fmt(invested)}</span>
                   <span className="text-slate-300">|</span>
-                  <span className="text-orange-500 font-medium">הוצאות / משיכות: {fmt(withdrawn)}</span>
+                  <span className="text-orange-500 font-medium">משיכות: {fmt(withdrawn)}</span>
                 </div>
               </div>
 
               {isExpanded && (
-                <PartnerTransactionsList partner={partner} projectId={projectId} />
+                <>
+                  <PartnerTransactionsList partner={partner} projectId={projectId} />
+                  {(partner as any).portal_access && (
+                    <PartnerPermissionsPanel partner={partner as any} />
+                  )}
+                </>
               )}
             </div>
           )
         })}
       </div>
 
-      {/* Add partner sheet */}
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+      {/* Add / Edit partner sheet */}
+      <Sheet open={addOpen || !!editingPartner} onOpenChange={open => { if (!open) { setAddOpen(false); setEditingPartner(null) } }}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
-            <SheetHeader><SheetTitle className="text-lg font-bold">הוספת שותף חדש</SheetTitle></SheetHeader>
+            <SheetHeader>
+              <SheetTitle className="text-lg font-bold">{editingPartner ? 'עריכת פרטי שותף' : 'הוספת שותף חדש'}</SheetTitle>
+            </SheetHeader>
           </div>
-          <form onSubmit={handleAdd} className="p-6 space-y-4">
+          <form onSubmit={editingPartner ? handleEdit : handleAdd} className="p-6 space-y-4">
             <div className="space-y-2">
               <Label className="font-medium text-slate-700">שם השותף <span className="text-red-400">*</span></Label>
               <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="שם מלא" className="h-10" required />
@@ -201,9 +262,9 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
               <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="h-10" />
             </div>
             <div className="flex gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)} className="flex-1">ביטול</Button>
+              <Button type="button" variant="outline" onClick={() => { setAddOpen(false); setEditingPartner(null) }} className="flex-1">ביטול</Button>
               <Button type="submit" disabled={saving || !form.name.trim()} className="flex-1 bg-indigo-500 hover:bg-indigo-400 text-white font-bold">
-                {saving ? 'שומר...' : 'הוסף שותף'}
+                {saving ? 'שומר...' : editingPartner ? 'שמור שינויים' : 'הוסף שותף'}
               </Button>
             </div>
           </form>
@@ -319,6 +380,59 @@ function PartnerTransactionsList({ partner, projectId }: {
           </button>
         </div>
       ))}
+    </div>
+  )
+}
+
+function PartnerPermissionsPanel({ partner }: { partner: any }) {
+  const [, startTransition] = useTransition()
+  const [perms, setPerms] = useState({
+    can_view_payments:     !!partner.can_view_payments,
+    can_view_buyers:       !!partner.can_view_buyers,
+    can_view_transactions: !!partner.can_view_transactions,
+    can_view_loans:        !!partner.can_view_loans,
+  })
+
+  function toggle(key: keyof typeof perms) {
+    const next = { ...perms, [key]: !perms[key] }
+    setPerms(next)
+    startTransition(async () => {
+      const r = await updatePartnerPermissions(partner.id, next)
+      if (r.error) toast.error(r.error)
+    })
+  }
+
+  return (
+    <div className="border-t border-indigo-100 bg-indigo-50/30 px-4 py-3">
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">הרשאות פורטל שותף</p>
+        <a
+          href={`/moshe/preview/partner/${partner.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-indigo-600 font-bold hover:text-indigo-800 flex items-center gap-1 transition-colors"
+        >
+          <Eye className="w-3 h-3" /> תצוגה מקדימה
+        </a>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {([
+          { key: 'can_view_payments',     label: 'לוח תשלומים' },
+          { key: 'can_view_buyers',       label: 'קונים' },
+          { key: 'can_view_transactions', label: 'הוצאות/הכנסות' },
+          { key: 'can_view_loans',        label: 'הלוואות' },
+        ] as const).map(({ key, label }) => (
+          <label key={key} className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded-lg hover:bg-indigo-100/60 select-none">
+            <input
+              type="checkbox"
+              checked={perms[key]}
+              onChange={() => toggle(key)}
+              className="w-3.5 h-3.5 accent-indigo-500"
+            />
+            <span className="text-xs text-slate-700">{label}</span>
+          </label>
+        ))}
+      </div>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -11,6 +11,8 @@ const NAV = [
   { href: '/moshe/projects', label: 'פרויקטים', icon: FolderKanban },
   { href: '/moshe/calendar', label: 'יומן תשלומים', icon: Calendar },
   { href: '/moshe/finance', label: 'מאזן כספי', icon: BarChart3 },
+  { href: '/moshe/workers', label: 'עובדים', icon: HardHat },
+  { href: '/moshe/activity', label: 'יומן פעילות', icon: ScrollText },
 ]
 
 interface Props {
