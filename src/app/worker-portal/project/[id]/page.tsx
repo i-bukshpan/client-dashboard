@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, MapPin, CalendarDays, User, Phone, Plus } from 'lucide-react'
+import { ArrowRight, MapPin, CalendarDays, User, Phone, TrendingUp, TrendingDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -32,25 +32,36 @@ export default async function WorkerProjectPage({ params }: { params: Promise<{ 
 
   const { data: perm } = await db
     .from('moshe_worker_project_permissions')
-    .select('can_view, can_log')
+    .select('can_view, can_log, can_view_payments, can_view_buyers')
     .eq('worker_id', worker.id)
     .eq('project_id', id)
     .single()
 
   if (!perm?.can_view) notFound()
 
-  const [{ data: project }, { data: myLogs }] = await Promise.all([
+  const none = Promise.resolve({ data: [] as any[] })
+
+  const [
+    { data: project },
+    { data: myLogs },
+    { data: rawPayments },
+    { data: rawBuyers },
+    { data: rawBuyerPayments },
+  ] = await Promise.all([
     db.from('moshe_projects').select('*').eq('id', id).single(),
-    db.from('moshe_worker_logs')
-      .select('*')
-      .eq('worker_id', worker.id)
-      .eq('project_id', id)
-      .order('log_date', { ascending: false }),
+    db.from('moshe_worker_logs').select('*').eq('worker_id', worker.id).eq('project_id', id).order('log_date', { ascending: false }),
+    perm.can_view_payments ? db.from('moshe_project_payments').select('*').eq('project_id', id).order('due_date') : none,
+    perm.can_view_buyers   ? db.from('moshe_buyers').select('id, name, unit, price').eq('project_id', id).order('name') : none,
+    perm.can_view_buyers   ? db.from('moshe_buyer_payments').select('*').eq('project_id', id).order('due_date') : none,
   ])
 
   if (!project) notFound()
 
-  const p = project as any
+  const projPayments  = (rawPayments as any[]) ?? []
+  const buyers        = (rawBuyers as any[]) ?? []
+  const buyerPayments = (rawBuyerPayments as any[]) ?? []
+
+  const p    = project as any
   const logs = (myLogs as any[]) ?? []
 
   return (
@@ -71,6 +82,67 @@ export default async function WorkerProjectPage({ params }: { params: Promise<{ 
         </div>
         {p.notes && <p className="mt-3 text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{p.notes}</p>}
       </div>
+
+      {/* Project payments */}
+      {perm.can_view_payments && projPayments.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-red-400" />
+            <p className="text-sm font-bold text-slate-700">תשלומי הפרויקט ({projPayments.length})</p>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {projPayments.map((pay: any) => (
+              <div key={pay.id} className="flex items-center gap-3 px-4 py-3">
+                <div className={cn('w-2 h-2 rounded-full shrink-0', pay.is_paid ? 'bg-emerald-400' : 'bg-red-400')} />
+                <div className="flex-1 min-w-0">
+                  {pay.notes && <p className="text-xs text-slate-600">{pay.notes}</p>}
+                  {pay.due_date && (
+                    <p className="text-[10px] text-slate-400">
+                      {format(new Date(pay.due_date), 'dd/MM/yyyy', { locale: he })}
+                    </p>
+                  )}
+                </div>
+                <span className={cn('text-sm font-black shrink-0', pay.is_paid ? 'text-slate-400 line-through' : 'text-red-600')}>
+                  {fmt(Number(pay.amount))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Buyers */}
+      {perm.can_view_buyers && buyers.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <p className="text-sm font-bold text-slate-700">קונים ({buyers.length})</p>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {buyers.map((b: any) => {
+              const bPayments = buyerPayments.filter((pay: any) => pay.buyer_id === b.id)
+              const received  = bPayments.filter((pay: any) => pay.is_received).reduce((s: number, pay: any) => s + Number(pay.amount), 0)
+              const total     = bPayments.reduce((s: number, pay: any) => s + Number(pay.amount), 0)
+              return (
+                <div key={b.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm font-medium text-slate-700">{b.name}</p>
+                    {b.unit && <span className="text-[10px] text-slate-400">{b.unit}</span>}
+                  </div>
+                  {total > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="text-emerald-600 font-bold">{fmt(received)}</span>
+                      <span>/</span>
+                      <span>{fmt(total)}</span>
+                      <span className="text-[10px]">({total > 0 ? Math.round(received / total * 100) : 0}%)</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Worker log */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">

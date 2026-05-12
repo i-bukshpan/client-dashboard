@@ -83,7 +83,7 @@ const transactionSchema = z.object({
   category: z.string().optional(),
   notes: z.string().optional(),
   partner_id: z.string().uuid().optional().or(z.literal('')),
-  is_partner_tx: z.boolean().optional(),
+  partner_tx_type: z.enum(['investment', 'withdrawal']).or(z.literal('')).optional(),
 })
 
 const eventSchema = z.object({
@@ -452,11 +452,11 @@ export async function createTransaction(raw: unknown) {
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
 
   // Also create a partner transaction if flagged
-  if (d.is_partner_tx && d.partner_id) {
+  if (d.partner_tx_type && d.partner_id) {
     await db.from('moshe_partner_transactions').insert({
       partner_id: d.partner_id,
       project_id: d.project_id,
-      type: d.type === 'income' ? 'investment' : 'withdrawal',
+      type: d.partner_tx_type,
       amount: parseFloat(d.amount),
       date: d.date,
       notes: d.notes || null,
@@ -1047,11 +1047,23 @@ export async function deleteWorker(id: string) {
   return { success: true }
 }
 
-export async function setWorkerPermissions(workerId: string, projectIds: string[], canLog: boolean) {
-  // Delete existing permissions for this worker
+export async function setWorkerPermissions(
+  workerId: string,
+  projectIds: string[],
+  canLog: boolean,
+  canViewPayments: boolean = false,
+  canViewBuyers: boolean = false,
+) {
   await db.from('moshe_worker_project_permissions').delete().eq('worker_id', workerId)
   if (projectIds.length > 0) {
-    const rows = projectIds.map(pid => ({ worker_id: workerId, project_id: pid, can_view: true, can_log: canLog }))
+    const rows = projectIds.map(pid => ({
+      worker_id: workerId,
+      project_id: pid,
+      can_view: true,
+      can_log: canLog,
+      can_view_payments: canViewPayments,
+      can_view_buyers: canViewBuyers,
+    }))
     const { error } = await db.from('moshe_worker_project_permissions').insert(rows)
     if (error) return { error: `שגיאה בשמירת הרשאות: ${error.message}` }
   }

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useTransition, useRef, useCallback } from 'react'
+import { useState, useTransition, useRef, useCallback, useEffect, Fragment } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive } from 'lucide-react'
+import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive, ChevronRight } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { addDocument, deleteDocument, updateDocument, updateDriveLink } from '@/app/moshe/actions'
 import { toast } from 'sonner'
@@ -37,24 +37,54 @@ function fmtBytes(bytes?: string) {
   return `${(n / 1048576).toFixed(1)} MB`
 }
 
+interface FolderEntry { id: string; name: string }
+
+function parseFolderId(url: string): string | null {
+  const m = url.match(/folders\/([a-zA-Z0-9_-]+)/)
+  return m ? m[1] : /^[a-zA-Z0-9_-]{20,}$/.test(url) ? url : null
+}
+
 function DriveBrowser({ folderUrl }: { folderUrl: string | null }) {
+  const [stack, setStack]       = useState<FolderEntry[]>([])
   const [files, setFiles]       = useState<DriveFile[] | null>(null)
   const [loading, setLoading]   = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [preview, setPreview]   = useState<DriveFile | null>(null)
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     if (!folderUrl) return
+    const id = parseFolderId(folderUrl)
+    if (id) setStack([{ id, name: 'תיקיית הדרייב' }])
+  }, [folderUrl])
+
+  const currentFolder = stack[stack.length - 1] ?? null
+
+  const load = useCallback(async (folder: FolderEntry) => {
     setLoading(true)
     try {
-      const url = `/api/moshe/drive-list?folder=${encodeURIComponent(folderUrl)}`
-      const res  = await fetch(url)
+      const res  = await fetch(`/api/moshe/drive-list?folder=${folder.id}`)
       const data = await res.json()
       if (data.error) { toast.error(data.error); return }
       setFiles(data.files)
     } finally {
       setLoading(false)
     }
-  }, [folderUrl])
+  }, [])
+
+  useEffect(() => {
+    if (currentFolder) {
+      setFiles(null)
+      load(currentFolder)
+    }
+  }, [currentFolder, load])
+
+  function openFolder(file: DriveFile) {
+    setStack(s => [...s, { id: file.id, name: file.name }])
+  }
+
+  function goBack() {
+    setStack(s => s.slice(0, -1))
+  }
 
   async function handleDelete(file: DriveFile) {
     if (!confirm(`למחוק את "${file.name}" מהדרייב? פעולה זו אינה הפיכה.`)) return
@@ -73,61 +103,104 @@ function DriveBrowser({ folderUrl }: { folderUrl: string | null }) {
   if (!folderUrl) return null
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-blue-500" />
-          <p className="text-sm font-bold text-slate-700">תוכן תיקיית הדרייב</p>
-          {files !== null && (
-            <span className="text-[10px] text-slate-400">({files.length} קבצים)</span>
+    <>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+          <HardDrive className="w-4 h-4 text-blue-500 shrink-0" />
+          {stack.length > 1 && (
+            <button onClick={goBack}
+              className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 shrink-0">
+              <ChevronRight className="w-4 h-4" />
+            </button>
           )}
+          <div className="flex items-center gap-1 flex-1 min-w-0 text-sm">
+            {stack.map((f, i) => (
+              <Fragment key={f.id}>
+                {i > 0 && <span className="text-slate-300 shrink-0">/</span>}
+                <span className={`truncate ${i === stack.length - 1 ? 'font-bold text-slate-700' : 'text-slate-400'}`}>
+                  {f.name}
+                </span>
+              </Fragment>
+            ))}
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => currentFolder && load(currentFolder)} disabled={loading}
+            className="text-xs gap-1.5 h-8 text-blue-600 hover:bg-blue-50 shrink-0">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            רענן
+          </Button>
         </div>
-        <Button size="sm" variant="ghost" onClick={load} disabled={loading}
-          className="text-xs gap-1.5 h-8 text-blue-600 hover:bg-blue-50">
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          {files === null ? 'טען קבצים' : 'רענן'}
-        </Button>
+
+        {loading && (
+          <div className="py-10 flex justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+          </div>
+        )}
+
+        {!loading && files !== null && files.length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-8">התיקייה ריקה</p>
+        )}
+
+        {!loading && files !== null && files.length > 0 && (
+          <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
+            {files.map(file => {
+              const isFolder = file.mimeType === 'application/vnd.google-apps.folder'
+              return (
+                <div key={file.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/50 group">
+                  <span className="text-base shrink-0">{fileIcon(file.mimeType)}</span>
+                  {isFolder ? (
+                    <button onClick={() => openFolder(file)} className="flex-1 min-w-0 text-right">
+                      <p className="text-sm font-medium text-blue-600 truncate hover:underline">{file.name}</p>
+                    </button>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {fmtBytes(file.size)}
+                          {file.modifiedTime && ` · ${format(new Date(file.modifiedTime), 'dd/MM/yyyy', { locale: he })}`}
+                        </p>
+                      </div>
+                      <button onClick={() => setPreview(file)}
+                        className="w-7 h-7 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      {file.webViewLink && (
+                        <a href={file.webViewLink} target="_blank" rel="noopener noreferrer"
+                          className="w-7 h-7 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center shrink-0">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      <button onClick={() => handleDelete(file)} disabled={deleting === file.id}
+                        className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {deleting === file.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {files === null && !loading && (
-        <p className="text-xs text-slate-400 text-center py-8">לחץ "טען קבצים" לצפייה בתוכן התיקייה</p>
-      )}
-
-      {files !== null && files.length === 0 && (
-        <p className="text-xs text-slate-400 text-center py-8">התיקייה ריקה</p>
-      )}
-
-      {files !== null && files.length > 0 && (
-        <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
-          {files.map(file => (
-            <div key={file.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/50 group">
-              <span className="text-base shrink-0">{fileIcon(file.mimeType)}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
-                <p className="text-[10px] text-slate-400">
-                  {fmtBytes(file.size)}
-                  {file.modifiedTime && ` · עודכן ${format(new Date(file.modifiedTime), 'dd/MM/yyyy', { locale: he })}`}
-                </p>
-              </div>
-              {file.webViewLink && (
-                <a href={file.webViewLink} target="_blank" rel="noopener noreferrer"
-                  className="w-7 h-7 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center shrink-0">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
-              <button
-                onClick={() => handleDelete(file)}
-                disabled={deleting === file.id}
-                className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                {deleting === file.id
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Trash2 className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <Dialog open={!!preview} onOpenChange={open => !open && setPreview(null)}>
+        <DialogContent className="max-w-4xl w-full p-0 overflow-hidden" style={{ height: '82vh' }}>
+          <DialogHeader className="px-4 py-3 border-b border-slate-100">
+            <DialogTitle className="text-sm font-bold truncate">{preview?.name}</DialogTitle>
+          </DialogHeader>
+          {preview && (
+            <iframe
+              src={`https://drive.google.com/file/d/${preview.id}/preview`}
+              className="w-full"
+              style={{ height: 'calc(82vh - 56px)', border: 'none' }}
+              allow="autoplay"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

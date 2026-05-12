@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, isBefore, isToday } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { ChevronRight, ChevronLeft, Plus, Check, AlertTriangle, LayoutList, CalendarDays as CalIcon, Pencil, Trash2 } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Plus, Check, AlertTriangle, LayoutList, CalendarDays as CalIcon, Pencil, Trash2, ChevronDown } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,8 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
   const [eventForm, setEventForm] = useState({ title: '', start_time: '', end_time: '', notes: '', type: 'meeting' })
   const [editForm, setEditForm] = useState({ title: '', start_time: '', end_time: '', notes: '', type: 'meeting' })
   const [saving, setSaving] = useState(false)
+  const [overdueExpanded, setOverdueExpanded] = useState(false)
+  const [selectedEventItem, setSelectedEventItem] = useState<CalItem | null>(null)
   const router = useRouter()
   const today = new Date()
 
@@ -200,13 +203,41 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
       </div>
 
       {overdueItems.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-          <p className="text-sm text-red-700 font-medium">
-            {overdueItems.filter(i => i.kind === 'expense').length} הוצאות
-            · {overdueItems.filter(i => i.kind === 'income').length} הכנסות
-            — באיחור ולא טופלו
-          </p>
+        <div className="bg-red-50 border border-red-200 rounded-2xl overflow-hidden">
+          <button onClick={() => setOverdueExpanded(e => !e)}
+            className="w-full px-4 py-3 flex items-center gap-3 text-right">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-sm text-red-700 font-medium flex-1">
+              {overdueItems.filter(i => i.kind === 'expense').length} הוצאות
+              · {overdueItems.filter(i => i.kind === 'income').length} הכנסות
+              — באיחור ולא טופלו
+            </p>
+            <ChevronDown className={cn('w-4 h-4 text-red-400 transition-transform', overdueExpanded && 'rotate-180')} />
+          </button>
+          {overdueExpanded && (
+            <div className="border-t border-red-100 divide-y divide-red-50">
+              {overdueItems.map(item => (
+                <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
+                  <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', item.kind === 'expense' ? 'bg-red-400' : 'bg-emerald-400')} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-700 truncate">
+                      {item.kind !== 'event' ? item.label : item.title}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {format(item.date, 'dd/MM/yyyy')}
+                      {item.kind === 'income' && item.projectName && ` · ${item.projectName}`}
+                      {item.notes && ` · ${item.notes}`}
+                    </p>
+                  </div>
+                  {item.kind !== 'event' && (
+                    <span className={cn('text-xs font-black shrink-0', item.kind === 'expense' ? 'text-red-600' : 'text-emerald-700')}>
+                      {item.kind === 'income' ? '+' : '-'}{fmt(item.amount)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -327,7 +358,7 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
                     <p className="text-xs text-slate-400 text-center py-8">אין פריטים ביום זה</p>
                   )}
                   {selectedItems.map(item => (
-                    <CalendarDayItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} />
+                    <CalendarDayItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} onSelect={setSelectedEventItem} />
                   ))}
                 </div>
               </div>
@@ -376,11 +407,89 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
           )}
           <div className="divide-y divide-slate-50">
             {sortedAll.map(item => (
-              <CalendarListItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} />
+              <CalendarListItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} onSelect={setSelectedEventItem} />
             ))}
           </div>
         </div>
       )}
+
+      {/* Event info dialog */}
+      <Dialog open={!!selectedEventItem} onOpenChange={open => !open && setSelectedEventItem(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {selectedEventItem?.kind === 'event' ? selectedEventItem.title
+               : selectedEventItem?.kind === 'expense' ? `הוצאה — ${selectedEventItem.label}`
+               : selectedEventItem?.kind === 'income' ? `הכנסה — ${selectedEventItem?.label}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedEventItem && (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">תאריך</span>
+                <span className="font-medium">{format(selectedEventItem.date, 'dd/MM/yyyy', { locale: he })}</span>
+              </div>
+              {selectedEventItem.kind === 'event' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">שעת התחלה</span>
+                    <span className="font-medium">{format(selectedEventItem.date, 'HH:mm')}</span>
+                  </div>
+                  {selectedEventItem.end_time && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">שעת סיום</span>
+                      <span className="font-medium">{format(new Date(selectedEventItem.end_time), 'HH:mm')}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">סוג</span>
+                    <span className="font-medium">{typeLabel[selectedEventItem.type] ?? selectedEventItem.type}</span>
+                  </div>
+                </>
+              )}
+              {selectedEventItem.kind !== 'event' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">סכום</span>
+                    <span className={cn('font-black', selectedEventItem.kind === 'expense' ? 'text-red-600' : 'text-emerald-700')}>
+                      {fmt(selectedEventItem.amount)}
+                    </span>
+                  </div>
+                  {selectedEventItem.kind === 'income' && selectedEventItem.projectName && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">פרויקט</span>
+                      <span className="font-medium">{selectedEventItem.projectName}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">סטטוס</span>
+                    <span className={cn('font-bold', (selectedEventItem.kind === 'expense' ? selectedEventItem.is_paid : selectedEventItem.is_received) ? 'text-emerald-600' : 'text-red-600')}>
+                      {(selectedEventItem.kind === 'expense' ? selectedEventItem.is_paid : selectedEventItem.is_received) ? 'שולם ✓' : 'טרם שולם'}
+                    </span>
+                  </div>
+                </>
+              )}
+              {selectedEventItem.notes && (
+                <div className="pt-1 border-t border-slate-100">
+                  <p className="text-slate-500 text-xs mb-1">הערות</p>
+                  <p className="text-slate-700">{selectedEventItem.notes}</p>
+                </div>
+              )}
+              {selectedEventItem.kind === 'event' && (
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={() => { setSelectedEventItem(null); openEditEvent(selectedEventItem.id) }}>
+                    <Pencil className="w-3.5 h-3.5" /> ערוך
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1 gap-1.5 border-red-200 text-red-500 hover:bg-red-50"
+                    onClick={() => { setSelectedEventItem(null); handleDeleteEvent(selectedEventItem.id) }}>
+                    <Trash2 className="w-3.5 h-3.5" /> מחק
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Add event sheet */}
       <Sheet open={addEventOpen} onOpenChange={setAddEventOpen}>
@@ -405,17 +514,18 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
   )
 }
 
-function CalendarDayItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
+function CalendarDayItem({ item, onToggle, onEditEvent, onDeleteEvent, onSelect }: {
   item: CalItem
   onToggle: (item: CalItem) => void
   onEditEvent: (id: string) => void
   onDeleteEvent: (id: string) => void
+  onSelect: (item: CalItem) => void
 }) {
   const done = item.kind === 'expense' ? item.is_paid : item.kind === 'income' ? item.is_received : true
   return (
-    <div className="px-4 py-3 flex items-start gap-3 group hover:bg-slate-50/50">
+    <div className="px-4 py-3 flex items-start gap-3 group hover:bg-slate-50/50 cursor-pointer" onClick={() => onSelect(item)}>
       {item.kind !== 'event' ? (
-        <button onClick={() => onToggle(item)}
+        <button onClick={e => { e.stopPropagation(); onToggle(item) }}
           className={cn(
             'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all mt-0.5',
             done ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -461,11 +571,11 @@ function CalendarDayItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
         </span>
         {item.kind === 'event' && (
           <>
-            <button onClick={() => onEditEvent(item.id)}
+            <button onClick={e => { e.stopPropagation(); onEditEvent(item.id) }}
               className="w-6 h-6 rounded text-slate-300 hover:text-amber-500 hover:bg-amber-50 flex items-center justify-center">
               <Pencil className="w-3 h-3" />
             </button>
-            <button onClick={() => onDeleteEvent(item.id)}
+            <button onClick={e => { e.stopPropagation(); onDeleteEvent(item.id) }}
               className="w-6 h-6 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 flex items-center justify-center">
               <Trash2 className="w-3 h-3" />
             </button>
@@ -476,11 +586,12 @@ function CalendarDayItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
   )
 }
 
-function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
+function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent, onSelect }: {
   item: CalItem
   onToggle: (item: CalItem) => void
   onEditEvent: (id: string) => void
   onDeleteEvent: (id: string) => void
+  onSelect: (item: CalItem) => void
 }) {
   const done = item.kind === 'expense' ? item.is_paid : item.kind === 'income' ? item.is_received : true
   const today = new Date()
@@ -488,9 +599,9 @@ function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
 
   return (
     <div className={cn(
-      'flex items-center gap-4 px-5 py-3 group hover:bg-slate-50/50 transition-colors',
+      'flex items-center gap-4 px-5 py-3 group hover:bg-slate-50/50 transition-colors cursor-pointer',
       overdue && 'bg-red-50/20'
-    )}>
+    )} onClick={() => onSelect(item)}>
       {/* Date badge */}
       <div className={cn(
         'w-12 text-center rounded-xl py-1.5 shrink-0',
@@ -516,7 +627,7 @@ function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
 
       {/* Toggle for payments */}
       {item.kind !== 'event' && (
-        <button onClick={() => onToggle(item)}
+        <button onClick={e => { e.stopPropagation(); onToggle(item) }}
           className={cn(
             'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
             done ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -563,11 +674,11 @@ function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent }: {
 
       {item.kind === 'event' && (
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onEditEvent(item.id)}
+          <button onClick={e => { e.stopPropagation(); onEditEvent(item.id) }}
             className="w-7 h-7 rounded-lg text-slate-200 hover:text-amber-500 hover:bg-amber-50 flex items-center justify-center">
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => onDeleteEvent(item.id)}
+          <button onClick={e => { e.stopPropagation(); onDeleteEvent(item.id) }}
             className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center">
             <Trash2 className="w-3.5 h-3.5" />
           </button>

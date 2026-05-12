@@ -91,7 +91,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     category: '',
     notes: '',
     partner_id: '',
-    is_partner_tx: false,
+    partner_tx_type: '' as '' | 'investment' | 'withdrawal',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editRow, setEditRow] = useState({
@@ -139,7 +139,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     const r = await createTransaction({ project_id: projectId, ...form })
     if (r.error) { toast.error(r.error); return }
     toast.success('עסקה נוספה')
-    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '', is_partner_tx: false }))
+    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '', partner_tx_type: '' }))
     setShowForm(false)
   }
 
@@ -239,7 +239,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
             {partners.length > 0 && (
               <div className="space-y-1">
                 <Label className="text-[11px] text-slate-500">שותף אחראי</Label>
-                <Select value={form.partner_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, partner_id: v === '__none__' ? '' : (v as string), is_partner_tx: false }))}>
+                <Select value={form.partner_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, partner_id: v === '__none__' ? '' : (v as string), partner_tx_type: '' }))}>
                   <SelectTrigger className="h-9 text-sm border-slate-200 bg-white">
                     <SelectValue>
                       {form.partner_id ? (partnerMap[form.partner_id] ?? 'בחר שותף') : 'ללא שיוך'}
@@ -255,19 +255,31 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
               </div>
             )}
             {form.partner_id && (
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={form.is_partner_tx}
-                  onChange={e => setForm(f => ({ ...f, is_partner_tx: e.target.checked }))}
-                  className="w-4 h-4 rounded border-slate-300 text-indigo-600"
-                />
-                <span className="text-xs text-slate-600">
-                  סמן כ<span className="font-bold text-indigo-700">
-                    {form.type === 'income' ? 'השקעה' : 'משיכה'}
-                  </span> של השותף (יתווסף גם לתנועות השותף)
-                </span>
-              </label>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-slate-500">תנועה לשותף (אופציונלי)</Label>
+                <div className="flex gap-2">
+                  {(['', 'investment', 'withdrawal'] as const).map(v => {
+                    const label = v === '' ? 'ללא תנועה' : v === 'investment' ? 'השקעה של השותף' : 'משיכה של השותף'
+                    const active = form.partner_tx_type === v
+                    return (
+                      <button key={v} type="button"
+                        onClick={() => setForm(f => ({ ...f, partner_tx_type: v }))}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-lg border transition-colors ${
+                          active
+                            ? v === '' ? 'bg-slate-100 border-slate-300 text-slate-700'
+                              : v === 'investment' ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                              : 'bg-red-100 border-red-300 text-red-800'
+                            : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        }`}>
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {form.partner_tx_type && (
+                  <p className="text-[10px] text-slate-400">התנועה תיווסף גם לרשימת תנועות השותף</p>
+                )}
+              </div>
             )}
             <div className="space-y-1">
               <Label className="text-[11px] text-slate-500">הערות</Label>

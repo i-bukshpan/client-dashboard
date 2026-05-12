@@ -25,17 +25,23 @@ export default async function MosheDashboard() {
     { data: projPayments },
     { data: buyerPayments },
     { data: transactions },
+    { data: loans },
+    { data: loanPayments },
   ] = await Promise.all([
     db.from('moshe_projects').select('*').neq('status', 'closed'),
     db.from('moshe_project_payments').select('*'),
     db.from('moshe_buyer_payments').select('*'),
     db.from('moshe_transactions').select('*'),
+    db.from('moshe_loans').select('id, project_id, total_amount'),
+    db.from('moshe_loan_payments').select('loan_id, amount, is_paid'),
   ])
 
-  const pp = (projPayments as any[]) ?? []
-  const bp = (buyerPayments as any[]) ?? []
-  const tx = (transactions as any[]) ?? []
+  const pp   = (projPayments as any[]) ?? []
+  const bp   = (buyerPayments as any[]) ?? []
+  const tx   = (transactions as any[]) ?? []
   const proj = (projects as any[]) ?? []
+  const lo   = (loans as any[]) ?? []
+  const lp   = (loanPayments as any[]) ?? []
 
   // KPIs
   const totalPaid = pp.filter(p => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
@@ -81,15 +87,22 @@ export default async function MosheDashboard() {
   // Insights: per-project collection stats
   const in30 = addDays(today, 30)
   const projectInsights = proj.map((p: any) => {
-    const bRecv    = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const bTotal   = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const pPaid    = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const overdue  = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const bRecv       = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const bTotal      = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const pPaid       = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const txIncome    = tx.filter((x: any) => x.project_id === p.id && x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const txExpense   = tx.filter((x: any) => x.project_id === p.id && x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const projLoans   = lo.filter((x: any) => x.project_id === p.id)
+    const totalLoans  = projLoans.reduce((s: number, x: any) => s + Number(x.total_amount), 0)
+    const loanRepaid  = lp.filter((x: any) => projLoans.some((l: any) => l.id === x.loan_id) && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const loanNet     = totalLoans - loanRepaid
+    const cashInFund  = (loanNet + bRecv + txIncome) - (pPaid + txExpense)
+    const overdue     = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
       + bp.filter((x: any) => x.project_id === p.id && !x.is_received && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const next30In = bp.filter((x: any) => x.project_id === p.id && !x.is_received && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const next30Ex = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const pct      = bTotal > 0 ? Math.round((bRecv / bTotal) * 100) : 0
-    return { id: p.id, name: p.name, pct, bRecv, bTotal, pPaid, overdue, next30In, next30Ex, realBalance: bRecv - pPaid }
+    const next30In    = bp.filter((x: any) => x.project_id === p.id && !x.is_received && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const next30Ex    = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const pct         = bTotal > 0 ? Math.round((bRecv / bTotal) * 100) : 0
+    return { id: p.id, name: p.name, pct, bRecv, bTotal, pPaid, overdue, next30In, next30Ex, cashInFund }
   }).sort((a: any, b: any) => b.overdue - a.overdue)
 
   const totalNext30In  = projectInsights.reduce((s: number, p: any) => s + p.next30In, 0)
@@ -280,16 +293,9 @@ export default async function MosheDashboard() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {proj.slice(0, 6).map((p: any) => {
-            const pPaid = pp.filter((pay: any) => pay.project_id === p.id && pay.is_paid)
-              .reduce((s: number, pay: any) => s + Number(pay.amount), 0)
-            const pTotal = pp.filter((pay: any) => pay.project_id === p.id)
-              .reduce((s: number, pay: any) => s + Number(pay.amount), 0)
-            const bReceived = bp.filter((pay: any) => pay.project_id === p.id && pay.is_received)
-              .reduce((s: number, pay: any) => s + Number(pay.amount), 0)
-            const bTotal = bp.filter((pay: any) => pay.project_id === p.id)
-              .reduce((s: number, pay: any) => s + Number(pay.amount), 0)
-            const balance = bReceived - pPaid
-            const pct = bTotal > 0 ? Math.round((bReceived / bTotal) * 100) : 0
+            const insight = projectInsights.find((i: any) => i.id === p.id)
+            const pct     = insight?.pct ?? 0
+            const fund    = insight?.cashInFund ?? 0
 
             return (
               <Link key={p.id} href={`/moshe/projects/${p.id}`}
@@ -302,9 +308,12 @@ export default async function MosheDashboard() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400">גבייה {pct}%</span>
-                  <span className={cn('text-xs font-black', balance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-                    {fmt(balance)}
-                  </span>
+                  <div className="text-right">
+                    <span className={cn('text-xs font-black', fund >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {fmt(fund)}
+                    </span>
+                    <p className="text-[9px] text-slate-400">כסף בקופה</p>
+                  </div>
                 </div>
               </Link>
             )
@@ -412,8 +421,8 @@ export default async function MosheDashboard() {
                         {p.pct < 50 && p.bTotal > 0 && <p>גבייה {p.pct}% בלבד</p>}
                       </div>
                     </div>
-                    <span className={cn('text-xs font-black shrink-0', p.realBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-                      {fmt(p.realBalance)}
+                    <span className={cn('text-xs font-black shrink-0', p.cashInFund >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {fmt(p.cashInFund)}
                     </span>
                   </div>
                 ))}

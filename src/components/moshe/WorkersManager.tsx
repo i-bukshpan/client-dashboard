@@ -33,7 +33,7 @@ interface Worker {
   role: string
   notes: string | null
   is_active: boolean
-  permissions: { project_id: string; can_view: boolean; can_log: boolean }[]
+  permissions: { project_id: string; can_view: boolean; can_log: boolean; can_view_payments: boolean; can_view_buyers: boolean }[]
   logs: { id: string; log_date: string; note: string; project_id: string | null }[]
   tasks: WorkerTask[]
 }
@@ -374,15 +374,16 @@ function WorkerLogPanel({ worker, projects }: { worker: Worker; projects: Projec
 
 function WorkerPermPanel({ worker, projects }: { worker: Worker; projects: Project[] }) {
   const currentProjectIds = worker.permissions.map(p => p.project_id)
-  const currentCanLog = worker.permissions.some(p => p.can_log)
-  const [selected, setSelected] = useState<string[]>(currentProjectIds)
-  const [canLog, setCanLog] = useState(currentCanLog)
-  const [saving, setSaving] = useState(false)
+  const [selected, setSelected]               = useState<string[]>(currentProjectIds)
+  const [canLog, setCanLog]                   = useState(worker.permissions.some(p => p.can_log))
+  const [canViewPayments, setCanViewPayments] = useState(worker.permissions.some(p => p.can_view_payments))
+  const [canViewBuyers, setCanViewBuyers]     = useState(worker.permissions.some(p => p.can_view_buyers))
+  const [saving, setSaving]                   = useState(false)
 
   async function handleSave() {
     setSaving(true)
     try {
-      const r = await setWorkerPermissions(worker.id, selected, canLog)
+      const r = await setWorkerPermissions(worker.id, selected, canLog, canViewPayments, canViewBuyers)
       if (r.error) { toast.error(r.error); return }
       toast.success('הרשאות עודכנו')
     } finally { setSaving(false) }
@@ -394,13 +395,25 @@ function WorkerPermPanel({ worker, projects }: { worker: Worker; projects: Proje
 
   return (
     <div className="px-4 py-3 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs font-bold text-slate-600">פרויקטים נגישים לעובד</p>
-        <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-          <input type="checkbox" checked={canLog} onChange={e => setCanLog(e.target.checked)}
-            className="w-3.5 h-3.5 accent-orange-500" />
-          יכול להוסיף ללוג
-        </label>
+        <div className="flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+            <input type="checkbox" checked={canLog} onChange={e => setCanLog(e.target.checked)}
+              className="w-3.5 h-3.5 accent-orange-500" />
+            כתיבה ליומן
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+            <input type="checkbox" checked={canViewPayments} onChange={e => setCanViewPayments(e.target.checked)}
+              className="w-3.5 h-3.5 accent-orange-500" />
+            צפייה בתשלומים
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+            <input type="checkbox" checked={canViewBuyers} onChange={e => setCanViewBuyers(e.target.checked)}
+              className="w-3.5 h-3.5 accent-orange-500" />
+            צפייה בקונים
+          </label>
+        </div>
       </div>
 
       <div className="space-y-1 max-h-48 overflow-y-auto">

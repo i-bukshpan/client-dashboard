@@ -1,7 +1,7 @@
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { Eye, MapPin, CalendarDays, FolderKanban, CalendarCheck, ArrowRight } from 'lucide-react'
+import { Eye, MapPin, CalendarDays, FolderKanban, CalendarCheck, ArrowRight, ListChecks, CheckSquare, Square } from 'lucide-react'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -46,15 +46,21 @@ export default async function PreviewWorkerPage({ params }: { params: Promise<{ 
     ? await db.from('moshe_projects').select('*').in('id', projectIds).order('name')
     : { data: [] }
 
-  const { data: logs } = await db
-    .from('moshe_worker_logs')
-    .select('*')
-    .eq('worker_id', id)
-    .order('log_date', { ascending: false })
-    .limit(20)
+  const [{ data: logs }, { data: tasks }] = await Promise.all([
+    db.from('moshe_worker_logs')
+      .select('*')
+      .eq('worker_id', id)
+      .order('log_date', { ascending: false })
+      .limit(20),
+    db.from('moshe_worker_tasks')
+      .select('*')
+      .eq('worker_id', id)
+      .order('created_at', { ascending: false }),
+  ])
 
   const projectsArr = (projects as any[]) ?? []
   const logsArr     = (logs as any[]) ?? []
+  const tasksArr    = (tasks as any[]) ?? []
 
   const canLogMap = Object.fromEntries(permArr.map(p => [p.project_id, p.can_log]))
   const projectMap = Object.fromEntries(projectsArr.map(p => [p.id, p.name]))
@@ -128,6 +134,36 @@ export default async function PreviewWorkerPage({ params }: { params: Promise<{ 
               </div>
             )}
           </div>
+
+          {/* Tasks assigned to this worker */}
+          {tasksArr.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+                <ListChecks className="w-4 h-4 text-orange-400" />
+                <p className="text-sm font-bold text-slate-700">
+                  משימות ({tasksArr.filter((t: any) => !t.is_done).length} פתוחות)
+                </p>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {tasksArr.map((task: any) => (
+                  <div key={task.id} className={cn('flex items-center gap-3 px-4 py-3', task.is_done && 'opacity-50')}>
+                    {task.is_done
+                      ? <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                      : <Square className="w-4 h-4 text-slate-300 shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <p className={cn('text-sm text-slate-700', task.is_done && 'line-through')}>{task.title}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                        {task.due_date && <span className="text-amber-600">{format(new Date(task.due_date + 'T00:00:00'), 'dd/MM/yyyy')}</span>}
+                        {task.project_id && projectMap[task.project_id] && <span className="text-indigo-500">{projectMap[task.project_id]}</span>}
+                        {task.notes && <span>{task.notes}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recent logs by this worker */}
           {logsArr.length > 0 && (
