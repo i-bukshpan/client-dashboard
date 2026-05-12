@@ -30,7 +30,7 @@ async function writeAudit(
   snapshot?: Record<string, unknown> | null
 ) {
   const userEmail = await getCurrentUserEmail()
-  await db.from('moshe_audit_log').insert({
+  const row: Record<string, unknown> = {
     project_id: projectId,
     user_email: userEmail,
     user_name: userEmail,
@@ -38,8 +38,11 @@ async function writeAudit(
     entity_type: entityType,
     entity_id: entityId ?? null,
     description,
-    undo_snapshot: snapshot ?? null,
-  })
+  }
+  // undo_snapshot exists only after migration 020 — include only when provided
+  if (snapshot != null) row.undo_snapshot = snapshot
+  const { error } = await db.from('moshe_audit_log').insert(row)
+  if (error) console.error('[writeAudit]', error.message)
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────
