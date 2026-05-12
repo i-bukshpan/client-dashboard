@@ -1,12 +1,135 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp } from 'lucide-react'
+import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { addDocument, deleteDocument, updateDocument, updateDriveLink } from '@/app/moshe/actions'
 import { toast } from 'sonner'
+import { format } from 'date-fns'
+import { he } from 'date-fns/locale'
+
+interface DriveFile {
+  id: string
+  name: string
+  mimeType: string
+  size?: string
+  webViewLink?: string
+  modifiedTime?: string
+}
+
+function fileIcon(mimeType: string) {
+  if (mimeType.startsWith('image/')) return '🖼️'
+  if (mimeType === 'application/pdf') return '📄'
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊'
+  if (mimeType.includes('document') || mimeType.includes('word')) return '📝'
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📋'
+  if (mimeType === 'application/vnd.google-apps.folder') return '📁'
+  return '📎'
+}
+
+function fmtBytes(bytes?: string) {
+  if (!bytes) return ''
+  const n = parseInt(bytes)
+  if (n < 1024) return `${n} B`
+  if (n < 1048576) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / 1048576).toFixed(1)} MB`
+}
+
+function DriveBrowser({ folderUrl }: { folderUrl: string | null }) {
+  const [files, setFiles]       = useState<DriveFile[] | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (!folderUrl) return
+    setLoading(true)
+    try {
+      const url = `/api/moshe/drive-list?folder=${encodeURIComponent(folderUrl)}`
+      const res  = await fetch(url)
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      setFiles(data.files)
+    } finally {
+      setLoading(false)
+    }
+  }, [folderUrl])
+
+  async function handleDelete(file: DriveFile) {
+    if (!confirm(`למחוק את "${file.name}" מהדרייב? פעולה זו אינה הפיכה.`)) return
+    setDeleting(file.id)
+    try {
+      const res  = await fetch(`/api/moshe/drive-file?fileId=${file.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      toast.success(`"${file.name}" נמחק מהדרייב`)
+      setFiles(prev => prev?.filter(f => f.id !== file.id) ?? null)
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  if (!folderUrl) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <HardDrive className="w-4 h-4 text-blue-500" />
+          <p className="text-sm font-bold text-slate-700">תוכן תיקיית הדרייב</p>
+          {files !== null && (
+            <span className="text-[10px] text-slate-400">({files.length} קבצים)</span>
+          )}
+        </div>
+        <Button size="sm" variant="ghost" onClick={load} disabled={loading}
+          className="text-xs gap-1.5 h-8 text-blue-600 hover:bg-blue-50">
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {files === null ? 'טען קבצים' : 'רענן'}
+        </Button>
+      </div>
+
+      {files === null && !loading && (
+        <p className="text-xs text-slate-400 text-center py-8">לחץ "טען קבצים" לצפייה בתוכן התיקייה</p>
+      )}
+
+      {files !== null && files.length === 0 && (
+        <p className="text-xs text-slate-400 text-center py-8">התיקייה ריקה</p>
+      )}
+
+      {files !== null && files.length > 0 && (
+        <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
+          {files.map(file => (
+            <div key={file.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/50 group">
+              <span className="text-base shrink-0">{fileIcon(file.mimeType)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate">{file.name}</p>
+                <p className="text-[10px] text-slate-400">
+                  {fmtBytes(file.size)}
+                  {file.modifiedTime && ` · עודכן ${format(new Date(file.modifiedTime), 'dd/MM/yyyy', { locale: he })}`}
+                </p>
+              </div>
+              {file.webViewLink && (
+                <a href={file.webViewLink} target="_blank" rel="noopener noreferrer"
+                  className="w-7 h-7 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 flex items-center justify-center shrink-0">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+              <button
+                onClick={() => handleDelete(file)}
+                disabled={deleting === file.id}
+                className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {deleting === file.id
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Trash2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Document {
   id: string
@@ -356,6 +479,9 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
           })}
         </div>
       </div>
+
+      {/* Drive folder browser */}
+      <DriveBrowser folderUrl={driveFolderUrl ?? null} />
 
       {/* Preview Dialog */}
       <Dialog open={!!previewUrl} onOpenChange={open => !open && setPreviewUrl(null)}>

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Trash2, TrendingUp, TrendingDown, Pencil, X, Tag, User } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, TrendingDown, Pencil, Tag, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { createTransaction, deleteTransaction, updateTransaction } from '@/app/moshe/actions'
@@ -91,6 +91,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     category: '',
     notes: '',
     partner_id: '',
+    is_partner_tx: false,
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editRow, setEditRow] = useState({
@@ -138,7 +139,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     const r = await createTransaction({ project_id: projectId, ...form })
     if (r.error) { toast.error(r.error); return }
     toast.success('עסקה נוספה')
-    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '' }))
+    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '', is_partner_tx: false }))
     setShowForm(false)
   }
 
@@ -238,7 +239,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
             {partners.length > 0 && (
               <div className="space-y-1">
                 <Label className="text-[11px] text-slate-500">שותף אחראי</Label>
-                <Select value={form.partner_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, partner_id: v === '__none__' ? '' : (v as string) }))}>
+                <Select value={form.partner_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, partner_id: v === '__none__' ? '' : (v as string), is_partner_tx: false }))}>
                   <SelectTrigger className="h-9 text-sm border-slate-200 bg-white">
                     <SelectValue>
                       {form.partner_id ? (partnerMap[form.partner_id] ?? 'בחר שותף') : 'ללא שיוך'}
@@ -252,6 +253,21 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {form.partner_id && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.is_partner_tx}
+                  onChange={e => setForm(f => ({ ...f, is_partner_tx: e.target.checked }))}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600"
+                />
+                <span className="text-xs text-slate-600">
+                  סמן כ<span className="font-bold text-indigo-700">
+                    {form.type === 'income' ? 'השקעה' : 'משיכה'}
+                  </span> של השותף (יתווסף גם לתנועות השותף)
+                </span>
+              </label>
             )}
             <div className="space-y-1">
               <Label className="text-[11px] text-slate-500">הערות</Label>

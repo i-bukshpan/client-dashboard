@@ -26,7 +26,8 @@ async function writeAudit(
   actionType: 'create' | 'update' | 'delete',
   entityType: string,
   description: string,
-  entityId?: string
+  entityId?: string,
+  snapshot?: Record<string, unknown> | null
 ) {
   const userEmail = await getCurrentUserEmail()
   await db.from('moshe_audit_log').insert({
@@ -37,6 +38,7 @@ async function writeAudit(
     entity_type: entityType,
     entity_id: entityId ?? null,
     description,
+    undo_snapshot: snapshot ?? null,
   })
 }
 
@@ -81,6 +83,7 @@ const transactionSchema = z.object({
   category: z.string().optional(),
   notes: z.string().optional(),
   partner_id: z.string().uuid().optional().or(z.literal('')),
+  is_partner_tx: z.boolean().optional(),
 })
 
 const eventSchema = z.object({
@@ -436,7 +439,7 @@ export async function createTransaction(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { error } = await db.from('moshe_transactions').insert({
+  const { data: tx, error } = await db.from('moshe_transactions').insert({
     project_id: d.project_id,
     type: d.type,
     amount: parseFloat(d.amount),
@@ -444,9 +447,23 @@ export async function createTransaction(raw: unknown) {
     category: d.category || null,
     notes: d.notes || null,
     partner_id: d.partner_id || null,
-  })
+  }).select('id').single()
 
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
+
+  // Also create a partner transaction if flagged
+  if (d.is_partner_tx && d.partner_id) {
+    await db.from('moshe_partner_transactions').insert({
+      partner_id: d.partner_id,
+      project_id: d.project_id,
+      type: d.type === 'income' ? 'investment' : 'withdrawal',
+      amount: parseFloat(d.amount),
+      date: d.date,
+      notes: d.notes || null,
+      source_transaction_id: tx.id,
+    })
+  }
+
   void writeAudit(d.project_id, 'create', 'transaction',
     `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} נרשמה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
@@ -456,9 +473,10 @@ export async function createTransaction(raw: unknown) {
 }
 
 export async function deleteTransaction(id: string, projectId: string) {
-  void writeAudit(projectId, 'delete', 'transaction', `עסקה נמחקה`, id)
+  const { data: old } = await db.from('moshe_transactions').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_transactions').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת העסקה: ${error.message}` }
+  void writeAudit(projectId, 'delete', 'transaction', `עסקה נמחקה`, id, old as Record<string, unknown> ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe/finance')
   return { success: true }
@@ -866,9 +884,10 @@ export async function createLoan(raw: unknown) {
 }
 
 export async function deleteLoan(id: string, projectId: string) {
-  void writeAudit(projectId, 'delete', 'loan', `הלוואה נמחקה`, id)
+  const { data: old } = await db.from('moshe_loans').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_loans').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת הלוואה: ${error.message}` }
+  void writeAudit(projectId, 'delete', 'loan', `הלוואה נמחקה`, id, old as Record<string, unknown> ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }
 }
@@ -1148,5 +1167,47 @@ export async function invitePortalUser(email: string) {
 
   const { error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo })
   if (error) return { error: `שגיאה בשליחת הזמנה: ${error.message}` }
+  return { success: true }
+}
+
+// ─── Undo audit action ─────────────────────────────────────────────
+
+export async function undoAuditAction(auditId: string) {
+  const { data: audit } = await db
+    .from('moshe_audit_log')
+    .select('*')
+    .eq('id', auditId)
+    .single()
+
+  if (!audit) return { error: 'רשומה לא נמצאה' }
+  if ((audit as any).is_undone) return { error: 'פעולה זו כבר בוטלה' }
+
+  const createdAt = new Date((audit as any).created_at)
+  const diffMinutes = (Date.now() - createdAt.getTime()) / 60000
+  if (diffMinutes > 10) return { error: 'פג תוקף הביטול (10 דקות)' }
+
+  const snapshot = (audit as any).undo_snapshot
+  if (!snapshot) return { error: 'לא ניתן לבטל — אין נתוני שחזור' }
+
+  const tableMap: Record<string, string> = {
+    transaction: 'moshe_transactions',
+    loan: 'moshe_loans',
+  }
+  const table = tableMap[(audit as any).entity_type]
+  if (!table) return { error: 'סוג ישות לא נתמך לשחזור' }
+
+  if ((audit as any).action_type === 'delete') {
+    const { error } = await db.from(table).insert(snapshot)
+    if (error) return { error: `שגיאה בשחזור: ${error.message}` }
+  }
+
+  await db.from('moshe_audit_log').update({ is_undone: true }).eq('id', auditId)
+
+  const pid = (audit as any).project_id
+  if (pid) {
+    revalidatePath(`/moshe/projects/${pid}`)
+    revalidatePath('/moshe')
+  }
+  revalidatePath('/moshe/activity')
   return { success: true }
 }

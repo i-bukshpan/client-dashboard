@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { format, isBefore, addDays } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { TrendingUp, TrendingDown, Wallet, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { CashFlowChart } from '@/components/moshe/CashFlowChart'
+import { OverdueAlert } from '@/components/moshe/OverdueAlert'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -159,24 +160,26 @@ export default async function MosheDashboard() {
 
       {/* Overdue alert */}
       {overdueCount > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
-          </div>
-          <div className="flex-1">
-            <p className="font-bold text-red-800 text-sm">
-              {overdueCount} תשלומים באיחור
-            </p>
-            <p className="text-xs text-red-600 mt-0.5">
-              {overdueExpenses.length > 0 && `${overdueExpenses.length} הוצאות שצריך לשלם`}
-              {overdueExpenses.length > 0 && overdueIncome.length > 0 && ' · '}
-              {overdueIncome.length > 0 && `${overdueIncome.length} תשלומים לגבייה`}
-            </p>
-          </div>
-          <Link href="/moshe/calendar" className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 shrink-0">
-            לפירוט <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-          </Link>
-        </div>
+        <OverdueAlert items={[
+          ...overdueExpenses.map((p: any) => ({
+            id: p.id,
+            kind: 'expense' as const,
+            label: projectMap[p.project_id] ?? 'פרויקט',
+            projectName: projectMap[p.project_id] ?? '',
+            amount: Number(p.amount),
+            due_date: p.due_date,
+            notes: p.notes,
+          })),
+          ...overdueIncome.map((p: any) => ({
+            id: p.id,
+            kind: 'income' as const,
+            label: buyerMap[p.buyer_id] ?? 'קונה',
+            projectName: projectMap[p.project_id] ?? '',
+            amount: Number(p.amount),
+            due_date: p.due_date,
+            notes: p.notes,
+          })),
+        ]} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

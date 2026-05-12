@@ -224,11 +224,25 @@ export function LoansTab({ projectId, loans, partners }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-900 text-sm truncate">{loan.lender}</p>
-                  <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
                     <span>{fmt(total)}</span>
                     {loan.interest_rate && <span>{loan.interest_rate}% ריבית ({interestLabel}: {fmt(calculatedInterest)})</span>}
                     <span>{paidCount}/{loan.num_payments} תשלומים</span>
                     {arrangerName && <span className="text-indigo-500">דאג: {arrangerName}</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 mt-0.5">
+                    {loan.start_date && (
+                      <span className="flex items-center gap-0.5">
+                        <CalendarDays className="w-3 h-3" />
+                        מ-{format(new Date(loan.start_date + 'T00:00:00'), 'dd/MM/yyyy', { locale: he })}
+                      </span>
+                    )}
+                    {loan.end_date && (
+                      <span className="flex items-center gap-0.5">
+                        עד {format(new Date(loan.end_date + 'T00:00:00'), 'dd/MM/yyyy', { locale: he })}
+                      </span>
+                    )}
+                    {loan.notes && <span className="truncate max-w-[200px] text-slate-400 italic">{loan.notes}</span>}
                   </div>
                 </div>
                 <div className="text-right shrink-0">

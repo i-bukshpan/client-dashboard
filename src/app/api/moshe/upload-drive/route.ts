@@ -4,6 +4,9 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { Readable } from 'stream'
 
+// No body size limit — allow large file uploads
+export const maxDuration = 120
+
 function getDriveAuth() {
   // OAuth (personal Drive) — preferred
   const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID

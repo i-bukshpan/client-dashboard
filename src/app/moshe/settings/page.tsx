@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2 } from 'lucide-react'
+import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2, Download, HardDrive } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function SettingsPage() {
@@ -20,6 +20,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pwMsg, setPwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [backupLoading, setBackupLoading] = useState(false)
+  const [driveBackupLoading, setDriveBackupLoading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -72,6 +74,25 @@ export default function SettingsPage() {
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function handleBackup(uploadToDrive: boolean) {
+    const set = uploadToDrive ? setDriveBackupLoading : setBackupLoading
+    set(true)
+    try {
+      const url = `/api/moshe/backup${uploadToDrive ? '?drive=1' : ''}`
+      const res = await fetch(url)
+      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'שגיאה'); return }
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      if (uploadToDrive) alert('גיבוי הועלה לתיקיית "גיבויים" בדרייב והורד למכשירך')
+    } finally {
+      set(false)
+    }
   }
 
   return (
@@ -179,6 +200,37 @@ export default function SettingsPage() {
           {pwLoading ? 'מחליף סיסמה...' : 'החלף סיסמה'}
         </Button>
       </form>
+
+      {/* Backup */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">גיבוי נתונים</p>
+          <p className="text-xs text-slate-400 mt-1">ייצוא כל הנתונים של המערכת לקובץ JSON</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            type="button"
+            onClick={() => handleBackup(false)}
+            disabled={backupLoading}
+            variant="outline"
+            className="flex-1 font-bold gap-2 border-slate-200"
+          >
+            {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {backupLoading ? 'מכין גיבוי...' : 'הורד גיבוי'}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => handleBackup(true)}
+            disabled={driveBackupLoading}
+            variant="outline"
+            className="flex-1 font-bold gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+          >
+            {driveBackupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
+            {driveBackupLoading ? 'מעלה לדרייב...' : 'גיבוי + העלה לדרייב'}
+          </Button>
+        </div>
+        <p className="text-[11px] text-slate-400">הגיבוי מכיל את כל הפרויקטים, התשלומים, העסקאות, ההלוואות, השותפים, העובדים והמסמכים. לגיבוי בדרייב נדרש GOOGLE_DRIVE_PARENT_FOLDER_ID ו-OAuth מוגדרים.</p>
+      </div>
 
       {/* Danger zone */}
       <div className="bg-white rounded-2xl border border-red-100 p-5 shadow-sm">
