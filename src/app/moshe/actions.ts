@@ -219,8 +219,10 @@ export async function toggleProjectPayment(id: string, projectId: string, isPaid
 }
 
 export async function deleteProjectPayment(id: string, projectId: string) {
+  const { data: snap } = await db.from('moshe_project_payments').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_project_payments').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת תשלום: ${error.message}` }
+  await writeAudit(projectId, 'delete', 'payment', 'תשלום פרויקט נמחק', id, snap ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
@@ -323,8 +325,10 @@ export async function addBuyerPayment(raw: unknown) {
 }
 
 export async function deleteBuyerPayment(id: string, projectId: string) {
+  const { data: snap } = await db.from('moshe_buyer_payments').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_buyer_payments').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת תשלום: ${error.message}` }
+  await writeAudit(projectId, 'delete', 'buyer_payment', 'תשלום קונה נמחק', id, snap ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
@@ -1213,6 +1217,8 @@ export async function undoAuditAction(auditId: string) {
   const tableMap: Record<string, string> = {
     transaction: 'moshe_transactions',
     loan: 'moshe_loans',
+    payment: 'moshe_project_payments',
+    buyer_payment: 'moshe_buyer_payments',
   }
   const table = tableMap[(audit as any).entity_type]
   if (!table) return { error: 'סוג ישות לא נתמך לשחזור' }
