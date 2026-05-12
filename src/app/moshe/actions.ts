@@ -441,7 +441,7 @@ export async function createTransaction(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { data: tx, error } = await db.from('moshe_transactions').insert({
+  const { error } = await db.from('moshe_transactions').insert({
     project_id: d.project_id,
     type: d.type,
     amount: parseFloat(d.amount),
@@ -449,21 +449,21 @@ export async function createTransaction(raw: unknown) {
     category: d.category || null,
     notes: d.notes || null,
     partner_id: d.partner_id || null,
-  }).select('id').single()
+  })
 
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
 
   // Also create a partner transaction if flagged
   if (d.partner_tx_type && d.partner_id) {
-    await db.from('moshe_partner_transactions').insert({
+    const { error: ptxErr } = await db.from('moshe_partner_transactions').insert({
       partner_id: d.partner_id,
       project_id: d.project_id,
       type: d.partner_tx_type,
       amount: parseFloat(d.amount),
       date: d.date,
       notes: d.notes || null,
-      source_transaction_id: tx.id,
     })
+    if (ptxErr) return { error: `עסקה נשמרה אך שגיאה בתנועת השותף: ${ptxErr.message}` }
   }
 
   await writeAudit(d.project_id, 'create', 'transaction',
