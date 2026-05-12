@@ -118,7 +118,7 @@ export async function createProject(raw: unknown) {
 
   if (error) return { error: `שגיאה ביצירת הפרויקט: ${error.message}` }
 
-  void writeAudit(project.id, 'create', 'project', `פרויקט חדש נוצר: ${data.name}`, project.id)
+  await writeAudit(project.id, 'create', 'project', `פרויקט חדש נוצר: ${data.name}`, project.id)
 
   if (payments.length > 0) {
     const rows = payments
@@ -161,14 +161,14 @@ export async function updateProject(id: string, raw: unknown) {
 
   if (error) return { error: `שגיאה בעדכון הפרויקט: ${error.message}` }
 
-  void writeAudit(id, 'update', 'project', `פרויקט עודכן: ${data.name}`, id)
+  await writeAudit(id, 'update', 'project', `פרויקט עודכן: ${data.name}`, id)
   revalidatePath('/moshe/projects')
   revalidatePath(`/moshe/projects/${id}`)
   return { success: true }
 }
 
 export async function deleteProject(id: string) {
-  void writeAudit(id, 'delete', 'project', `פרויקט נמחק`, id)
+  await writeAudit(id, 'delete', 'project', `פרויקט נמחק`, id)
   const { error } = await db.from('moshe_projects').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת הפרויקט: ${error.message}` }
   revalidatePath('/moshe/projects')
@@ -208,6 +208,7 @@ export async function toggleProjectPayment(id: string, projectId: string, isPaid
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
+  await writeAudit(projectId, 'update', 'payment', isPaid ? 'תשלום פרויקט סומן כשולם' : 'תשלום פרויקט בוטל כשולם')
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe')
   revalidatePath('/moshe/calendar')
@@ -247,7 +248,7 @@ export async function createBuyer(raw: unknown) {
 
   if (error) return { error: `שגיאה בהוספת קונה: ${error.message}` }
 
-  void writeAudit(data.project_id, 'create', 'buyer', `קונה חדש נוסף: ${data.name}`, buyer.id)
+  await writeAudit(data.project_id, 'create', 'buyer', `קונה חדש נוסף: ${data.name}`, buyer.id)
 
   if (payments.length > 0) {
     const rows = payments
@@ -271,7 +272,7 @@ export async function createBuyer(raw: unknown) {
 }
 
 export async function deleteBuyer(id: string, projectId: string) {
-  void writeAudit(projectId, 'delete', 'buyer', `קונה נמחק`, id)
+  await writeAudit(projectId, 'delete', 'buyer', `קונה נמחק`, id)
   const { error } = await db.from('moshe_buyers').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת קונה: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -285,6 +286,7 @@ export async function toggleBuyerPayment(id: string, projectId: string, isReceiv
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
+  await writeAudit(projectId, 'update', 'buyer_payment', isReceived ? 'תשלום קונה סומן כהתקבל' : 'תשלום קונה בוטל כהתקבל')
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe')
   revalidatePath('/moshe/calendar')
@@ -464,7 +466,7 @@ export async function createTransaction(raw: unknown) {
     })
   }
 
-  void writeAudit(d.project_id, 'create', 'transaction',
+  await writeAudit(d.project_id, 'create', 'transaction',
     `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} נרשמה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/finance')
@@ -476,7 +478,7 @@ export async function deleteTransaction(id: string, projectId: string) {
   const { data: old } = await db.from('moshe_transactions').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_transactions').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת העסקה: ${error.message}` }
-  void writeAudit(projectId, 'delete', 'transaction', `עסקה נמחקה`, id, old as Record<string, unknown> ?? null)
+  await writeAudit(projectId, 'delete', 'transaction', `עסקה נמחקה`, id, old as Record<string, unknown> ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe/finance')
   return { success: true }
@@ -529,6 +531,7 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
+  await writeAudit((payment as any)?.project_id, 'update', 'payment', `תשלום פרויקט עודכן: ₪${Number(d.amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${(payment as any)?.project_id}`)
   revalidatePath('/moshe/calendar')
   revalidatePath('/moshe/finance')
@@ -553,6 +556,7 @@ export async function updateBuyerPayment(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
+  await writeAudit((payment as any)?.project_id, 'update', 'buyer_payment', `תשלום קונה עודכן: ₪${Number(d.amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${(payment as any)?.project_id}`)
   revalidatePath('/moshe/calendar')
   revalidatePath('/moshe/finance')
@@ -583,6 +587,7 @@ export async function updateTransaction(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
+  await writeAudit((tx as any)?.project_id, 'update', 'transaction', `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} עודכנה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
   revalidatePath(`/moshe/projects/${(tx as any)?.project_id}`)
   revalidatePath('/moshe/finance')
   return { success: true }
@@ -750,7 +755,7 @@ export async function createPartner(raw: unknown) {
   })
 
   if (error) return { error: `שגיאה בהוספת שותף: ${error.message}` }
-  void writeAudit(d.project_id, 'create', 'partner', `שותף חדש נוסף: ${d.name}`)
+  await writeAudit(d.project_id, 'create', 'partner', `שותף חדש נוסף: ${d.name}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -780,7 +785,7 @@ export async function updatePartner(id: string, raw: unknown) {
 }
 
 export async function deletePartner(id: string, projectId: string) {
-  void writeAudit(projectId, 'delete', 'partner', `שותף נמחק`, id)
+  await writeAudit(projectId, 'delete', 'partner', `שותף נמחק`, id)
   const { error } = await db.from('moshe_partners').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת שותף: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -810,7 +815,7 @@ export async function createPartnerTransaction(raw: unknown) {
   })
 
   if (error) return { error: `שגיאה בהוספת תנועה: ${error.message}` }
-  void writeAudit(d.project_id, 'create', 'partner_transaction',
+  await writeAudit(d.project_id, 'create', 'partner_transaction',
     `${d.type === 'investment' ? 'השקעה' : 'משיכה'} של שותף: ₪${Number(d.amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
@@ -858,7 +863,7 @@ export async function createLoan(raw: unknown) {
 
   if (error) return { error: `שגיאה ביצירת הלוואה: ${error.message}` }
 
-  void writeAudit(d.project_id, 'create', 'loan', `הלוואה חדשה נרשמה מ-${d.lender}: ₪${totalAmount.toLocaleString('he-IL')}`, loan.id)
+  await writeAudit(d.project_id, 'create', 'loan', `הלוואה חדשה נרשמה מ-${d.lender}: ₪${totalAmount.toLocaleString('he-IL')}`, loan.id)
 
   // Auto-generate loan payment schedule
   if (numPayments > 0) {
@@ -887,7 +892,7 @@ export async function deleteLoan(id: string, projectId: string) {
   const { data: old } = await db.from('moshe_loans').select('*').eq('id', id).single()
   const { error } = await db.from('moshe_loans').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת הלוואה: ${error.message}` }
-  void writeAudit(projectId, 'delete', 'loan', `הלוואה נמחקה`, id, old as Record<string, unknown> ?? null)
+  await writeAudit(projectId, 'delete', 'loan', `הלוואה נמחקה`, id, old as Record<string, unknown> ?? null)
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }
 }
@@ -963,6 +968,7 @@ export async function updateLoan(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון הלוואה: ${error.message}` }
+  await writeAudit(d.project_id, 'update', 'loan', `הלוואה עודכנה — ${d.lender}: ₪${Number(d.total_amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -1012,7 +1018,7 @@ export async function createWorker(raw: unknown) {
   }).select('id').single()
 
   if (error) return { error: `שגיאה בהוספת עובד: ${error.message}` }
-  void writeAudit(null, 'create', 'worker', `עובד חדש נוסף: ${d.name}`, worker.id)
+  await writeAudit(null, 'create', 'worker', `עובד חדש נוסף: ${d.name}`, worker.id)
   revalidatePath('/moshe/workers')
   return { success: true, id: worker.id }
 }
