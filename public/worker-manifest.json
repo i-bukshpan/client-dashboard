@@ -1,33 +1,40 @@
 {
-  "name": "פורטל עובד — נחמיה",
-  "short_name": "פורטל עובד",
-  "description": "פורטל העובדים של משה פרוש — משימות, שליחויות ועדכונים",
+  "name": "נחמיה OS",
+  "short_name": "נחמיה",
+  "description": "פורטל העובדים והניהול של משה פרוש",
+  "id": "/worker-portal",
   "start_url": "/worker-portal",
-  "scope": "/worker-portal",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f8fafc",
+  "background_color": "#ffffff",
   "theme_color": "#f97316",
   "lang": "he",
   "dir": "rtl",
   "icons": [
-    { "src": "/worker-icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
-    { "src": "/worker-icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
-    { "src": "/worker-icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
-    { "src": "/worker-icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/worker-icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
-    { "src": "/worker-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/worker-icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
-    { "src": "/worker-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ],
-  "categories": ["business", "productivity"],
-  "shortcuts": [
     {
-      "name": "הודעות בוט",
-      "short_name": "הודעות",
-      "description": "הודעות ומשימות ממנהל",
-      "url": "/worker-portal",
-      "icons": [{ "src": "/worker-icon-96.png", "sizes": "96x96" }]
+      "src": "/worker-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/worker-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/worker-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/worker-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
