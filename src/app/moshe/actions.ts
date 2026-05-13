@@ -1238,3 +1238,71 @@ export async function undoAuditAction(auditId: string) {
   revalidatePath('/moshe/activity')
   return { success: true }
 }
+
+// ─── Worker Bot Messages ───────────────────────────────────────────
+
+const workerMessageSchema = z.object({
+  worker_id: z.string().uuid(),
+  type: z.enum(['task', 'delivery', 'event', 'message']),
+  title: z.string().min(1, 'כותרת נדרשת'),
+  body: z.string().optional(),
+  due_date: z.string().optional(),
+  location: z.string().optional(),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
+})
+
+export async function createWorkerMessage(raw: unknown) {
+  const parsed = workerMessageSchema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('worker_messages').insert({
+    worker_id: d.worker_id,
+    type: d.type,
+    title: d.title,
+    body: d.body || null,
+    due_date: d.due_date || null,
+    location: d.location || null,
+    priority: d.priority,
+    status: 'open',
+  })
+
+  if (error) return { error: `שגיאה בשליחת הודעה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+export async function updateWorkerMessageStatus(id: string, status: 'open' | 'in_progress' | 'done' | 'cancelled') {
+  const { error } = await db
+    .from('worker_messages')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון סטטוס: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+export async function deleteWorkerMessage(id: string) {
+  const { error } = await db.from('worker_messages').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת הודעה: ${error.message}` }
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}
+
+export async function addWorkerMessageReply(messageId: string, body: string, sender: 'admin' | 'worker') {
+  if (!body.trim()) return { error: 'תגובה ריקה' }
+  const { error } = await db.from('worker_message_replies').insert({
+    message_id: messageId,
+    sender,
+    body: body.trim(),
+  })
+  if (error) return { error: `שגיאה בשליחת תגובה: ${error.message}` }
+  await db.from('worker_messages').update({ updated_at: new Date().toISOString() }).eq('id', messageId)
+  revalidatePath('/moshe/workers')
+  revalidatePath('/worker-portal')
+  return { success: true }
+}

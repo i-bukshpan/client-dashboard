@@ -6,11 +6,12 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { HardHat, Plus, Trash2, ChevronDown, ChevronUp, Phone, Mail, ClipboardList, Shield, CalendarDays, Pencil, Send, ExternalLink, CheckSquare, Square, ListChecks } from 'lucide-react'
+import { HardHat, Plus, Trash2, ChevronDown, ChevronUp, Phone, Mail, ClipboardList, Shield, CalendarDays, Pencil, Send, ExternalLink, CheckSquare, Square, ListChecks, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { createWorker, updateWorker, deleteWorker, setWorkerPermissions, addWorkerLog, deleteWorkerLog, invitePortalUser, createWorkerTask, deleteWorkerTask, toggleWorkerTask } from '@/app/moshe/actions'
 import { toast } from 'sonner'
+import { WorkerBotPanel } from '@/components/moshe/WorkerBotPanel'
 
 function fmt(s: string) { return s }
 
@@ -25,6 +26,20 @@ interface WorkerTask {
   project_id: string | null
 }
 
+interface WorkerBotMessage {
+  id: string
+  worker_id: string
+  type: 'task' | 'delivery' | 'event' | 'message'
+  title: string
+  body: string | null
+  due_date: string | null
+  location: string | null
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  status: 'open' | 'in_progress' | 'done' | 'cancelled'
+  created_at: string
+  replies: { id: string; message_id: string; sender: 'worker' | 'admin'; body: string; created_at: string }[]
+}
+
 interface Worker {
   id: string
   name: string
@@ -36,6 +51,7 @@ interface Worker {
   permissions: { project_id: string; can_view: boolean; can_log: boolean; can_view_payments: boolean; can_view_buyers: boolean }[]
   logs: { id: string; log_date: string; note: string; project_id: string | null }[]
   tasks: WorkerTask[]
+  bot_messages: WorkerBotMessage[]
 }
 
 interface Project { id: string; name: string; status: string }
@@ -52,7 +68,7 @@ export function WorkersManager({ workers, projects }: Props) {
   const [addOpen, setAddOpen] = useState(false)
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<Record<string, 'logs' | 'tasks' | 'perms'>>({})
+  const [activeTab, setActiveTab] = useState<Record<string, 'logs' | 'tasks' | 'perms' | 'bot'>>({})
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -132,6 +148,7 @@ export function WorkersManager({ workers, projects }: Props) {
               onTabChange={t => setActiveTab(prev => ({ ...prev, [worker.id]: t }))}
               onEdit={() => openEdit(worker)}
               onDelete={() => handleDelete(worker.id)}
+              onBotOpen={() => { setExpandedId(worker.id); setActiveTab(prev => ({ ...prev, [worker.id]: 'bot' })) }}
             />
           ))}
         </div>
@@ -185,11 +202,11 @@ export function WorkersManager({ workers, projects }: Props) {
   )
 }
 
-function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, onEdit, onDelete }: {
+function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, onEdit, onDelete, onBotOpen }: {
   worker: Worker; projects: Project[]
-  expanded: boolean; tab: 'logs' | 'tasks' | 'perms'
-  onToggle: () => void; onTabChange: (t: 'logs' | 'tasks' | 'perms') => void
-  onEdit: () => void; onDelete: () => void
+  expanded: boolean; tab: 'logs' | 'tasks' | 'perms' | 'bot'
+  onToggle: () => void; onTabChange: (t: 'logs' | 'tasks' | 'perms' | 'bot') => void
+  onEdit: () => void; onDelete: () => void; onBotOpen: () => void
 }) {
   const [inviting, setInviting] = useState(false)
 
@@ -248,6 +265,24 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
           >
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
+          {/* Bot shortcut — shows unread worker replies */}
+          <button
+            onClick={onBotOpen}
+            title="הודעות בוט"
+            className={cn(
+              'w-8 h-8 rounded-lg border flex items-center justify-center transition-colors relative',
+              worker.bot_messages.some(m => m.replies.some(r => r.sender === 'worker'))
+                ? 'border-indigo-200 bg-indigo-50 text-indigo-500'
+                : 'border-slate-100 text-slate-300 hover:text-indigo-400 hover:bg-indigo-50'
+            )}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-600 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length}
+              </span>
+            )}
+          </button>
           <button onClick={onDelete} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -260,23 +295,48 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
       {expanded && (
         <div className="border-t border-slate-100">
           {/* Tab bar */}
-          <div className="flex border-b border-slate-100">
+          <div className="flex border-b border-slate-100 overflow-x-auto">
             {([
-              ['logs',  'יומן עובד',          ClipboardList],
+              ['logs',  'יומן עובד',    ClipboardList],
               ['tasks', `משימות (${worker.tasks.filter(t => !t.is_done).length})`, ListChecks],
-              ['perms', 'הרשאות פרויקטים',   Shield],
+              ['perms', 'הרשאות',       Shield],
             ] as const).map(([t, label, Icon]) => (
-              <button key={t} onClick={() => onTabChange(t)}
-                className={cn('flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-colors',
+              <button key={t} onClick={() => onTabChange(t as any)}
+                className={cn('flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-colors whitespace-nowrap',
                   tab === t ? 'text-orange-600 border-b-2 border-orange-500 -mb-px bg-orange-50/40' : 'text-slate-400 hover:text-slate-600')}>
                 <Icon className="w-3.5 h-3.5" />{label}
               </button>
             ))}
+            {/* Bot tab */}
+            <button
+              onClick={() => onTabChange('bot')}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-colors whitespace-nowrap',
+                tab === 'bot'
+                  ? 'text-indigo-600 border-b-2 border-indigo-500 -mb-px bg-indigo-50/40'
+                  : 'text-slate-400 hover:text-slate-600'
+              )}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              בוט
+              {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length > 0 && (
+                <span className="bg-indigo-600 text-white text-[8px] font-black px-1 py-0.5 rounded-full">
+                  {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length}
+                </span>
+              )}
+            </button>
           </div>
 
           {tab === 'logs'  && <WorkerLogPanel  worker={worker} projects={projects} />}
           {tab === 'tasks' && <WorkerTaskPanel worker={worker} projects={projects} />}
           {tab === 'perms' && <WorkerPermPanel worker={worker} projects={projects} />}
+          {tab === 'bot'   && (
+            <WorkerBotPanel
+              workerId={worker.id}
+              workerName={worker.name}
+              initialMessages={worker.bot_messages}
+            />
+          )}
         </div>
       )}
     </div>

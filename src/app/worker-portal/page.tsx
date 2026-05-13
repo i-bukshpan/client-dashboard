@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { MapPin, CalendarDays, FolderKanban, AlertCircle } from 'lucide-react'
+import { MapPin, CalendarDays, FolderKanban } from 'lucide-react'
 import { WorkerTaskToggle } from '@/components/moshe/WorkerTaskToggle'
+import { WorkerBotView } from '@/components/moshe/WorkerBotView'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
@@ -34,24 +35,19 @@ export default async function WorkerPortalHome() {
 
   if (!worker) redirect('/login')
 
-  const [{ data: perms }, { data: tasks }] = await Promise.all([
+  const [{ data: perms }, { data: tasks }, { data: botMessages }] = await Promise.all([
     db.from('moshe_worker_project_permissions').select('project_id, can_log').eq('worker_id', worker.id).eq('can_view', true),
     db.from('moshe_worker_tasks').select('*').eq('worker_id', worker.id).order('created_at', { ascending: false }),
+    db.from('worker_messages')
+      .select('*, replies:worker_message_replies(*)')
+      .eq('worker_id', worker.id)
+      .order('created_at', { ascending: false }),
   ])
 
-  const projectIds = (perms ?? []).map((p: any) => p.project_id)
-  const tasksArr   = (tasks as any[]) ?? []
+  const projectIds   = (perms ?? []).map((p: any) => p.project_id)
+  const tasksArr     = (tasks as any[]) ?? []
+  const botMsgsArr   = (botMessages as any[]) ?? []
   const pendingTasks = tasksArr.filter((t: any) => !t.is_done)
-
-  if (projectIds.length === 0 && tasksArr.length === 0) {
-    return (
-      <div className="text-center py-20">
-        <FolderKanban className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-        <p className="text-slate-500 font-medium">אין פרויקטים משויכים אליך עדיין</p>
-        <p className="text-slate-400 text-sm mt-1">פנה למנהל לקבלת הרשאות</p>
-      </div>
-    )
-  }
 
   const { data: projects } = projectIds.length > 0
     ? await db.from('moshe_projects').select('*').in('id', projectIds).order('name')
@@ -59,9 +55,34 @@ export default async function WorkerPortalHome() {
 
   const projectMap = Object.fromEntries(((projects as any[]) ?? []).map((p: any) => [p.id, p.name]))
 
+  // Active bot messages count for badge
+  const activeBotCount = botMsgsArr.filter((m: any) => m.status !== 'done' && m.status !== 'cancelled').length
+
   return (
     <div className="space-y-5">
-      {/* Tasks section */}
+      {/* ── Bot section ── */}
+      <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-indigo-50 flex items-center gap-2 bg-gradient-to-l from-indigo-50 to-white">
+          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+            <span className="text-white text-xs">🤖</span>
+          </div>
+          <p className="text-sm font-bold text-indigo-800">נחמיה בוט</p>
+          {activeBotCount > 0 && (
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center ms-auto">
+              {activeBotCount}
+            </span>
+          )}
+        </div>
+        <div className="px-4 py-4">
+          <WorkerBotView
+            messages={botMsgsArr as any}
+            workerName={worker.name}
+            workerId={worker.id}
+          />
+        </div>
+      </div>
+
+      {/* ── Tasks section (existing) ── */}
       {tasksArr.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
@@ -98,7 +119,7 @@ export default async function WorkerPortalHome() {
         </div>
       )}
 
-      {/* Projects section */}
+      {/* ── Projects section (existing) ── */}
       {projectIds.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-bold text-slate-700">הפרויקטים שלך ({projectIds.length})</p>
@@ -123,14 +144,6 @@ export default async function WorkerPortalHome() {
               </Link>
             )
           })}
-        </div>
-      )}
-
-      {tasksArr.length === 0 && projectIds.length === 0 && (
-        <div className="text-center py-20">
-          <FolderKanban className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">אין פרויקטים ומשימות משויכים אליך עדיין</p>
-          <p className="text-slate-400 text-sm mt-1">פנה למנהל לקבלת הרשאות</p>
         </div>
       )}
     </div>
