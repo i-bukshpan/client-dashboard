@@ -2,6 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { MosheShell } from '@/components/moshe/MosheShell'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  manifest: '/moshe-manifest.json',
+}
 
 const db = adminDb(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -46,6 +46,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname === '/worker-manifest.json' ||
+    pathname === '/moshe-manifest.json' ||
     pathname === '/sw.js'
   ) {
     // Redirect logged-in users away from login to their correct portal
@@ -144,6 +145,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|worker-manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|worker-manifest.json|moshe-manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

@@ -242,53 +242,55 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
             <span>{worker.permissions.length} פרויקטים · {worker.logs.length} רשומות · {worker.tasks.filter(t => !t.is_done).length} משימות</span>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={onEdit} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50">
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          {worker.email && (
-            <button
-              onClick={handleInvite}
-              disabled={inviting}
-              title="שלח הזמנה לפורטל"
-              className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 transition-colors disabled:opacity-50"
-            >
-              <Send className="w-3.5 h-3.5" />
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+            <button onClick={onEdit} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50" title="עריכה">
+              <Pencil className="w-3.5 h-3.5" />
             </button>
-          )}
-          <a
-            href={`/moshe/preview/worker/${worker.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="תצוגה מקדימה של פורטל עובד"
-            className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-200 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-          {/* Bot shortcut — shows unread worker replies */}
-          <button
-            onClick={onBotOpen}
-            title="הודעות בוט"
-            className={cn(
-              'w-8 h-8 rounded-lg border flex items-center justify-center transition-colors relative',
-              worker.bot_messages.some(m => m.replies.some(r => r.sender === 'worker'))
-                ? 'border-indigo-200 bg-indigo-50 text-indigo-500'
-                : 'border-slate-100 text-slate-300 hover:text-indigo-400 hover:bg-indigo-50'
+            {worker.email && (
+              <button
+                onClick={handleInvite}
+                disabled={inviting}
+                title="שלח הזמנה לפורטל"
+                className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 transition-colors disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
             )}
-          >
-            <Bot className="w-3.5 h-3.5" />
-            {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length > 0 && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-600 text-white text-[8px] font-black rounded-full flex items-center justify-center">
-                {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length}
-              </span>
-            )}
-          </button>
-          <button onClick={onDelete} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={onToggle} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-50">
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+            <a
+              href={`/moshe/preview/worker/${worker.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="תצוגה מקדימה"
+              className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-200 transition-colors hidden sm:flex"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            {/* Bot shortcut */}
+            <button
+              onClick={onBotOpen}
+              title="הודעות בוט"
+              className={cn(
+                'w-8 h-8 rounded-lg border flex items-center justify-center transition-colors relative',
+                worker.bot_messages.some(m => m.replies.some(r => r.sender === 'worker'))
+                  ? 'border-indigo-200 bg-indigo-50 text-indigo-500'
+                  : 'border-slate-100 text-slate-300 hover:text-indigo-400 hover:bg-indigo-50'
+              )}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length > 0 && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-600 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                  {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length}
+                </span>
+              )}
+            </button>
+            <button onClick={onDelete} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50" title="מחיקה">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onToggle} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-50">
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       </div>
 

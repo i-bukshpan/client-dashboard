@@ -109,11 +109,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const loanPaidBack    = lp.filter((p: any) => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanNetReceived = totalLoans - loanPaidBack
 
-  const realBalance     = (totalReceived + txIncome) - (totalPaid + txExpense)
-  const expectedBalance = (totalExpected + txIncome) - (totalScheduled + txExpense)
+  // Partners
+  const totalInvested  = ptx.filter((x: any) => x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalWithdrawn = ptx.filter((x: any) => x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const partnerNet     = totalInvested - totalWithdrawn
 
-  // Cash in fund = loans received + buyers received + misc income − payments out − expenses − loan repayments
-  const cashInFund = (loanNetReceived + totalReceived + txIncome) - (totalPaid + txExpense)
+  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + totalWithdrawn)
+  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + totalWithdrawn)
+
+  // Cash in fund = loans received + buyers received + misc income + partner net − payments out − expenses − loan repayments
+  const cashInFund = (loanNetReceived + totalReceived + txIncome + partnerNet) - (totalPaid + txExpense)
 
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 

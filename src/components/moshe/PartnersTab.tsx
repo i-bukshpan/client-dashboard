@@ -94,7 +94,7 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-center">
           <p className="text-[10px] text-indigo-500 font-bold uppercase">סה&quot;כ השקעות שותפים</p>
           <p className="text-lg font-black text-indigo-700 mt-0.5">{fmt(totalInvested)}</p>
