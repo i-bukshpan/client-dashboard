@@ -24,6 +24,26 @@ export default async function WorkerPortalLayout({ children }: { children: React
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
+      {/* PWA Meta Tags */}
+      <link rel="manifest" href="/worker-manifest.json" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      <meta name="apple-mobile-web-app-title" content="פורטל עובד" />
+      <link rel="apple-touch-icon" href="/worker-icon-192.png" />
+      
+      {/* Service Worker Registration */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js').then(function(reg) {
+              console.log('SW registered');
+            }).catch(function(err) {
+              console.log('SW error', err);
+            });
+          });
+        }
+      `}} />
+
       <header className="bg-white border-b border-slate-100 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
