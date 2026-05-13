@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText, Users } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { WorkerBotNotification } from './WorkerBotNotification'
 
 const NAV = [
   { href: '/moshe', label: 'דשבורד', icon: LayoutDashboard, exact: true },
@@ -15,12 +16,22 @@ const NAV = [
   { href: '/moshe/activity', label: 'יומן פעילות', icon: ScrollText },
 ]
 
+interface PendingReply {
+  messageId: string
+  messageTitle: string
+  workerName: string
+  lastReply: string
+  repliedAt: string
+}
+
 interface Props {
   isAdmin: boolean
   onClose?: () => void
+  pendingRepliesCount: number
+  pendingReplies: PendingReply[]
 }
 
-export function MosheSidebar({ isAdmin, onClose }: Props) {
+export function MosheSidebar({ isAdmin, onClose, pendingRepliesCount, pendingReplies }: Props) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -84,9 +95,20 @@ export function MosheSidebar({ isAdmin, onClose }: Props) {
           >
             <Icon className="w-4 h-4 shrink-0" />
             {label}
+            {/* Badge for worker replies on the Workers nav item */}
+            {href === '/moshe/workers' && pendingRepliesCount > 0 && (
+              <span className="ms-auto bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
+                {pendingRepliesCount}
+              </span>
+            )}
           </Link>
         ))}
       </nav>
+
+      {/* Worker bot notification widget */}
+      <div className="px-3 pb-2">
+        <WorkerBotNotification initialPending={pendingReplies} />
+      </div>
 
       {/* Footer: settings + logout */}
       <div className="p-3 border-t border-white/10 space-y-0.5">

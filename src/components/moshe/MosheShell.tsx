@@ -1,15 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { Menu, X } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { MosheSidebar } from './MosheSidebar'
+import { WorkerBotNotification } from './WorkerBotNotification'
+
+interface PendingReply {
+  messageId: string
+  messageTitle: string
+  workerName: string
+  lastReply: string
+  repliedAt: string
+}
 
 interface Props {
   isAdmin: boolean
   children: React.ReactNode
+  pendingReplies: PendingReply[]
 }
 
-export function MosheShell({ isAdmin, children }: Props) {
+export function MosheShell({ isAdmin, children, pendingReplies }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
@@ -28,7 +38,10 @@ export function MosheShell({ isAdmin, children }: Props) {
         lg:relative lg:translate-x-0 lg:z-auto
         ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
-        <MosheSidebar isAdmin={isAdmin} onClose={() => setSidebarOpen(false)} />
+        <MosheSidebar isAdmin={isAdmin} onClose={() => setSidebarOpen(false)}
+          pendingRepliesCount={pendingReplies.length}
+          pendingReplies={pendingReplies}
+        />
       </div>
 
       {/* Main content */}

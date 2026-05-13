@@ -79,53 +79,43 @@ export function WorkerBotView({
   const [messages, setMessages] = useState<WorkerMessage[]>(initialMessages)
   const [open, setOpen] = useState<WorkerMessage | null>(null)
   const supabase = createClient()
+  // Use a ref so the realtime callback always sees the latest openId
+  // without needing to recreate the channel
+  const openIdRef = useRef<string | null>(null)
+  openIdRef.current = open?.id ?? null
 
-  // ── Realtime subscription ──────────────────────────────────────────
+  // ── Realtime subscription — created ONCE, never recreated ──────────
   useEffect(() => {
+    async function refetch() {
+      const { data } = await supabase
+        .from('worker_messages')
+        .select('*, replies:worker_message_replies(*)')
+        .eq('worker_id', workerId)
+        .order('created_at', { ascending: false })
+      if (!data) return
+      setMessages(data as WorkerMessage[])
+      // If a thread is open, sync it too
+      const currentOpenId = openIdRef.current
+      if (currentOpenId) {
+        const updated = (data as WorkerMessage[]).find(m => m.id === currentOpenId)
+        if (updated) setOpen(updated)
+      }
+    }
+
     const channel = supabase
       .channel(`worker-bot-${workerId}`)
-      .on(
-        'postgres_changes',
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'worker_messages', filter: `worker_id=eq.${workerId}` },
-        async () => {
-          // Re-fetch messages on any change
-          const { data } = await supabase
-            .from('worker_messages')
-            .select('*, replies:worker_message_replies(*)')
-            .eq('worker_id', workerId)
-            .order('created_at', { ascending: false })
-          if (data) {
-            setMessages(data as WorkerMessage[])
-            // Update open message if it's in the new data
-            if (open) {
-              const updated = (data as WorkerMessage[]).find(m => m.id === open.id)
-              if (updated) setOpen(updated)
-            }
-          }
-        }
+        refetch
       )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'worker_message_replies' },
-        async () => {
-          const { data } = await supabase
-            .from('worker_messages')
-            .select('*, replies:worker_message_replies(*)')
-            .eq('worker_id', workerId)
-            .order('created_at', { ascending: false })
-          if (data) {
-            setMessages(data as WorkerMessage[])
-            if (open) {
-              const updated = (data as WorkerMessage[]).find(m => m.id === open.id)
-              if (updated) setOpen(updated)
-            }
-          }
-        }
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'worker_message_replies' },
+        refetch
       )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [workerId, open?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openMsg = open ? messages.find(m => m.id === open.id) ?? open : null
   const activeMessages = messages.filter(m => m.status !== 'done' && m.status !== 'cancelled')

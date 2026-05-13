@@ -95,32 +95,35 @@ export function WorkerBotPanel({
   const [newOpen, setNewOpen]   = useState(false)
   const [thread, setThread]     = useState<WorkerMessage | null>(null)
   const supabase = createClient()
+  const threadIdRef = useRef<string | null>(null)
+  threadIdRef.current = thread?.id ?? null
 
-  // ── Realtime ───────────────────────────────────────────────────────
+  // ── Realtime — stable channel, never recreated ─────────────────────
   useEffect(() => {
-    const refetch = async () => {
+    async function refetch() {
       const { data } = await supabase
         .from('worker_messages')
         .select('*, replies:worker_message_replies(*)')
         .eq('worker_id', workerId)
         .order('created_at', { ascending: false })
-      if (data) {
-        setMessages(data as WorkerMessage[])
-        if (thread) {
-          const updated = (data as WorkerMessage[]).find(m => m.id === thread.id)
-          if (updated) setThread(updated)
-        }
+      if (!data) return
+      setMessages(data as WorkerMessage[])
+      const currentThreadId = threadIdRef.current
+      if (currentThreadId) {
+        const updated = (data as WorkerMessage[]).find(m => m.id === currentThreadId)
+        if (updated) setThread(updated)
       }
     }
 
     const channel = supabase
       .channel(`admin-bot-${workerId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_messages', filter: `worker_id=eq.${workerId}` }, refetch)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'worker_message_replies' }, refetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_message_replies' }, refetch)
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [workerId, thread?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workerId]) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const threadMsg = thread ? messages.find(m => m.id === thread.id) ?? thread : null
   const active = messages.filter(m => m.status !== 'done' && m.status !== 'cancelled')
