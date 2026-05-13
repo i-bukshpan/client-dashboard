@@ -39,11 +39,6 @@ export function MosheSidebar({ isAdmin, onClose, pendingRepliesCount, pendingRep
     return exact ? pathname === href : pathname.startsWith(href)
   }
 
-  async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
 
   return (
     <aside className="w-56 h-full flex flex-col bg-[#0f172a] text-white">
@@ -125,13 +120,15 @@ export function MosheSidebar({ isAdmin, onClose, pendingRepliesCount, pendingRep
           <Settings className="w-4 h-4 shrink-0" />
           הגדרות
         </Link>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all w-full text-white/50 hover:text-red-400 hover:bg-red-400/10"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          התנתקות
-        </button>
+        <form action="/api/auth/signout" method="POST">
+          <button
+            type="submit"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all w-full text-white/50 hover:text-red-400 hover:bg-red-400/10"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            התנתקות
+          </button>
+        </form>
         <p className="text-[10px] text-white/20 text-center pt-2">Nehemiah OS · פרטי</p>
       </div>
     </aside>

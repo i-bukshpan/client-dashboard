@@ -21,8 +21,9 @@ export default function ForgotPasswordPage() {
     setLoading(true)
     setError(null)
     const supabase = createClient()
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ndfm.ibsites.co.il'
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${appUrl}/reset-password`,
     })
     setLoading(false)
     if (error) { setError(error.message); return }

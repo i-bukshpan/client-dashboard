@@ -1186,9 +1186,12 @@ export async function toggleWorkerTask(id: string, isDone: boolean) {
 
 export async function invitePortalUser(email: string) {
   const h = await headers()
-  const host = h.get('host') ?? 'localhost:3000'
-  const proto = h.get('x-forwarded-proto') ?? 'http'
-  const redirectTo = `${proto}://${host}/reset-password`
+  const host = h.get('host') ?? 'ndfm.ibsites.co.il'
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  
+  // Always prefer the production domain for email links
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ndfm.ibsites.co.il'
+  const redirectTo = `${appUrl}/reset-password`
 
   const { error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo })
   if (error) return { error: `שגיאה בשליחת הזמנה: ${error.message}` }

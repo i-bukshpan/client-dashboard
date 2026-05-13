@@ -222,73 +222,87 @@ function WorkerCard({ worker, projects, expanded, tab, onToggle, onTabChange, on
 
   return (
     <div className={cn('bg-white rounded-2xl border shadow-sm overflow-hidden', worker.is_active ? 'border-slate-100' : 'border-slate-100 opacity-60')}>
-      <div className="px-5 py-4 flex items-center gap-4">
-        <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0',
-          worker.role === 'foreman' ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-slate-400 to-slate-500')}>
-          {worker.name[0]}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-bold text-slate-900 text-sm">{worker.name}</p>
-            <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-full',
-              worker.role === 'foreman' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500')}>
-              {ROLE_LABELS[worker.role] ?? worker.role}
-            </span>
-            {!worker.is_active && <span className="text-[9px] bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-bold">לא פעיל</span>}
+      <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+        {/* Top part: Avatar + Info */}
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-base shrink-0 shadow-sm',
+            worker.role === 'foreman' ? 'bg-gradient-to-br from-amber-400 to-orange-500' : 'bg-gradient-to-br from-slate-400 to-slate-500')}>
+            {worker.name[0]}
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
-            {worker.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{worker.phone}</span>}
-            {worker.email && <span className="flex items-center gap-0.5"><Mail className="w-2.5 h-2.5" />{worker.email}</span>}
-            <span>{worker.permissions.length} פרויקטים · {worker.logs.length} רשומות · {worker.tasks.filter(t => !t.is_done).length} משימות</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-slate-900 text-base">{worker.name}</p>
+              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full',
+                worker.role === 'foreman' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500')}>
+                {ROLE_LABELS[worker.role] ?? worker.role}
+              </span>
+              {!worker.is_active && <span className="text-[10px] bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-bold">לא פעיל</span>}
+            </div>
+            <div className="flex flex-col gap-1 mt-1">
+              {worker.email && <span className="flex items-center gap-1.5 text-xs text-slate-400 truncate"><Mail className="w-3 h-3" />{worker.email}</span>}
+              <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium">
+                <span>{worker.permissions.length} פרויקטים</span>
+                <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                <span>{worker.logs.length} רשומות</span>
+                <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                <span className={cn(worker.tasks.filter(t => !t.is_done).length > 0 ? 'text-amber-600 font-bold' : '')}>
+                  {worker.tasks.filter(t => !t.is_done).length} משימות
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
-          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
-            <button onClick={onEdit} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50" title="עריכה">
-              <Pencil className="w-3.5 h-3.5" />
+
+        {/* Action Buttons row */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0 border-t sm:border-0 border-slate-50">
+          <div className="flex items-center gap-1.5">
+            <button onClick={onEdit} className="w-9 h-9 rounded-xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-all" title="עריכה">
+              <Pencil className="w-4 h-4" />
             </button>
             {worker.email && (
               <button
                 onClick={handleInvite}
                 disabled={inviting}
-                title="שלח הזמנה לפורטל"
-                className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 transition-colors disabled:opacity-50"
+                title="שלח הזמנה"
+                className="w-9 h-9 rounded-xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all disabled:opacity-50"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
               </button>
             )}
-            <a
-              href={`/moshe/preview/worker/${worker.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="תצוגה מקדימה"
-              className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-200 transition-colors hidden sm:flex"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-            {/* Bot shortcut */}
             <button
               onClick={onBotOpen}
               title="הודעות בוט"
               className={cn(
-                'w-8 h-8 rounded-lg border flex items-center justify-center transition-colors relative',
+                'w-9 h-9 rounded-xl border flex items-center justify-center transition-all relative',
                 worker.bot_messages.some(m => m.replies.some(r => r.sender === 'worker'))
-                  ? 'border-indigo-200 bg-indigo-50 text-indigo-500'
-                  : 'border-slate-100 text-slate-300 hover:text-indigo-400 hover:bg-indigo-50'
+                  ? 'border-indigo-200 bg-indigo-50 text-indigo-600'
+                  : 'border-slate-100 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50'
               )}
             >
-              <Bot className="w-3.5 h-3.5" />
+              <Bot className="w-4 h-4" />
               {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-600 text-white text-[8px] font-black rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-indigo-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">
                   {worker.bot_messages.filter(m => m.status !== 'done' && m.status !== 'cancelled').length}
                 </span>
               )}
             </button>
-            <button onClick={onDelete} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50" title="מחיקה">
-              <Trash2 className="w-3.5 h-3.5" />
+            <button onClick={onDelete} className="w-9 h-9 rounded-xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="מחיקה">
+              <Trash2 className="w-4 h-4" />
             </button>
-            <button onClick={onToggle} className="w-8 h-8 rounded-lg border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-50">
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <a
+              href={`/moshe/preview/worker/${worker.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 rounded-xl border border-slate-100 flex items-center justify-center text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 transition-all"
+              title="תצוגה מקדימה"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <button onClick={onToggle} className="w-9 h-9 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-all shadow-sm">
+              {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
             </button>
           </div>
         </div>
