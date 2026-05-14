@@ -57,6 +57,16 @@ export async function middleware(request: NextRequest) {
       if (isMosheEmail(user.email)) {
         return NextResponse.redirect(new URL('/moshe', request.url))
       }
+      // Admin team members (profiles) take priority over moshe_workers
+      const { data: profile } = await supabase
+        .from('profiles').select('role').eq('id', user.id).single()
+      const role = (profile as any)?.role
+      if (role === 'admin') {
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+      }
+      if (role === 'employee') {
+        return NextResponse.redirect(new URL('/employee/dashboard', request.url))
+      }
       // Check worker
       const { data: worker } = await adminDb
         .from('moshe_workers').select('id, is_active').eq('email', user.email).single()
@@ -69,11 +79,7 @@ export async function middleware(request: NextRequest) {
       if (partner) {
         return NextResponse.redirect(new URL('/partner-portal', request.url))
       }
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single()
-      const role = (profile as any)?.role
-      const dest = role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'
-      return NextResponse.redirect(new URL(dest, request.url))
+      return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
     return supabaseResponse
   }

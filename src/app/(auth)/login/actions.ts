@@ -34,6 +34,13 @@ export async function loginWithEmail(formData: FormData) {
     redirect('/admin/dashboard')
   }
 
+  // Admin team members (profiles) take priority over moshe_workers
+  const { data: profile } = await supabase
+    .from('profiles').select('role').eq('id', user.id).single()
+  const role = (profile as any)?.role
+  if (role === 'admin') redirect('/admin/dashboard')
+  if (role === 'employee') redirect('/employee/dashboard')
+
   // Worker portal
   const { data: worker } = await db
     .from('moshe_workers').select('id, is_active').eq('email', email).single()
@@ -44,11 +51,7 @@ export async function loginWithEmail(formData: FormData) {
     .from('moshe_partners').select('id').eq('email', email).eq('portal_access', true).single()
   if (partner) redirect('/partner-portal')
 
-  // Default: employee/admin by profiles role
-  const { data: profile } = await supabase
-    .from('profiles').select('role').eq('id', user.id).single()
-  const role = (profile as any)?.role || 'employee'
-  redirect(role === 'admin' ? '/admin/dashboard' : '/employee/dashboard')
+  redirect('/employee/dashboard')
 }
 
 export async function logout() {
