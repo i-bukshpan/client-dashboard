@@ -1054,8 +1054,20 @@ export async function updateWorker(id: string, raw: unknown) {
 }
 
 export async function deleteWorker(id: string) {
+  // Fetch email before deleting so we can clean up auth user
+  const { data: worker } = await db.from('moshe_workers').select('email').eq('id', id).single()
+
   const { error } = await db.from('moshe_workers').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת עובד: ${error.message}` }
+
+  // Delete auth user (and the auto-created profile) if one was invited
+  if (worker?.email) {
+    const { data: profile } = await db.from('profiles').select('id').eq('email', worker.email).maybeSingle()
+    if (profile) {
+      await db.auth.admin.deleteUser(profile.id)
+    }
+  }
+
   revalidatePath('/moshe/workers')
   return { success: true }
 }

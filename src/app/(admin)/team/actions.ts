@@ -161,26 +161,19 @@ export async function addEmployeeBonus(data: {
 }
 
 export async function deleteEmployee(id: string) {
-  // Delete the auth user (this will cascade to the profile if RLS/Triggers are set up, 
-  // but we'll also delete the profile explicitly to be sure)
+  // Clean up FK-constrained tables before deleting the auth user
+  await supabaseAdmin.from('conversations').delete().or(`employee_id.eq.${id},admin_id.eq.${id}`)
+
   const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id)
-  
+
   if (authError) {
     console.error('Delete Auth Error:', authError)
-    // If user not found in Auth, still try to delete profile
     if (authError.message.includes('User not found')) {
-       await supabaseAdmin.from('profiles').delete().eq('id', id)
-       revalidatePath('/admin/team')
-       return { success: true }
+      await supabaseAdmin.from('profiles').delete().eq('id', id)
+      revalidatePath('/admin/team')
+      return { success: true }
     }
     return { error: `שגיאה במחיקת המשתמש: ${authError.message}` }
-  }
-
-  const { error: profileError } = await supabaseAdmin.from('profiles').delete().eq('id', id)
-  
-  if (profileError) {
-    console.error('Delete Profile Error:', profileError)
-    return { error: `המשתמש נמחק מהאימות אך חלה שגיאה במחיקת הפרופיל: ${profileError.message}` }
   }
 
   revalidatePath('/admin/team')
