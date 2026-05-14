@@ -1193,7 +1193,10 @@ export async function invitePortalUser(email: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ndfm.ibsites.co.il'
   const redirectTo = `${appUrl}/reset-password`
 
-  const { error } = await db.auth.admin.inviteUserByEmail(email, { redirectTo })
+  const { error } = await db.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { role: 'worker' },
+  })
   if (error) return { error: `שגיאה בשליחת הזמנה: ${error.message}` }
   return { success: true }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Mail, Loader2, Edit3, Trash2 } from 'lucide-react'
@@ -20,6 +21,7 @@ interface Props {
 export function EmployeeActions({ employeeId, email, name, salaryBase }: Props) {
   const [loading, setLoading] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const router = useRouter()
 
   async function handleInvite() {
     setLoading(true)
@@ -47,6 +49,7 @@ export function EmployeeActions({ employeeId, email, name, salaryBase }: Props) 
         toast.error(res.error)
       } else {
         toast.success('העובד נמחק מהמערכת בהצלחה')
+        router.refresh()
       }
     } catch (err) {
       toast.error('אירעה שגיאה במחיקת העובד')
