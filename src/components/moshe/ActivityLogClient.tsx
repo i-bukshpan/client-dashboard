@@ -60,6 +60,7 @@ export function ActivityLogClient({ entries, projectMap }: Props) {
   const [projectFilter, setProjectFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [showSnapshotId, setShowSnapshotId] = useState<string | null>(null)
 
   const now = Date.now()
 
@@ -194,11 +195,11 @@ export function ActivityLogClient({ entries, projectMap }: Props) {
             {visible.map((entry) => {
               const ageMin = (now - new Date(entry.created_at).getTime()) / 60000
               const canUndo =
-                entry.action_type === 'delete' &&
                 UNDOABLE_TYPES.has(entry.entity_type) &&
-                !!entry.undo_snapshot &&
                 !entry.is_undone &&
-                ageMin <= 10
+                ageMin <= 10 &&
+                (entry.action_type === 'create' ||
+                  ((entry.action_type === 'delete' || entry.action_type === 'update') && !!entry.undo_snapshot))
 
               return (
                 <div key={entry.id} className={cn(
@@ -240,7 +241,41 @@ export function ActivityLogClient({ entries, projectMap }: Props) {
                       )}
                       <span>·</span>
                       <span>{format(new Date(entry.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}</span>
+                      {entry.undo_snapshot && (
+                        <>
+                          <span>·</span>
+                          <button
+                            onClick={() => setShowSnapshotId(showSnapshotId === entry.id ? null : entry.id)}
+                            className="text-violet-600 hover:text-violet-700 font-bold hover:underline"
+                          >
+                            {showSnapshotId === entry.id ? 'הסתר ערכים קודמים' : 'הצג ערכים קודמים'}
+                          </button>
+                        </>
+                      )}
                     </div>
+                    {showSnapshotId === entry.id && entry.undo_snapshot && (
+                      <div className="mt-2 p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-mono text-slate-600 max-w-lg overflow-x-auto" dir="ltr">
+                        <div className="font-bold mb-1 border-b border-slate-200 pb-1 text-slate-500 font-sans text-right" dir="rtl">הערכים שנשמרו:</div>
+                        <table className="w-full text-left">
+                          <tbody>
+                            {Object.entries(entry.undo_snapshot).map(([key, val]) => {
+                              if (['id', 'created_at', 'project_id', 'buyer_id', 'partner_id'].includes(key)) return null
+                              let displayVal = String(val)
+                              if (val === null || val === undefined) displayVal = 'null'
+                              else if (typeof val === 'boolean') displayVal = val ? 'true' : 'false'
+                              else if (key === 'amount' || key === 'total_amount') displayVal = `₪${Number(val).toLocaleString('he-IL')}`
+                              
+                              return (
+                                <tr key={key} className="border-b border-slate-100 last:border-0">
+                                  <td className="py-0.5 pr-2 font-bold text-slate-500">{key}:</td>
+                                  <td className="py-0.5 font-medium">{displayVal}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                   {canUndo && <UndoButton auditId={entry.id} />}
                 </div>

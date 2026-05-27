@@ -60,14 +60,16 @@ export default async function MosheDashboard() {
   const today = new Date()
   const in14 = addDays(today, 14)
   const yesterday = addDays(today, -1)
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
 
   const upcomingExpenses = pp
-    .filter((p: any) => !p.is_paid && p.due_date && isBefore(new Date(p.due_date), in14))
+    .filter((p: any) => !p.is_paid && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
     .slice(0, 6)
 
   const upcomingIncome = bp
-    .filter((p: any) => !p.is_received && p.due_date && isBefore(new Date(p.due_date), in14))
+    .filter((p: any) => !p.is_received && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
     .slice(0, 6)
 

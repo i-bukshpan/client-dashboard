@@ -191,27 +191,36 @@ export async function addProjectPayment(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { error } = await db.from('moshe_project_payments').insert({
+  const { data: payment, error } = await db.from('moshe_project_payments').insert({
     project_id: d.project_id,
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
     notes: d.notes || null,
-  })
+  }).select('id').single()
 
   if (error) return { error: `שגיאה בהוספת תשלום: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'payment', `תשלום פרויקט חדש נוסף: ₪${Number(d.amount).toLocaleString('he-IL')}`, (payment as any).id)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
 }
 
 export async function toggleProjectPayment(id: string, projectId: string, isPaid: boolean) {
+  const { data: oldPayment } = await db.from('moshe_project_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
   const { error } = await db
     .from('moshe_project_payments')
     .update({ is_paid: isPaid, paid_at: isPaid ? new Date().toISOString() : null })
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
-  await writeAudit(projectId, 'update', 'payment', isPaid ? 'תשלום פרויקט סומן כשולם' : 'תשלום פרויקט בוטל כשולם')
+  
+  const desc = isPaid 
+    ? `תשלום פרויקט סומן כשולם (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})` 
+    : `תשלום פרויקט בוטל כשולם (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})`
+
+  await writeAudit(projectId, 'update', 'payment', desc, id, oldPayment)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe')
   revalidatePath('/moshe/calendar')
@@ -285,13 +294,21 @@ export async function deleteBuyer(id: string, projectId: string) {
 }
 
 export async function toggleBuyerPayment(id: string, projectId: string, isReceived: boolean) {
+  const { data: oldPayment } = await db.from('moshe_buyer_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
   const { error } = await db
     .from('moshe_buyer_payments')
     .update({ is_received: isReceived, received_at: isReceived ? new Date().toISOString() : null })
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
-  await writeAudit(projectId, 'update', 'buyer_payment', isReceived ? 'תשלום קונה סומן כהתקבל' : 'תשלום קונה בוטל כהתקבל')
+
+  const desc = isReceived 
+    ? `תשלום קונה סומן כהתקבל (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})` 
+    : `תשלום קונה בוטל כהתקבל (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})`
+
+  await writeAudit(projectId, 'update', 'buyer_payment', desc, id, oldPayment)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe')
   revalidatePath('/moshe/calendar')
@@ -310,15 +327,16 @@ export async function addBuyerPayment(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { error } = await db.from('moshe_buyer_payments').insert({
+  const { data: payment, error } = await db.from('moshe_buyer_payments').insert({
     buyer_id: d.buyer_id,
     project_id: d.project_id,
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
     notes: d.notes || null,
-  })
+  }).select('id').single()
 
   if (error) return { error: `שגיאה בהוספת תשלום: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'buyer_payment', `תשלום קונה חדש נוסף: ₪${Number(d.amount).toLocaleString('he-IL')}`, (payment as any).id)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
@@ -448,7 +466,7 @@ export async function createTransaction(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { error } = await db.from('moshe_transactions').insert({
+  const { data: tx, error } = await db.from('moshe_transactions').insert({
     project_id: d.project_id,
     type: d.type,
     amount: parseFloat(d.amount),
@@ -456,7 +474,7 @@ export async function createTransaction(raw: unknown) {
     category: d.category || null,
     notes: d.notes || null,
     partner_id: d.partner_id || null,
-  })
+  }).select('id').single()
 
   if (error) return { error: `שגיאה בשמירת העסקה: ${error.message}` }
 
@@ -474,7 +492,7 @@ export async function createTransaction(raw: unknown) {
   }
 
   await writeAudit(d.project_id, 'create', 'transaction',
-    `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} נרשמה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
+    `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} נרשמה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`, (tx as any).id)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/finance')
   revalidatePath('/moshe')
@@ -530,7 +548,9 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { data: payment } = await db.from('moshe_project_payments').select('project_id').eq('id', id).single()
+  const { data: oldPayment } = await db.from('moshe_project_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
   const { error } = await db.from('moshe_project_payments').update({
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
@@ -538,8 +558,22 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
-  await writeAudit((payment as any)?.project_id, 'update', 'payment', `תשלום פרויקט עודכן: ₪${Number(d.amount).toLocaleString('he-IL')}`)
-  revalidatePath(`/moshe/projects/${(payment as any)?.project_id}`)
+
+  const changes: string[] = []
+  if (Number(oldPayment.amount) !== parseFloat(d.amount)) {
+    changes.push(`סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')} ➔ ₪${parseFloat(d.amount).toLocaleString('he-IL')}`)
+  }
+  if ((oldPayment.due_date || '') !== (d.due_date || '')) {
+    changes.push(`תאריך יעד: ${oldPayment.due_date || 'ללא'} ➔ ${d.due_date || 'ללא'}`)
+  }
+  if ((oldPayment.notes || '') !== (d.notes || '')) {
+    changes.push(`הערות: "${oldPayment.notes || ''}" ➔ "${d.notes || ''}"`)
+  }
+
+  const desc = `תשלום פרויקט עודכן. שינויים: ${changes.length > 0 ? changes.join(', ') : 'לא בוצעו שינויים'}`
+
+  await writeAudit((oldPayment as any).project_id, 'update', 'payment', desc, id, oldPayment)
+  revalidatePath(`/moshe/projects/${(oldPayment as any).project_id}`)
   revalidatePath('/moshe/calendar')
   revalidatePath('/moshe/finance')
   return { success: true }
@@ -555,7 +589,9 @@ export async function updateBuyerPayment(id: string, raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { data: payment } = await db.from('moshe_buyer_payments').select('project_id').eq('id', id).single()
+  const { data: oldPayment } = await db.from('moshe_buyer_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
   const { error } = await db.from('moshe_buyer_payments').update({
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
@@ -563,8 +599,22 @@ export async function updateBuyerPayment(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
-  await writeAudit((payment as any)?.project_id, 'update', 'buyer_payment', `תשלום קונה עודכן: ₪${Number(d.amount).toLocaleString('he-IL')}`)
-  revalidatePath(`/moshe/projects/${(payment as any)?.project_id}`)
+
+  const changes: string[] = []
+  if (Number(oldPayment.amount) !== parseFloat(d.amount)) {
+    changes.push(`סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')} ➔ ₪${parseFloat(d.amount).toLocaleString('he-IL')}`)
+  }
+  if ((oldPayment.due_date || '') !== (d.due_date || '')) {
+    changes.push(`תאריך יעד: ${oldPayment.due_date || 'ללא'} ➔ ${d.due_date || 'ללא'}`)
+  }
+  if ((oldPayment.notes || '') !== (d.notes || '')) {
+    changes.push(`הערות: "${oldPayment.notes || ''}" ➔ "${d.notes || ''}"`)
+  }
+
+  const desc = `תשלום קונה עודכן. שינויים: ${changes.length > 0 ? changes.join(', ') : 'לא בוצעו שינויים'}`
+
+  await writeAudit((oldPayment as any).project_id, 'update', 'buyer_payment', desc, id, oldPayment)
+  revalidatePath(`/moshe/projects/${(oldPayment as any).project_id}`)
   revalidatePath('/moshe/calendar')
   revalidatePath('/moshe/finance')
   return { success: true }
@@ -583,7 +633,9 @@ export async function updateTransaction(id: string, raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { data: tx } = await db.from('moshe_transactions').select('project_id').eq('id', id).single()
+  const { data: oldTx } = await db.from('moshe_transactions').select('*').eq('id', id).single()
+  if (!oldTx) return { error: 'תנועה לא נמצאה' }
+
   const { error } = await db.from('moshe_transactions').update({
     type: d.type,
     amount: parseFloat(d.amount),
@@ -594,8 +646,28 @@ export async function updateTransaction(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון: ${error.message}` }
-  await writeAudit((tx as any)?.project_id, 'update', 'transaction', `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} עודכנה: ₪${Number(d.amount).toLocaleString('he-IL')}${d.notes ? ` - ${d.notes}` : ''}`)
-  revalidatePath(`/moshe/projects/${(tx as any)?.project_id}`)
+
+  const changes: string[] = []
+  if (oldTx.type !== d.type) {
+    changes.push(`סוג: ${oldTx.type === 'income' ? 'הכנסה' : 'הוצאה'} ➔ ${d.type === 'income' ? 'הכנסה' : 'הוצאה'}`)
+  }
+  if (Number(oldTx.amount) !== parseFloat(d.amount)) {
+    changes.push(`סכום: ₪${Number(oldTx.amount).toLocaleString('he-IL')} ➔ ₪${parseFloat(d.amount).toLocaleString('he-IL')}`)
+  }
+  if (oldTx.date !== d.date) {
+    changes.push(`תאריך: ${oldTx.date} ➔ ${d.date}`)
+  }
+  if ((oldTx.category || '') !== (d.category || '')) {
+    changes.push(`קטגוריה: ${oldTx.category || 'ללא'} ➔ ${d.category || 'ללא'}`)
+  }
+  if ((oldTx.notes || '') !== (d.notes || '')) {
+    changes.push(`הערות: "${oldTx.notes || ''}" ➔ "${d.notes || ''}"`)
+  }
+
+  const desc = `${d.type === 'income' ? 'הכנסה' : 'הוצאה'} עודכנה. שינויים: ${changes.length > 0 ? changes.join(', ') : 'לא בוצעו שינויים'}`
+
+  await writeAudit((oldTx as any).project_id, 'update', 'transaction', desc, id, oldTx)
+  revalidatePath(`/moshe/projects/${(oldTx as any).project_id}`)
   revalidatePath('/moshe/finance')
   return { success: true }
 }
@@ -963,6 +1035,9 @@ export async function updateLoan(id: string, raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
+  const { data: oldLoan } = await db.from('moshe_loans').select('*').eq('id', id).single()
+  if (!oldLoan) return { error: 'הלוואה לא נמצאה' }
+
   const { error } = await db.from('moshe_loans').update({
     lender: d.lender,
     arranged_by: d.arranged_by || null,
@@ -975,7 +1050,33 @@ export async function updateLoan(id: string, raw: unknown) {
   }).eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון הלוואה: ${error.message}` }
-  await writeAudit(d.project_id, 'update', 'loan', `הלוואה עודכנה — ${d.lender}: ₪${Number(d.total_amount).toLocaleString('he-IL')}`)
+
+  const changes: string[] = []
+  if (oldLoan.lender !== d.lender) {
+    changes.push(`מלווה: ${oldLoan.lender} ➔ ${d.lender}`)
+  }
+  if (Number(oldLoan.total_amount) !== parseFloat(d.total_amount)) {
+    changes.push(`סכום: ₪${Number(oldLoan.total_amount).toLocaleString('he-IL')} ➔ ₪${parseFloat(d.total_amount).toLocaleString('he-IL')}`)
+  }
+  if (Number(oldLoan.interest_rate || 0) !== parseFloat(d.interest_rate || '0')) {
+    changes.push(`ריבית: ${oldLoan.interest_rate || 0}% ➔ ${d.interest_rate || 0}%`)
+  }
+  if (Number(oldLoan.num_payments || 1) !== parseInt(d.num_payments || '1')) {
+    changes.push(`מספר תשלומים: ${oldLoan.num_payments || 1} ➔ ${d.num_payments || 1}`)
+  }
+  if ((oldLoan.start_date || '') !== (d.start_date || '')) {
+    changes.push(`תאריך התחלה: ${oldLoan.start_date || 'ללא'} ➔ ${d.start_date || 'ללא'}`)
+  }
+  if ((oldLoan.end_date || '') !== (d.end_date || '')) {
+    changes.push(`תאריך סיום: ${oldLoan.end_date || 'ללא'} ➔ ${d.end_date || 'ללא'}`)
+  }
+  if ((oldLoan.notes || '') !== (d.notes || '')) {
+    changes.push(`הערות: "${oldLoan.notes || ''}" ➔ "${d.notes || ''}"`)
+  }
+
+  const desc = `הלוואה עודכנה. שינויים: ${changes.length > 0 ? changes.join(', ') : 'לא בוצעו שינויים'}`
+
+  await writeAudit(d.project_id, 'update', 'loan', desc, id, oldLoan)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -1227,7 +1328,7 @@ export async function undoAuditAction(auditId: string) {
   if (diffMinutes > 10) return { error: 'פג תוקף הביטול (10 דקות)' }
 
   const snapshot = (audit as any).undo_snapshot
-  if (!snapshot) return { error: 'לא ניתן לבטל — אין נתוני שחזור' }
+  if ((audit as any).action_type !== 'create' && !snapshot) return { error: 'לא ניתן לבטל — אין נתוני שחזור' }
 
   const tableMap: Record<string, string> = {
     transaction: 'moshe_transactions',
@@ -1241,6 +1342,14 @@ export async function undoAuditAction(auditId: string) {
   if ((audit as any).action_type === 'delete') {
     const { error } = await db.from(table).insert(snapshot)
     if (error) return { error: `שגיאה בשחזור: ${error.message}` }
+  } else if ((audit as any).action_type === 'create') {
+    if (!(audit as any).entity_id) return { error: 'לא ניתן לבטל יצירה — מזהה ישות חסר' }
+    const { error } = await db.from(table).delete().eq('id', (audit as any).entity_id)
+    if (error) return { error: `שגיאה בביטול יצירה: ${error.message}` }
+  } else if ((audit as any).action_type === 'update') {
+    if (!(audit as any).entity_id) return { error: 'לא ניתן לבטל עדכון — מזהה ישות חסר' }
+    const { error } = await db.from(table).update(snapshot).eq('id', (audit as any).entity_id)
+    if (error) return { error: `שגיאה בביטול עדכון: ${error.message}` }
   }
 
   await db.from('moshe_audit_log').update({ is_undone: true }).eq('id', auditId)
@@ -1251,6 +1360,8 @@ export async function undoAuditAction(auditId: string) {
     revalidatePath('/moshe')
   }
   revalidatePath('/moshe/activity')
+  revalidatePath('/moshe/calendar')
+  revalidatePath('/moshe/finance')
   return { success: true }
 }
 

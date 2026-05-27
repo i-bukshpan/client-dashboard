@@ -44,6 +44,9 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
   const [saving, setSaving] = useState(false)
   const [overdueExpanded, setOverdueExpanded] = useState(false)
   const [selectedEventItem, setSelectedEventItem] = useState<CalItem | null>(null)
+  const [showPastItems, setShowPastItems] = useState(false)
+  const [listStartDate, setListStartDate] = useState<string>('')
+  const [listEndDate, setListEndDate] = useState<string>('')
   const router = useRouter()
   const today = new Date()
 
@@ -176,7 +179,34 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
   const typeLabel: Record<string, string> = { meeting: 'פגישה', reminder: 'תזכורת', other: 'אחר' }
 
   // Sorted list of all items for list view
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  
   const sortedAll = [...filtered].sort((a, b) => a.date.getTime() - b.date.getTime())
+  
+  const listItems = sortedAll.filter(item => {
+    const itemDate = new Date(item.date)
+    const isPast = isBefore(itemDate, startOfToday)
+    
+    // If we're not showing past items, exclude them
+    if (!showPastItems && isPast) return false
+    
+    // If showPastItems is true AND we have a start date filter
+    if (showPastItems && listStartDate) {
+      const start = new Date(listStartDate)
+      start.setHours(0, 0, 0, 0)
+      if (isBefore(itemDate, start)) return false
+    }
+    
+    // If showPastItems is true AND we have an end date filter
+    if (showPastItems && listEndDate) {
+      const end = new Date(listEndDate)
+      end.setHours(23, 59, 59, 999)
+      if (isBefore(end, itemDate)) return false
+    }
+    
+    return true
+  })
 
   return (
     <div className="space-y-5">
@@ -397,18 +427,73 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
         </div>
       ) : (
         /* List view */
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <p className="font-bold text-slate-800">כל הפריטים</p>
-            <span className="text-xs text-slate-400">{sortedAll.length} פריטים</span>
+        <div className="space-y-3">
+          {/* List view filters */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showPastItems}
+                onChange={e => {
+                  setShowPastItems(e.target.checked)
+                  if (!e.target.checked) {
+                    setListStartDate('')
+                    setListEndDate('')
+                  }
+                }}
+                className="w-4 h-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500 cursor-pointer"
+              />
+              הצג פריטים שעברו (היסטוריה)
+            </label>
+
+            {showPastItems && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400">סינון תאריכים:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">מ-</span>
+                  <input
+                    type="date"
+                    value={listStartDate}
+                    onChange={e => setListStartDate(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-amber-300 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400">עד-</span>
+                  <input
+                    type="date"
+                    value={listEndDate}
+                    onChange={e => setListEndDate(e.target.value)}
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:border-amber-300 cursor-pointer"
+                  />
+                </div>
+                {(listStartDate || listEndDate) && (
+                  <button
+                    onClick={() => { setListStartDate(''); setListEndDate('') }}
+                    className="text-[10px] text-red-500 hover:text-red-700 font-bold"
+                  >
+                    איפוס תאריכים
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          {sortedAll.length === 0 && (
-            <p className="text-center text-sm text-slate-400 py-16">אין פריטים</p>
-          )}
-          <div className="divide-y divide-slate-50">
-            {sortedAll.map(item => (
-              <CalendarListItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} onSelect={setSelectedEventItem} />
-            ))}
+
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <p className="font-bold text-slate-800">
+                {showPastItems ? 'כל הפריטים (כולל עבר)' : 'פריטים עתידיים בלבד'}
+              </p>
+              <span className="text-xs text-slate-400">{listItems.length} פריטים</span>
+            </div>
+            {listItems.length === 0 && (
+              <p className="text-center text-sm text-slate-400 py-16">אין פריטים להצגה</p>
+            )}
+            <div className="divide-y divide-slate-50">
+              {listItems.map(item => (
+                <CalendarListItem key={item.id} item={item} onToggle={toggleItem} onEditEvent={openEditEvent} onDeleteEvent={handleDeleteEvent} onSelect={setSelectedEventItem} />
+              ))}
+            </div>
           </div>
         </div>
       )}
