@@ -6,6 +6,7 @@ import { google } from 'googleapis'
 import { Readable } from 'stream'
 
 export const maxDuration = 120
+export const dynamic = 'force-dynamic'; // 👈 אומר ל-Next.js לדלג על הקובץ הזה בזמן ה-Build!
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
