@@ -41,6 +41,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
   }
 
   function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק תשלום זה?')) return
     startTransition(async () => {
       const r = await deleteProjectPayment(id, projectId)
       if (r.error) toast.error(r.error)

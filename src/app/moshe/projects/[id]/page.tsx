@@ -55,7 +55,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     db.from('moshe_buyer_payments').select('*').eq('project_id', id),
     db.from('moshe_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
     db.from('moshe_project_documents').select('*').eq('project_id', id).order('created_at'),
-    db.from('moshe_project_logs').select('*').eq('project_id', id).order('created_at', { ascending: false }),
+    db.from('moshe_audit_log').select('*').eq('project_id', id).order('created_at', { ascending: false }),
     db.from('moshe_partners').select('*').eq('project_id', id).order('created_at'),
     db.from('moshe_partner_transactions').select('*').eq('project_id', id).order('date', { ascending: false }),
     db.from('moshe_loans').select('*').eq('project_id', id).order('created_at'),
@@ -107,18 +107,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   // Loans
   const totalLoans      = loansArr.reduce((s: number, l: any) => s + Number(l.total_amount), 0)
   const loanPaidBack    = lp.filter((p: any) => p.is_paid && !p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const loanInterestPaid = lp.filter((p: any) => p.is_paid && p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanNetReceived = totalLoans - loanPaidBack
+  const partnerNet      = partnersArr.reduce((s: number, p: any) => {
+    const inv = p.transactions.filter((tx: any) => tx.type === 'invest').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
+    const exp = p.transactions.filter((tx: any) => tx.type === 'expense').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
+    const wth = p.transactions.filter((tx: any) => tx.type === 'withdraw').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
+    return s + (inv - exp - wth)
+  }, 0)
 
   // Partners
   const totalInvested  = ptx.filter((x: any) => x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalWithdrawn = ptx.filter((x: any) => x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const partnerNet     = totalInvested - totalWithdrawn
+  const partnerNetTotal     = totalInvested - totalWithdrawn
 
   const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + totalWithdrawn)
   const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + totalWithdrawn)
 
-  // Cash in fund = loans received + buyers received + misc income + partner net − payments out − expenses − loan repayments
-  const cashInFund = (loanNetReceived + totalReceived + txIncome + partnerNet) - (totalPaid + txExpense)
+  // Cash in fund = loans received + buyers received + misc income + partner net − payments out − expenses − loan repayments - pure interest
+  const cashInFund = (loanNetReceived + totalReceived + txIncome + partnerNetTotal) - (totalPaid + txExpense + loanInterestPaid)
 
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 

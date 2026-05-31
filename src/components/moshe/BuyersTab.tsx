@@ -96,6 +96,7 @@ export function BuyersTab({ projectId, buyers, project }: Props) {
   }
 
   function removeBuyer(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק קונה זה?')) return
     startTransition(async () => {
       const r = await deleteBuyer(id, projectId)
       if (r.error) toast.error(r.error)
@@ -324,6 +325,7 @@ function BuyerPaymentsList({ buyer, projectId }: {
   }
 
   function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק תשלום זה?')) return
     startTransition(async () => {
       const r = await deleteBuyerPayment(id, projectId)
       if (r.error) toast.error(r.error)

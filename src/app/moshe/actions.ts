@@ -675,12 +675,14 @@ export async function updateTransaction(id: string, raw: unknown) {
 // ─── Activity Log ──────────────────────────────────────────────────
 
 export async function addLog(projectId: string, action: string, details?: string, actor?: string, logDate?: string) {
-  const { error } = await db.from('moshe_project_logs').insert({
+  const userEmail = await getCurrentUserEmail()
+  const { error } = await db.from('moshe_audit_log').insert({
     project_id: projectId,
-    actor: actor || 'משה',
-    action,
-    details: details || null,
-    log_date: logDate || null,
+    user_email: userEmail,
+    user_name: actor || 'משה',
+    action_type: 'create',
+    entity_type: 'log',
+    description: action + (details ? ` - ${details}` : '') + (logDate ? ` (תאריך אירוע: ${logDate})` : '')
   })
   if (error) return { error: `שגיאה בכתיבת לוג: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
@@ -688,7 +690,7 @@ export async function addLog(projectId: string, action: string, details?: string
 }
 
 export async function deleteLog(id: string, projectId: string) {
-  const { error } = await db.from('moshe_project_logs').delete().eq('id', id)
+  const { error } = await db.from('moshe_audit_log').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת רשומה: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }

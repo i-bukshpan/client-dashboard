@@ -144,6 +144,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
   }
 
   function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק עסקה זו?')) return
     startTransition(async () => {
       const r = await deleteTransaction(id, projectId)
       if (r.error) toast.error(r.error)

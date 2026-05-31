@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'
 import { he } from 'date-fns/locale'
 import { Plus, Trash2, ClipboardList, User, CalendarDays } from 'lucide-react'
+import { ActivityLogClient } from '@/components/moshe/ActivityLogClient'
 
 interface LogEntry {
   id: string
@@ -124,71 +125,12 @@ export function ActivityLogTab({ projectId, logs }: Props) {
           </div>
         )}
 
-        {/* Log entries */}
-        <div className="relative">
-          {sorted.length === 0 ? (
-            <p className="text-center text-sm text-slate-400 py-12">
-              אין רשומות בלוג. לחץ "הוסף רשומה" לתיעוד פעילות.
-            </p>
-          ) : (
-            <div className="px-4 py-2">
-              {/* Timeline */}
-              <div className="relative space-y-0">
-                {sorted.map((log, idx) => (
-                  <div key={log.id} className="flex gap-4 py-3 group">
-                    {/* Timeline dot + line */}
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-amber-50 border-2 border-amber-200 flex items-center justify-center shrink-0 text-amber-600">
-                        <span className="text-[10px] font-black">{log.actor.slice(0, 1)}</span>
-                      </div>
-                      {idx < sorted.length - 1 && (
-                        <div className="w-0.5 flex-1 bg-slate-100 mt-1" />
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0 pb-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-800">{log.action}</p>
-                          {log.details && (
-                            <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{log.details}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
-                            <span className="flex items-center gap-0.5">
-                              <User className="w-3 h-3" />{log.actor}
-                            </span>
-                            <span>·</span>
-                            {log.log_date ? (
-                              <span className="flex items-center gap-0.5 text-amber-600 font-medium">
-                                <CalendarDays className="w-3 h-3" />
-                                {format(new Date(log.log_date + 'T00:00:00'), 'dd/MM/yyyy')}
-                              </span>
-                            ) : (
-                              <span title={format(new Date(log.created_at), 'dd/MM/yyyy HH:mm', { locale: he })}>
-                                {formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: he })}
-                              </span>
-                            )}
-                            <span>·</span>
-                            <span className="text-slate-300">נוצר: {format(new Date(log.created_at), 'dd/MM/yyyy')}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDelete(log.id)}
-                          disabled={pending}
-                          className="w-7 h-7 rounded-lg text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center transition-colors shrink-0 opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Log entries via ActivityLogClient */}
+        <div className="p-4 bg-slate-50/50">
+          <ActivityLogClient entries={logs as any[]} projectMap={{}} />
         </div>
       </div>
     </div>
   )
 }
+

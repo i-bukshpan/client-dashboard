@@ -78,7 +78,7 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
   }
 
   function removePartner(id: string) {
-    if (!confirm('האם למחוק את השותף וכל התנועות שלו?')) return
+    if (!confirm('האם אתה בטוח שברצונך למחוק שותף זה?')) return
     startTransition(async () => {
       const r = await deletePartner(id, projectId)
       if (r.error) toast.error(r.error)
@@ -299,6 +299,7 @@ function PartnerTransactionsList({ partner, projectId }: {
   }
 
   function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק תנועה זו?')) return
     startTransition(async () => {
       const r = await deletePartnerTransaction(id, projectId)
       if (r.error) toast.error(r.error)

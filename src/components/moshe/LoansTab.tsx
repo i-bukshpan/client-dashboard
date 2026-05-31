@@ -155,6 +155,8 @@ export function LoansTab({ projectId, loans, partners }: Props) {
   const totalLoans = loans.reduce((s, l) => s + Number(l.total_amount), 0)
   const totalPaid = loans.reduce((s, l) =>
     s + l.payments.filter(p => p.is_paid && !p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0), 0)
+  const totalInterest = loans.reduce((s, l) =>
+    s + l.payments.filter(p => p.is_paid && p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0), 0)
   const totalRemaining = loans.reduce((s, l) => {
     const paid = l.payments.filter(p => p.is_paid && !p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0)
     return s + (Number(l.total_amount) - paid)
@@ -163,18 +165,22 @@ export function LoansTab({ projectId, loans, partners }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <div className="bg-violet-50 border border-violet-100 rounded-xl p-3 text-center overflow-hidden">
-          <p className="text-[10px] text-violet-500 font-bold uppercase truncate">סה&quot;כ הלוואות</p>
+          <p className="text-[10px] text-violet-500 font-bold uppercase truncate">סה"כ הלוואות</p>
           <p className="text-lg font-black text-violet-700 mt-0.5 truncate">{fmt(totalLoans)}</p>
         </div>
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center overflow-hidden">
-          <p className="text-[10px] text-emerald-500 font-bold uppercase truncate">שולם</p>
+          <p className="text-[10px] text-emerald-500 font-bold uppercase truncate">שולם (קרן)</p>
           <p className="text-lg font-black text-emerald-700 mt-0.5 truncate">{fmt(totalPaid)}</p>
         </div>
         <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center overflow-hidden">
-          <p className="text-[10px] text-amber-600 font-bold uppercase truncate">נותר לשלם</p>
-          <p className="text-lg font-black text-amber-700 mt-0.5 truncate">{fmt(totalRemaining)}</p>
+          <p className="text-[10px] text-amber-500 font-bold uppercase truncate">שולם (ריבית)</p>
+          <p className="text-lg font-black text-amber-700 mt-0.5 truncate">{fmt(totalInterest)}</p>
+        </div>
+        <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center overflow-hidden">
+          <p className="text-[10px] text-red-500 font-bold uppercase truncate">נותר לשלם (קרן)</p>
+          <p className="text-lg font-black text-red-700 mt-0.5 truncate">{fmt(totalRemaining)}</p>
         </div>
       </div>
 
@@ -361,6 +367,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
   }
 
   function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק תשלום זה?')) return
     startTransition(async () => {
       const r = await deleteLoanPayment(id, projectId)
       if (r.error) toast.error(r.error)
@@ -402,39 +409,37 @@ function LoanPaymentsList({ loan, projectId, partners }: {
       </div>
 
       {showAdd && (
-        <div className="px-4 py-3 bg-violet-50/30 border-b border-slate-100 flex flex-col gap-2">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-2 items-end">
+        <div className="px-4 py-4 bg-violet-50/30 border-b border-slate-100 flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-3 items-end">
             <Input type="number" placeholder="סכום ₪" dir="ltr" value={newRow.amount}
               onChange={e => setNewRow(r => ({ ...r, amount: e.target.value }))}
-              className="h-9 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white" />
+              className="h-11 sm:h-9 text-base sm:text-sm border-slate-200 bg-white" />
             <Input type="date" value={newRow.due_date}
               onChange={e => setNewRow(r => ({ ...r, due_date: e.target.value }))}
-              className="h-9 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white" />
+              className="h-11 sm:h-9 text-base sm:text-sm border-slate-200 bg-white" />
             <Input placeholder="הערות" value={newRow.notes}
               onChange={e => setNewRow(r => ({ ...r, notes: e.target.value }))}
-              className="h-9 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white" />
-            <Button size="sm" onClick={addRow} className="h-9 sm:h-8 text-sm sm:text-xs bg-violet-500 hover:bg-violet-400 text-white px-3 w-full sm:w-auto mt-2 sm:mt-0">שמור</Button>
+              className="h-11 sm:h-9 text-base sm:text-sm border-slate-200 bg-white" />
+            <Button size="sm" onClick={addRow} className="h-11 sm:h-9 text-base sm:text-sm bg-violet-500 hover:bg-violet-400 text-white px-5 w-full sm:w-auto mt-2 sm:mt-0">שמור</Button>
           </div>
-          <div className="flex flex-wrap items-center gap-4 mt-1 bg-white p-2 rounded border border-slate-100">
-            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-              <input type="checkbox" className="rounded border-slate-300 text-violet-500"
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white p-3 sm:p-2 rounded-xl border border-slate-100 shadow-sm">
+            <label className="flex items-center gap-2.5 text-sm sm:text-xs text-slate-700 cursor-pointer py-1">
+              <input type="checkbox" className="w-4 h-4 sm:w-3 sm:h-3 rounded border-slate-300 text-violet-500"
                 checked={newRow.is_interest} onChange={e => setNewRow(r => ({ ...r, is_interest: e.target.checked }))} />
               תשלום ריבית
             </label>
             {newRow.is_interest && (
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer border-r border-slate-200 pr-4">
-                <input type="checkbox" className="rounded border-slate-300 text-violet-500"
+              <label className="flex items-center gap-2.5 text-sm sm:text-xs text-slate-700 cursor-pointer sm:border-r sm:border-slate-200 sm:pr-4 py-1">
+                <input type="checkbox" className="w-4 h-4 sm:w-3 sm:h-3 rounded border-slate-300 text-violet-500"
                   checked={newRow.add_expense} onChange={e => setNewRow(r => ({ ...r, add_expense: e.target.checked }))} />
                 הוסף כהוצאה לשותף
               </label>
             )}
             {newRow.is_interest && newRow.add_expense && partners.length > 0 && (
-              <>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center w-full sm:w-auto">
                 <Select value={newRow.partner_id || '__none__'} onValueChange={(v: string | null) => setNewRow(prev => ({ ...prev, partner_id: v === '__none__' || !v ? '' : v }))}>
-                  <SelectTrigger className="h-7 text-xs border-slate-200 bg-white w-32">
-                    <SelectValue placeholder="בחר שותף">
-                      {newRow.partner_id ? partners.find(p => p.id === newRow.partner_id)?.name : 'בחר שותף'}
-                    </SelectValue>
+                  <SelectTrigger className="h-11 sm:h-8 text-base sm:text-xs border-slate-200 bg-white w-full sm:w-32">
+                    <SelectValue placeholder="בחר שותף" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">בחר שותף</SelectItem>
@@ -446,8 +451,8 @@ function LoanPaymentsList({ loan, projectId, partners }: {
                 
                 <Input placeholder="הערות להוצאה (אופציונלי)" value={newRow.expense_notes}
                   onChange={e => setNewRow(r => ({ ...r, expense_notes: e.target.value }))}
-                  className="h-7 text-xs border-slate-200 bg-white flex-1 min-w-[150px]" />
-              </>
+                  className="h-11 sm:h-8 text-base sm:text-xs border-slate-200 bg-white flex-1 w-full" />
+              </div>
             )}
           </div>
         </div>
