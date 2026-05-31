@@ -109,10 +109,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const loanPaidBack    = lp.filter((p: any) => p.is_paid && !p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanInterestPaid = lp.filter((p: any) => p.is_paid && p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanNetReceived = totalLoans - loanPaidBack
-  const partnerNet      = partnersArr.reduce((s: number, p: any) => {
-    const inv = p.transactions.filter((tx: any) => tx.type === 'invest').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
+  const partnerNet      = partnersWithTx.reduce((s: number, p: any) => {
+    const inv = p.transactions.filter((tx: any) => tx.type === 'investment').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
     const exp = p.transactions.filter((tx: any) => tx.type === 'expense').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
-    const wth = p.transactions.filter((tx: any) => tx.type === 'withdraw').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
+    const wth = p.transactions.filter((tx: any) => tx.type === 'withdrawal').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
     return s + (inv - exp - wth)
   }, 0)
 
