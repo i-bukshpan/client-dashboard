@@ -127,6 +127,7 @@ export interface MosheLoanPayment {
   is_paid: boolean
   paid_at: string | null
   notes: string | null
+  is_interest?: boolean
   created_at: string
 }
 

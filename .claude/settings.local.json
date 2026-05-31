@@ -13,7 +13,11 @@
       "Bash(npx supabase *)",
       "Bash(node -e ' *)",
       "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; console.log\\('recharts:', deps.recharts||'not found', 'jspdf:', deps.jspdf||'not found', 'html2canvas:', deps['html2canvas']||'not found', 'react-pdf:', deps['@react-pdf/renderer']||'not found'\\)\")",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -E \"\\\\.\\(sql|ts|js\\)$\")",
+      "PowerShell(git add \"src/app/\\(auth\\)/login/actions.ts\" src/middleware.ts)",
+      "PowerShell(git push origin main)",
+      "Bash(xargs grep *)"
     ]
   }
 }

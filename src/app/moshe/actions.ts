@@ -994,6 +994,10 @@ export async function addLoanPayment(raw: unknown) {
     amount: z.string().min(1, 'סכום נדרש'),
     due_date: z.string().optional(),
     notes: z.string().optional(),
+    is_interest: z.boolean().optional(),
+    add_expense: z.boolean().optional(),
+    partner_id: z.string().optional(),
+    expense_notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
@@ -1005,9 +1009,28 @@ export async function addLoanPayment(raw: unknown) {
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
     notes: d.notes || null,
+    is_interest: d.is_interest || false,
   })
 
   if (error) return { error: `שגיאה בהוספת תשלום: ${error.message}` }
+
+  if (d.add_expense) {
+    const expenseNotes = d.expense_notes ? d.expense_notes : `תשלום ריבית להלוואה: ${d.notes || ''}`.trim()
+    const { error: txError } = await db.from('moshe_transactions').insert({
+      project_id: d.project_id,
+      type: 'expense',
+      amount: parseFloat(d.amount),
+      date: d.due_date || new Date().toISOString().split('T')[0],
+      category: 'ריבית הלוואה',
+      notes: expenseNotes,
+      partner_id: d.partner_id || null,
+    })
+    if (txError) {
+      console.error('[addLoanPayment] Error adding expense:', txError.message)
+      // We don't fail the payment, just log the error
+    }
+  }
+
   revalidatePath(`/moshe/projects/${d.project_id}`)
   return { success: true }
 }
@@ -1016,6 +1039,32 @@ export async function deleteLoanPayment(id: string, projectId: string) {
   const { error } = await db.from('moshe_loan_payments').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת תשלום: ${error.message}` }
   revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function updateLoanPayment(id: string, raw: any) {
+  const schema = z.object({
+    amount: z.string().min(1, 'חובה'),
+    due_date: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: pay, error: fetchErr } = await db.from('moshe_loan_payments').select('project_id').eq('id', id).single()
+  if (fetchErr) return { error: 'תשלום לא נמצא' }
+
+  const { error } = await db.from('moshe_loan_payments')
+    .update({
+      amount: parseFloat(d.amount),
+      due_date: d.due_date || null,
+      notes: d.notes || null,
+    })
+    .eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון תשלום: ${error.message}` }
+  revalidatePath(`/moshe/projects/${pay.project_id}`)
   return { success: true }
 }
 

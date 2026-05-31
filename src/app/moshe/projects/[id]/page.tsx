@@ -106,7 +106,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   // Loans
   const totalLoans      = loansArr.reduce((s: number, l: any) => s + Number(l.total_amount), 0)
-  const loanPaidBack    = lp.filter((p: any) => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const loanPaidBack    = lp.filter((p: any) => p.is_paid && !p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanNetReceived = totalLoans - loanPaidBack
 
   // Partners
@@ -174,7 +174,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </div>
 
           {/* KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-2">
             {[
               { label: 'מאזן אמיתי',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
               { label: 'מאזן צפוי',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
@@ -183,9 +183,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               { label: 'יתרת הלוואות', value: fmt(loanNetReceived), color: 'text-violet-700', bg: 'bg-violet-50 border-violet-100' },
               { label: 'כסף בקופה (אחרי הלוואות)', value: fmt(cashInFund), color: cashInFund >= 0 ? 'text-teal-700' : 'text-red-600', bg: cashInFund >= 0 ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100' },
             ].map(kpi => (
-              <div key={kpi.label} className={cn('rounded-xl border p-3 text-center', kpi.bg)}>
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{kpi.label}</p>
-                <p className={cn('text-base font-black', kpi.color)}>{kpi.value}</p>
+              <div key={kpi.label} className={cn('rounded-xl border p-2 sm:p-3 text-center overflow-hidden', kpi.bg)}>
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5 whitespace-normal break-words leading-tight min-h-[28px] flex items-center justify-center">{kpi.label}</p>
+                <p className={cn('text-sm sm:text-base font-black truncate', kpi.color)}>{kpi.value}</p>
               </div>
             ))}
           </div>

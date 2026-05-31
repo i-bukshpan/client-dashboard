@@ -121,7 +121,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
         </div>
 
         {showAdd && (
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-[1fr_1fr_2fr_auto] gap-2 items-end">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-2 items-end">
             <div>
               <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
               <Input type="number" placeholder="0" dir="ltr" value={newRow.amount}
@@ -141,7 +141,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                 className="h-9 text-sm border-slate-200 bg-white" />
             </div>
             <Button size="sm" onClick={addRow}
-              className="h-9 bg-amber-500 hover:bg-amber-400 text-white text-xs">שמור</Button>
+              className="h-9 bg-amber-500 hover:bg-amber-400 text-white text-xs w-full sm:w-auto mt-2 sm:mt-0">שמור</Button>
           </div>
         )}
 
@@ -155,7 +155,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
 
             if (editingId === p.id) {
               return (
-                <div key={p.id} className="px-4 py-3 bg-amber-50/60 grid grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-end border-b border-amber-100">
+                <div key={p.id} className="px-4 py-3 bg-amber-50/60 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-end border-b border-amber-100">
                   <div>
                     <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
                     <Input type="number" dir="ltr" value={editRow.amount}
@@ -174,12 +174,14 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                       onChange={e => setEditRow(r => ({ ...r, notes: e.target.value }))}
                       className="h-9 text-sm border-amber-200 bg-white" />
                   </div>
-                  <Button size="sm" onClick={() => saveEdit(p.id)} disabled={pending}
-                    className="h-9 bg-amber-500 hover:bg-amber-400 text-white text-xs px-3">שמור</Button>
-                  <button onClick={() => setEditingId(null)}
-                    className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100">
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                    <Button size="sm" onClick={() => saveEdit(p.id)} disabled={pending}
+                      className="flex-1 h-9 bg-amber-500 hover:bg-amber-400 text-white text-sm sm:text-xs px-3">שמור</Button>
+                    <button onClick={() => setEditingId(null)}
+                      className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white bg-amber-100/50 sm:bg-transparent">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )
             }
@@ -268,24 +270,24 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                     </button>
                   </div>
                   <p className="text-[10px] text-purple-400">סכום מקורי: {fmt(Number(p.amount))} | הסכום החלקי יירשם כשולם, והיתרה תישאר בתשלום המקורי</p>
-                  <div className="grid grid-cols-[1fr_1fr_2fr] gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr] gap-2">
                     <div>
                       <p className="text-[10px] text-purple-500 font-medium mb-0.5">סכום חלקי (₪) *</p>
                       <Input type="number" dir="ltr" placeholder="0" value={partialForm.amount}
                         onChange={e => setPartialForm(f => ({ ...f, amount: e.target.value }))}
-                        className="h-8 text-xs border-purple-200 bg-white" />
+                        className="h-9 sm:h-8 text-sm sm:text-xs border-purple-200 bg-white" />
                     </div>
                     <div>
                       <p className="text-[10px] text-purple-500 font-medium mb-0.5">תאריך תשלום</p>
                       <Input type="date" value={partialForm.date}
                         onChange={e => setPartialForm(f => ({ ...f, date: e.target.value }))}
-                        className="h-8 text-xs border-purple-200 bg-white" />
+                        className="h-9 sm:h-8 text-sm sm:text-xs border-purple-200 bg-white" />
                     </div>
                     <div>
                       <p className="text-[10px] text-purple-500 font-medium mb-0.5">הערות</p>
                       <Input placeholder="תיאור התשלום החלקי..." value={partialForm.notes}
                         onChange={e => setPartialForm(f => ({ ...f, notes: e.target.value }))}
-                        className="h-8 text-xs border-purple-200 bg-white" />
+                        className="h-9 sm:h-8 text-sm sm:text-xs border-purple-200 bg-white" />
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end pt-1">
