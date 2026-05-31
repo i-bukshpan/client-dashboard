@@ -174,7 +174,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </div>
 
           {/* KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-2">
             {[
               { label: 'מאזן אמיתי',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
               { label: 'מאזן צפוי',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
