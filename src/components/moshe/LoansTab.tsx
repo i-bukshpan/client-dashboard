@@ -430,7 +430,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
             )}
             {newRow.is_interest && newRow.add_expense && partners.length > 0 && (
               <>
-                <Select value={newRow.partner_id || '__none__'} onValueChange={v => setNewRow(prev => ({ ...prev, partner_id: v === '__none__' ? '' : v }))}>
+                <Select value={newRow.partner_id || '__none__'} onValueChange={(v: string | null) => setNewRow(prev => ({ ...prev, partner_id: v === '__none__' || !v ? '' : v }))}>
                   <SelectTrigger className="h-7 text-xs border-slate-200 bg-white w-32">
                     <SelectValue placeholder="בחר שותף">
                       {newRow.partner_id ? partners.find(p => p.id === newRow.partner_id)?.name : 'בחר שותף'}
