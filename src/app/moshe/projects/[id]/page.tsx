@@ -119,13 +119,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   // Partners
   const totalInvested  = ptx.filter((x: any) => x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalWithdrawn = ptx.filter((x: any) => x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const partnerNetTotal     = totalInvested - totalWithdrawn
+  const ptxExpense     = ptx.filter((x: any) => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const partnerNetTotal     = totalInvested - totalWithdrawn - ptxExpense
 
-  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + totalWithdrawn)
-  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + totalWithdrawn)
+  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
+  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn)
 
-  // Cash in fund = loans received + buyers received + misc income + partner net − payments out − expenses − loan repayments - pure interest
-  const cashInFund = (loanNetReceived + totalReceived + txIncome + partnerNetTotal) - (totalPaid + txExpense + loanInterestPaid)
+  // Cash in fund = loans received + buyers received + misc income + partner investments − payments out − expenses - partner withdrawals
+  const cashInFund = (loanNetReceived + totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
 
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 
@@ -186,7 +187,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               { label: 'מאזן אמיתי',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
               { label: 'מאזן צפוי',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
               { label: 'הכנסות בפועל', value: fmt(totalReceived + txIncome),  color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-              { label: 'הוצאות בפועל', value: fmt(totalPaid + txExpense),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
+              { label: 'הוצאות בפועל', value: fmt(totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
               { label: 'יתרת הלוואות', value: fmt(loanNetReceived), color: 'text-violet-700', bg: 'bg-violet-50 border-violet-100' },
               { label: 'כסף בקופה (אחרי הלוואות)', value: fmt(cashInFund), color: cashInFund >= 0 ? 'text-teal-700' : 'text-red-600', bg: cashInFund >= 0 ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100' },
             ].map(kpi => (

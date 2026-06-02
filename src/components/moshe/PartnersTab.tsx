@@ -90,6 +90,8 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
     s + p.transactions.filter(t => t.type === 'investment').reduce((ss, t) => ss + Number(t.amount), 0), 0)
   const totalWithdrawn = partners.reduce((s, p) =>
     s + p.transactions.filter(t => t.type === 'withdrawal').reduce((ss, t) => ss + Number(t.amount), 0), 0)
+  const totalExpenses = partners.reduce((s, p) =>
+    s + p.transactions.filter(t => t.type === 'expense').reduce((ss, t) => ss + Number(t.amount), 0), 0)
 
 
   return (
@@ -104,12 +106,12 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
           <p className="text-lg font-black text-orange-600 mt-0.5">{fmt(totalWithdrawn)}</p>
         </div>
         <div className={cn('rounded-xl border p-3 text-center',
-          (totalInvested - totalWithdrawn) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100')}>
+          (totalInvested - totalWithdrawn - totalExpenses) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100')}>
           <p className={cn('text-[10px] font-bold uppercase',
-            (totalInvested - totalWithdrawn) >= 0 ? 'text-emerald-500' : 'text-red-500')}>מאזן שותפים</p>
+            (totalInvested - totalWithdrawn - totalExpenses) >= 0 ? 'text-emerald-500' : 'text-red-500')}>מאזן שותפים</p>
           <p className={cn('text-lg font-black mt-0.5',
-            (totalInvested - totalWithdrawn) >= 0 ? 'text-emerald-700' : 'text-red-600')}>
-            {fmt(totalInvested - totalWithdrawn)}
+            (totalInvested - totalWithdrawn - totalExpenses) >= 0 ? 'text-emerald-700' : 'text-red-600')}>
+            {fmt(totalInvested - totalWithdrawn - totalExpenses)}
           </p>
         </div>
       </div>
@@ -134,7 +136,8 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
         {partners.map(partner => {
           const invested  = partner.transactions.filter(t => t.type === 'investment').reduce((s, t) => s + Number(t.amount), 0)
           const withdrawn = partner.transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.amount), 0)
-          const balance = invested - withdrawn
+          const expenses  = partner.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+          const balance = invested - withdrawn - expenses
           const isExpanded = expandedPartner === partner.id
           const isDefault = partner.name === 'משה פרוש'
 
@@ -218,6 +221,12 @@ export function PartnersTab({ projectId, project, partners, loans = [], allTrans
                   <span className="text-indigo-500 font-medium">השקעות: {fmt(invested)}</span>
                   <span className="text-slate-300">|</span>
                   <span className="text-orange-500 font-medium">משיכות: {fmt(withdrawn)}</span>
+                  {expenses > 0 && (
+                    <>
+                      <span className="text-slate-300">|</span>
+                      <span className="text-red-500 font-medium">הוצאות: {fmt(expenses)}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -281,7 +290,7 @@ function PartnerTransactionsList({ partner, projectId }: {
   const [pending, startTransition] = useTransition()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
-    type: 'investment' as 'investment' | 'withdrawal',
+    type: 'investment' as 'investment' | 'withdrawal' | 'expense',
     amount: '',
     date: new Date().toISOString().split('T')[0],
     notes: '',
@@ -307,7 +316,7 @@ function PartnerTransactionsList({ partner, projectId }: {
     })
   }
 
-  const TYPE_LABELS: Record<string, string> = { investment: 'השקעה', withdrawal: 'משיכה' }
+  const TYPE_LABELS: Record<string, string> = { investment: 'השקעה', withdrawal: 'משיכה', expense: 'הוצאה' }
 
   return (
     <div className="border-t border-slate-100">
@@ -330,6 +339,7 @@ function PartnerTransactionsList({ partner, projectId }: {
                 <SelectContent>
                   <SelectItem value="investment">השקעה</SelectItem>
                   <SelectItem value="withdrawal">משיכה</SelectItem>
+                  <SelectItem value="expense">הוצאה</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -365,14 +375,14 @@ function PartnerTransactionsList({ partner, projectId }: {
 
       {sorted.map(t => (
         <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 group">
-          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', t.type === 'investment' ? 'bg-indigo-100' : 'bg-orange-100')}>
-            {t.type === 'investment' ? <TrendingUp className="w-3.5 h-3.5 text-indigo-600" /> : <TrendingDown className="w-3.5 h-3.5 text-orange-500" />}
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center shrink-0', t.type === 'investment' ? 'bg-indigo-100' : t.type === 'withdrawal' ? 'bg-orange-100' : 'bg-red-100')}>
+            {t.type === 'investment' ? <TrendingUp className="w-3.5 h-3.5 text-indigo-600" /> : <TrendingDown className={cn("w-3.5 h-3.5", t.type === 'withdrawal' ? 'text-orange-500' : 'text-red-500')} />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-slate-700 truncate">{t.notes || (t.type === 'investment' ? 'השקעה' : 'משיכה')}</p>
+            <p className="text-xs font-medium text-slate-700 truncate">{t.notes || TYPE_LABELS[t.type]}</p>
             <p className="text-[10px] text-slate-400">{format(new Date(t.date), 'dd/MM/yyyy')}</p>
           </div>
-          <p className={cn('font-bold text-xs shrink-0', t.type === 'investment' ? 'text-indigo-700' : 'text-orange-600')}>
+          <p className={cn('font-bold text-xs shrink-0', t.type === 'investment' ? 'text-indigo-700' : t.type === 'withdrawal' ? 'text-orange-600' : 'text-red-600')}>
             {t.type === 'investment' ? '+' : '-'}{fmt(Number(t.amount))}
           </p>
           <button onClick={() => remove(t.id)} disabled={pending}

@@ -97,7 +97,7 @@ export interface MoshePartnerTransaction {
   id: string
   partner_id: string
   project_id: string
-  type: 'investment' | 'withdrawal'
+  type: 'investment' | 'withdrawal' | 'expense'
   amount: number
   date: string
   notes: string | null

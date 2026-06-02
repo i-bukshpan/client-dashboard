@@ -877,7 +877,7 @@ export async function createPartnerTransaction(raw: unknown) {
   const schema = z.object({
     partner_id: z.string().uuid(),
     project_id: z.string().uuid(),
-    type: z.enum(['investment', 'withdrawal']),
+    type: z.enum(['investment', 'withdrawal', 'expense']),
     amount: z.string().min(1, 'סכום נדרש'),
     date: z.string().min(1, 'תאריך נדרש'),
     notes: z.string().optional(),
@@ -997,9 +997,10 @@ export async function addLoanPayment(raw: unknown) {
     due_date: z.string().optional(),
     notes: z.string().optional(),
     is_interest: z.boolean().optional(),
-    add_expense: z.boolean().optional(),
+    add_as_expense: z.boolean().optional(),
+    partner_action_type: z.enum(['none', 'withdrawal', 'investment']).optional(),
     partner_id: z.string().optional(),
-    expense_notes: z.string().optional(),
+    action_notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
@@ -1016,20 +1017,34 @@ export async function addLoanPayment(raw: unknown) {
 
   if (error) return { error: `שגיאה בהוספת תשלום: ${error.message}` }
 
-  if (d.add_expense) {
-    const expenseNotes = d.expense_notes ? d.expense_notes : `תשלום ריבית להלוואה: ${d.notes || ''}`.trim()
+  const actionNotes = d.action_notes ? d.action_notes : `תשלום ריבית להלוואה: ${d.notes || ''}`.trim()
+
+  if (d.add_as_expense) {
     const { error: txError } = await db.from('moshe_transactions').insert({
       project_id: d.project_id,
       type: 'expense',
       amount: parseFloat(d.amount),
       date: d.due_date || new Date().toISOString().split('T')[0],
       category: 'ריבית הלוואה',
-      notes: expenseNotes,
-      partner_id: d.partner_id || null,
+      notes: actionNotes,
+      partner_id: d.partner_id ? d.partner_id : null,
     })
     if (txError) {
       console.error('[addLoanPayment] Error adding expense:', txError.message)
-      // We don't fail the payment, just log the error
+    }
+  }
+
+  if (d.partner_action_type && d.partner_action_type !== 'none' && d.partner_id) {
+    const { error: txError } = await db.from('moshe_partner_transactions').insert({
+      partner_id: d.partner_id,
+      project_id: d.project_id,
+      type: d.partner_action_type,
+      amount: parseFloat(d.amount),
+      date: d.due_date || new Date().toISOString().split('T')[0],
+      notes: actionNotes,
+    })
+    if (txError) {
+      console.error('[addLoanPayment] Error adding partner tx:', txError.message)
     }
   }
 

@@ -347,7 +347,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
 }) {
   const [pending, startTransition] = useTransition()
   const [showAdd, setShowAdd] = useState(false)
-  const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '', is_interest: false, add_expense: false, partner_id: '', expense_notes: '' })
+  const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '', is_interest: false, add_as_expense: false, partner_action_type: 'none', partner_id: '', action_notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editRow, setEditRow] = useState({ amount: '', due_date: '', notes: '' })
   const today = new Date()
@@ -380,7 +380,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
     const r = await addLoanPayment({ loan_id: loan.id, project_id: projectId, ...newRow })
     if (r.error) { toast.error(r.error); return }
     toast.success('תשלום נוסף')
-    setNewRow({ amount: '', due_date: '', notes: '', is_interest: false, add_expense: false, partner_id: '', expense_notes: '' })
+    setNewRow({ amount: '', due_date: '', notes: '', is_interest: false, add_as_expense: false, partner_action_type: 'none', partner_id: '', action_notes: '' })
     setShowAdd(false)
   }
 
@@ -422,37 +422,63 @@ function LoanPaymentsList({ loan, projectId, partners }: {
               className="h-11 sm:h-9 text-base sm:text-sm border-slate-200 bg-white" />
             <Button size="sm" onClick={addRow} className="h-11 sm:h-9 text-base sm:text-sm bg-violet-500 hover:bg-violet-400 text-white px-5 w-full sm:w-auto mt-2 sm:mt-0">שמור</Button>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white p-3 sm:p-2 rounded-xl border border-slate-100 shadow-sm">
+          <div className="flex flex-col gap-3 bg-white p-3 sm:p-2 rounded-xl border border-slate-100 shadow-sm mt-3">
             <label className="flex items-center gap-2.5 text-sm sm:text-xs text-slate-700 cursor-pointer py-1">
               <input type="checkbox" className="w-4 h-4 sm:w-3 sm:h-3 rounded border-slate-300 text-violet-500"
                 checked={newRow.is_interest} onChange={e => setNewRow(r => ({ ...r, is_interest: e.target.checked }))} />
               תשלום ריבית
             </label>
             {newRow.is_interest && (
-              <label className="flex items-center gap-2.5 text-sm sm:text-xs text-slate-700 cursor-pointer sm:border-r sm:border-slate-200 sm:pr-4 py-1">
-                <input type="checkbox" className="w-4 h-4 sm:w-3 sm:h-3 rounded border-slate-300 text-violet-500"
-                  checked={newRow.add_expense} onChange={e => setNewRow(r => ({ ...r, add_expense: e.target.checked }))} />
-                הוסף כהוצאה לשותף
-              </label>
-            )}
-            {newRow.is_interest && newRow.add_expense && partners.length > 0 && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center w-full sm:w-auto">
-                <Select value={newRow.partner_id || '__none__'} onValueChange={(v: string | null) => setNewRow(prev => ({ ...prev, partner_id: v === '__none__' || !v ? '' : v }))}>
-                  <SelectTrigger className="h-11 sm:h-8 text-base sm:text-xs border-slate-200 bg-white w-full sm:w-32">
-                    <SelectValue placeholder="בחר שותף" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">בחר שותף</SelectItem>
-                    {partners.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-center border-t border-slate-100 pt-3 sm:pt-2">
+                <label className="flex items-center gap-2 text-sm sm:text-xs text-slate-700 cursor-pointer shrink-0">
+                  <input type="checkbox" className="w-4 h-4 sm:w-3 sm:h-3 rounded border-slate-300 text-amber-500"
+                    checked={newRow.add_as_expense} onChange={e => setNewRow(r => ({ ...r, add_as_expense: e.target.checked }))} />
+                  רישום כהוצאה לפרויקט
+                </label>
                 
-                <Input placeholder="הערות להוצאה (אופציונלי)" value={newRow.expense_notes}
-                  onChange={e => setNewRow(r => ({ ...r, expense_notes: e.target.value }))}
-                  className="h-11 sm:h-8 text-base sm:text-xs border-slate-200 bg-white flex-1 w-full" />
+                {partners.length > 0 && (
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center flex-1 sm:border-r border-slate-100 sm:pr-4">
+                    <Select value={newRow.partner_action_type} onValueChange={(v: string | null) => setNewRow(r => ({ ...r, partner_action_type: v || 'none' }))}>
+                      <SelectTrigger className="h-10 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white w-full sm:w-32">
+                        <SelectValue placeholder="פעולה לשותף">
+                          {newRow.partner_action_type === 'none' ? 'ללא שיוך לשותף' :
+                           newRow.partner_action_type === 'withdrawal' ? 'רישום כמשיכה' :
+                           newRow.partner_action_type === 'investment' ? 'רישום כהשקעה' : 'פעולה לשותף'}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">ללא שיוך לשותף</SelectItem>
+                        <SelectItem value="withdrawal">רישום כמשיכה</SelectItem>
+                        <SelectItem value="investment">רישום כהשקעה</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {(newRow.add_as_expense || newRow.partner_action_type !== 'none') && (
+                      <Select value={newRow.partner_id || '__none__'} onValueChange={(v: string | null) => setNewRow(prev => ({ ...prev, partner_id: v === '__none__' || !v ? '' : v }))}>
+                        <SelectTrigger className="h-10 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white w-full sm:w-32">
+                          <SelectValue placeholder="בחר שותף">
+                            {newRow.partner_id && newRow.partner_id !== '__none__'
+                              ? partners.find(p => p.id === newRow.partner_id)?.name
+                              : 'בחר שותף'}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">בחר שותף</SelectItem>
+                          {partners.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                )}
               </div>
+            )}
+            
+            {newRow.is_interest && (newRow.add_as_expense || newRow.partner_action_type !== 'none') && (
+              <Input placeholder="הערות לפעולות נוספות אלו (אופציונלי)" value={newRow.action_notes}
+                onChange={e => setNewRow(r => ({ ...r, action_notes: e.target.value }))}
+                className="h-10 sm:h-8 text-sm sm:text-xs border-slate-200 bg-white w-full mt-2" />
             )}
           </div>
         </div>
