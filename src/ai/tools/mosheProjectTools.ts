@@ -3,12 +3,16 @@
  *
  * כלים לפרויקטי נדל"ן — פרויקטים, קונים, תשלומים, עסקאות
  * גישה: moshe_admin + admin
+ *
+ * ⚠️ הנוסחאות מסונכרנות עם האתר החי:
+ *   src/app/moshe/projects/[id]/page.tsx
+ *   src/app/moshe/page.tsx
  */
 
 import { SchemaType, type FunctionDeclaration } from '@google/generative-ai'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-const db = createClient(
+const db = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -18,7 +22,8 @@ const db = createClient(
 export const listProjectsDeclaration: FunctionDeclaration = {
   name: 'listProjects',
   description:
-    'מחזיר רשימת פרויקטי הנדל"ן. השתמש כאשר המשתמש שואל "אילו פרויקטים יש", "רשימת פרויקטים".',
+    'מחזיר רשימת פרויקטי הנדל"ן של הפורטל (פרויקטי משה פרוש). ' +
+    'השתמש כאשר המשתמש שואל "אילו פרויקטים יש", "רשימת פרויקטים", "פרויקטים בפורטל".',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -26,17 +31,13 @@ export const listProjectsDeclaration: FunctionDeclaration = {
         type: SchemaType.STRING,
         description: 'סינון לפי סטטוס: active, pending, closed',
       },
-      allowed_ids: {
-        type: SchemaType.STRING,
-        description: 'רשימת UUIDs מופרדים בפסיק — לשימוש פנימי לסינון הרשאות שותף',
-      },
     },
     required: [],
   },
 }
 
 export async function listProjects(
-  args: { status?: string; allowed_ids?: string },
+  args: { status?: string },
   allowedProjectIds?: string[] | null
 ): Promise<Record<string, unknown>> {
   let query = db
@@ -45,6 +46,8 @@ export async function listProjects(
     .order('created_at', { ascending: false })
 
   if (args.status) query = query.eq('status', args.status)
+  else query = query.neq('status', 'closed') // ברירת מחדל: לא סגורים
+
   if (allowedProjectIds !== null && allowedProjectIds !== undefined) {
     query = query.in('id', allowedProjectIds)
   }
@@ -67,19 +70,20 @@ export async function listProjects(
 }
 
 // ─── getProjectBalance ─────────────────────────────────────────────────────────
+// נוסחה מסונכרנת עם: src/app/moshe/projects/[id]/page.tsx שורות 99-129
 
 export const getProjectBalanceDeclaration: FunctionDeclaration = {
   name: 'getProjectBalance',
   description:
-    'מחזיר את המאזן הפיננסי הנוכחי (בש"ח) של פרויקט נדל"ן. ' +
-    'המאזן = סך התקבולים שנגבו מקונים פחות סך ההוצאות ששולמו. ' +
-    'השתמש בכל פעם שהמשתמש שואל על יתרה / מאזן / כמה כסף יש בפרויקט.',
+    'מחזיר את כל ה-KPIs הפיננסיים של פרויקט בפורטל, זהה לאתר החי. ' +
+    'כולל: מאזן אמיתי, מאזן צפוי, הכנסות, הוצאות, יתרת הלוואות (בלי ריבית), כסף בקופה. ' +
+    'השתמש כאשר המשתמש שואל "מה המאזן", "כמה כסף יש", "מה הסטטוס הכספי".',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
       project: {
         type: SchemaType.STRING,
-        description: 'מזהה הפרויקט (UUID) או שם הפרויקט, למשל "רחוב הרצל 12".',
+        description: 'שם הפרויקט או UUID. לדוגמה: "רחוב הרצל 12" או UUID.',
       },
     },
     required: ['project'],
@@ -96,42 +100,84 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
     : db.from('moshe_projects').select('id, name').ilike('name', `%${query}%`).limit(2)
 
   const { data: projects, error: projErr } = await projectQuery
-  if (projErr) return { found: false, error: `שגיאת מסד נתונים: ${projErr.message}` }
-  if (!projects || projects.length === 0) return { found: false, error: `לא נמצא פרויקט בשם "${query}".` }
+  if (projErr) return { found: false, error: projErr.message }
+  if (!projects || projects.length === 0) return { found: false, error: `לא נמצא פרויקט "${query}".` }
   if (projects.length > 1) {
     return {
       found: false,
       ambiguous: true,
-      error: `נמצאו כמה פרויקטים תואמים ל-"${query}". יש לדייק.`,
+      error: `נמצאו מספר פרויקטים תואמים. יש לדייק.`,
       candidates: projects.map((p: any) => p.name),
     }
   }
-
   const project = projects[0]
 
-  const [{ data: buyerPayments }, { data: projectPayments }] = await Promise.all([
-    db.from('moshe_buyer_payments').select('amount, is_received').eq('project_id', project.id),
+  // שולף את כל הטבלאות הדרושות לנוסחה
+  const [
+    { data: projPayments },
+    { data: buyerPayments },
+    { data: transactions },
+    { data: partnerTransactions },
+    { data: loans },
+    { data: loanPayments },
+  ] = await Promise.all([
     db.from('moshe_project_payments').select('amount, is_paid').eq('project_id', project.id),
+    db.from('moshe_buyer_payments').select('amount, is_received').eq('project_id', project.id),
+    db.from('moshe_transactions').select('amount, type').eq('project_id', project.id),
+    db.from('moshe_partner_transactions').select('amount, type').eq('project_id', project.id),
+    db.from('moshe_loans').select('id, total_amount').eq('project_id', project.id),
+    db.from('moshe_loan_payments').select('loan_id, amount, is_paid, is_interest').eq('project_id', project.id),
   ])
 
-  const received = (buyerPayments ?? [])
-    .filter((p: any) => p.is_received)
-    .reduce((sum: number, p: any) => sum + Number(p.amount), 0)
-  const paid = (projectPayments ?? [])
-    .filter((p: any) => p.is_paid)
-    .reduce((sum: number, p: any) => sum + Number(p.amount), 0)
-  const balance = received - paid
+  const pp  = (projPayments ?? []) as any[]
+  const bp  = (buyerPayments ?? []) as any[]
+  const tx  = (transactions ?? []) as any[]
+  const ptx = (partnerTransactions ?? []) as any[]
+  const lo  = (loans ?? []) as any[]
+  const lp  = (loanPayments ?? []) as any[]
+
+  // ── נוסחאות זהות לדף פרויקט באתר החי ──────────────────────────────────────
+  const totalPaid      = pp.filter(x => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalReceived  = bp.filter(x => x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalExpected  = bp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const txIncome       = tx.filter(x => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const txExpense      = tx.filter(x => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalInvested  = ptx.filter(x => x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalWithdrawn = ptx.filter(x => x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const ptxExpense     = ptx.filter(x => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+
+  // הלוואות — בלי ריבית (is_interest=false OR is_interest IS NULL)
+  const totalLoans   = lo.reduce((s: number, l: any) => s + Number(l.total_amount), 0)
+  const loanPaidBack = lp
+    .filter((p: any) => p.is_paid && !p.is_interest)
+    .reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const loanInterestPaid = lp
+    .filter((p: any) => p.is_paid && p.is_interest)
+    .reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const loanNetReceived = totalLoans - loanPaidBack  // יתרת ההלוואה (בלי ריבית)
+
+  // KPIs — בדיוק כמו בדף הפרויקט
+  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
+  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn)
+  const cashInFund      = (loanNetReceived + totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
+
+  const f = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
 
   return {
     found: true,
     project_name: project.name,
-    balance,
-    received,
-    paid,
+    // KPIs — זהים לאתר
+    real_balance:       { value: realBalance,     formatted: f(realBalance) },
+    expected_balance:   { value: expectedBalance, formatted: f(expectedBalance) },
+    income_received:    { value: totalReceived + txIncome,  formatted: f(totalReceived + txIncome) },
+    expenses_paid:      { value: totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested, formatted: f(totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested) },
+    loan_net_remaining: { value: loanNetReceived, formatted: f(loanNetReceived), note: 'ללא ריבית' },
+    cash_in_fund:       { value: cashInFund,      formatted: f(cashInFund) },
+    // פרטים נוספים
+    collection_rate:    totalExpected > 0 ? Math.round((totalReceived / totalExpected) * 100) : 0,
+    interest_paid:      loanInterestPaid,
     currency: 'ILS',
-    balance_formatted: '₪' + balance.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
-    received_formatted: '₪' + received.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
-    paid_formatted: '₪' + paid.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
   }
 }
 
@@ -140,7 +186,7 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
 export const getProjectSummaryDeclaration: FunctionDeclaration = {
   name: 'getProjectSummary',
   description:
-    'מחזיר סיכום מלא של פרויקט — קונים, תשלומים, שותפים, עובדים, הלוואות. ' +
+    'מחזיר סיכום מלא של פרויקט בפורטל — KPIs, קונים, תשלומים, שותפים, עובדים, הלוואות. ' +
     'השתמש כאשר המשתמש אומר "ספר לי על פרויקט X", "מה הסטטוס של פרויקט X".',
   parameters: {
     type: SchemaType.OBJECT,
@@ -152,55 +198,64 @@ export const getProjectSummaryDeclaration: FunctionDeclaration = {
 }
 
 export async function getProjectSummary(args: { project?: string }): Promise<Record<string, unknown>> {
-  const query = (args.project || '').trim()
-  if (!query) return { found: false, error: 'לא צוין פרויקט.' }
+  // נשתמש ב-getProjectBalance לקבל את הנוסחאות, ואז נוסיף מידע נוסף
+  const balanceResult = await getProjectBalance(args)
+  if (!balanceResult.found) return balanceResult
 
+  const query = (args.project || '').trim()
   const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query)
   const { data: projects } = looksLikeUuid
     ? await db.from('moshe_projects').select('*').eq('id', query).limit(1)
     : await db.from('moshe_projects').select('*').ilike('name', `%${query}%`).limit(1)
 
-  if (!projects || projects.length === 0) return { found: false, error: `לא נמצא פרויקט "${query}".` }
+  if (!projects || projects.length === 0) return { found: false, error: 'פרויקט לא נמצא.' }
   const project = projects[0]
 
   const [
     { data: buyers },
-    { data: buyerPayments },
-    { data: projectPayments },
     { data: partners },
+    { data: workers },
     { data: loans },
+    { data: pendingProjectPayments },
   ] = await Promise.all([
     db.from('moshe_buyers').select('id, name, total_amount').eq('project_id', project.id),
-    db.from('moshe_buyer_payments').select('amount, is_received').eq('project_id', project.id),
-    db.from('moshe_project_payments').select('amount, is_paid, due_date').eq('project_id', project.id),
-    db.from('moshe_partners').select('name, phone').eq('project_id', project.id),
-    db.from('moshe_loans').select('lender, total_amount, interest_rate').eq('project_id', project.id),
+    db.from('moshe_partners').select('id, name').eq('project_id', project.id),
+    db.from('moshe_workers').select('id, name').eq('project_id', project.id).eq('is_active', true),
+    db.from('moshe_loans').select('id, lender, total_amount, interest_rate').eq('project_id', project.id),
+    db.from('moshe_project_payments').select('id, amount, due_date, notes').eq('project_id', project.id).eq('is_paid', false),
   ])
 
-  const totalReceived = (buyerPayments ?? []).filter((p: any) => p.is_received).reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const totalPaid = (projectPayments ?? []).filter((p: any) => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const pendingProjectPayments = (projectPayments ?? []).filter((p: any) => !p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
-
   return {
-    found: true,
+    ...balanceResult,
     project: {
       id: project.id,
       name: project.name,
       address: project.address,
       status: project.status,
-      total_cost: project.total_project_cost,
+      total_budget: project.total_project_cost,
+      start_date: project.start_date,
     },
-    finance: {
-      balance: totalReceived - totalPaid,
-      total_received: totalReceived,
-      total_paid: totalPaid,
-      pending_payments: pendingProjectPayments,
+    buyers: {
+      count: (buyers ?? []).length,
+      list: (buyers ?? []).map((b: any) => ({ id: b.id, name: b.name, total: b.total_amount })),
     },
-    buyers_count: (buyers ?? []).length,
-    buyers: (buyers ?? []).map((b: any) => ({ name: b.name, total: b.total_amount })),
-    partners: (partners ?? []).map((p: any) => p.name),
-    loans_count: (loans ?? []).length,
-    total_loans: (loans ?? []).reduce((s: number, l: any) => s + Number(l.total_amount), 0),
+    partners: {
+      count: (partners ?? []).length,
+      list: (partners ?? []).map((p: any) => ({ id: p.id, name: p.name })),
+    },
+    portal_workers: {
+      count: (workers ?? []).length,
+      list: (workers ?? []).map((w: any) => ({ id: w.id, name: w.name })),
+    },
+    loans: {
+      count: (loans ?? []).length,
+      total: (loans ?? []).reduce((s: number, l: any) => s + Number(l.total_amount), 0),
+      list: (loans ?? []).map((l: any) => ({ lender: l.lender, amount: l.total_amount, rate: l.interest_rate })),
+    },
+    pending_project_payments: {
+      count: (pendingProjectPayments ?? []).length,
+      total: (pendingProjectPayments ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0),
+    },
   }
 }
 
@@ -261,7 +316,7 @@ export async function getPendingPayments(args: { project?: string }): Promise<Re
 
 export const addProjectPaymentDeclaration: FunctionDeclaration = {
   name: 'addProjectPayment',
-  description: 'מוסיף תשלום הוצאה לפרויקט (הוצאה מתוכננת). השתמש כאשר המשתמש אומר "הוסף תשלום לפרויקט X".',
+  description: 'מוסיף תשלום הוצאה לפרויקט (הוצאה מתוכננת).',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -321,7 +376,7 @@ export async function executeAddProjectPayment(params: {
 
 export const markPaymentPaidDeclaration: FunctionDeclaration = {
   name: 'markPaymentPaid',
-  description: 'מסמן תשלום פרויקט כשולם. השתמש כאשר המשתמש אומר "שולם", "סמן שולם".',
+  description: 'מסמן תשלום פרויקט כשולם.',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -356,7 +411,7 @@ export const addTransactionDeclaration: FunctionDeclaration = {
   name: 'addTransaction',
   description:
     'מוסיף עסקה חופשית (הכנסה/הוצאה) לפרויקט. ' +
-    'השתמש כאשר המשתמש אומר "הוסף עסקה לפרויקט X", "רשום הוצאה/הכנסה".',
+    'השתמש כאשר המשתמש אומר "הוסף עסקה", "רשום הוצאה/הכנסה".',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
@@ -425,7 +480,7 @@ export async function executeAddTransaction(params: {
 
 export const addBuyerDeclaration: FunctionDeclaration = {
   name: 'addBuyer',
-  description: 'מוסיף קונה חדש לפרויקט. השתמש כאשר המשתמש אומר "הוסף קונה", "רשום קונה חדש לפרויקט X".',
+  description: 'מוסיף קונה חדש לפרויקט בפורטל.',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {

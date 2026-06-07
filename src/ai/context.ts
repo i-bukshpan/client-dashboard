@@ -4,7 +4,7 @@
  * פענוח contact_id (מספר טלפון מוואטסאפ) לסוג משתמש והרשאות.
  *
  * סדר בדיקה:
- * 1. env vars — BOT_ADMIN_PHONE → admin, BOT_MOSHE_PHONE → moshe_admin
+ * 1. env vars — BOT_ADMIN_PHONE → admin, BOT_EXTRA_ADMIN_PHONE → admin, BOT_MOSHE_PHONE → moshe_admin
  * 2. טבלת bot_contacts ב-DB (workers / partners שנרשמו ידנית)
  * 3. moshe_workers.phone — fallback אוטומטי
  * 4. moshe_partners.phone — fallback אוטומטי
@@ -39,16 +39,16 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     // פגישות
     'getUpcomingAppointments', 'createAppointment', 'cancelAppointment', 'updateAppointmentStatus',
     // משימות עובדי משרד
-    'getOpenTasks', 'createTask', 'updateTaskStatus', 'getWorkerTasks',
+    'getOpenTasks', 'createTask', 'updateTaskStatus',
     // לקוחות
     'searchClients', 'getClientDetails', 'createClient',
-    // פרויקטי משה (גישת admin מלאה)
+    // פרויקטי פורטל (גישת admin מלאה)
     'listProjects', 'getProjectSummary', 'getProjectBalance',
     'addBuyer', 'addProjectPayment', 'markPaymentPaid',
     'addTransaction', 'getPendingPayments',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
-    // עובדי משה
+    // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
@@ -60,13 +60,13 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     'addTransaction', 'getPendingPayments',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
-    // עובדי משה
+    // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
   ],
   worker: [
-    // עובד — רק על עצמו
+    // עובד פורטל — רק על עצמו
     'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
   ],
   partner: [
@@ -83,21 +83,24 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
   // נרמול: הסר + מוביל, רווחים, מקפים
   const phone = contactId.replace(/^\+/, '').replace(/[\s\-()]/g, '')
 
-  // 1. בדיקת env — מנהל כללי
-  const adminPhone = (process.env.BOT_ADMIN_PHONE || '').replace(/^\+/, '').trim()
-  if (adminPhone && phone === adminPhone) {
-    return {
-      role: 'admin',
-      phone,
-      name: 'מנהל',
-      allowedProjectIds: null,
-      allowedTools: TOOL_PERMISSIONS.admin,
-    }
+  // ── עזר: בדיקה אם phone שווה לmenv phone value ──────────────────────────────
+  const matchesEnvPhone = (envVar: string) => {
+    const envPhone = (process.env[envVar] || '').replace(/^\+/, '').trim()
+    return envPhone && phone === envPhone
   }
 
-  // 2. בדיקת env — משה
-  const moshePhone = (process.env.BOT_MOSHE_PHONE || '').replace(/^\+/, '').trim()
-  if (moshePhone && phone === moshePhone) {
+  // 1. env — מנהל כללי (admin)
+  if (matchesEnvPhone('BOT_ADMIN_PHONE')) {
+    return buildAdminCtx(phone, 'מנהל')
+  }
+
+  // 2. env — admin נוסף
+  if (matchesEnvPhone('BOT_EXTRA_ADMIN_PHONE')) {
+    return buildAdminCtx(phone, 'מנהל')
+  }
+
+  // 3. env — משה (moshe_admin)
+  if (matchesEnvPhone('BOT_MOSHE_PHONE')) {
     return {
       role: 'moshe_admin',
       phone,
@@ -107,18 +110,33 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
     }
   }
 
-  // 3. בדיקת טבלת bot_contacts (מאפשר רישום ידני גמיש)
+  // 4. טבלת bot_contacts (רישום ידני גמיש)
   const { data: botContact } = await db
     .from('bot_contacts')
-    .select('user_type, ref_id, name')
+    .select('role, ref_id, name')
     .eq('phone', phone)
     .eq('is_active', true)
     .maybeSingle()
 
   if (botContact) {
-    const role = botContact.user_type as UserRole
-    let allowedProjectIds: string[] | null = null
+    const role = botContact.role as UserRole
 
+    // admin מהDB — גישה מלאה
+    if (role === 'admin') return buildAdminCtx(phone, botContact.name ?? 'מנהל')
+
+    // moshe_admin מהDB
+    if (role === 'moshe_admin') {
+      return {
+        role: 'moshe_admin',
+        refId: botContact.ref_id ?? undefined,
+        name: botContact.name ?? undefined,
+        phone,
+        allowedProjectIds: null,
+        allowedTools: TOOL_PERMISSIONS.moshe_admin,
+      }
+    }
+
+    let allowedProjectIds: string[] | null = null
     if (role === 'partner' && botContact.ref_id) {
       allowedProjectIds = await getPartnerProjectIds(botContact.ref_id)
     }
@@ -133,10 +151,8 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
     }
   }
 
-  // 4. Fallback — חיפוש אוטומטי ב-moshe_workers לפי phone
-  // נסה פורמטים שונים: 972XXXXXXXXX, 0XXXXXXXXX
-  const localPhone = phone.startsWith('972') ? '0' + phone.slice(3) : phone
-  const intlPhone = phone.startsWith('0') ? '972' + phone.slice(1) : phone
+  // 5. Fallback — חיפוש אוטומטי ב-moshe_workers
+  const { localPhone, intlPhone } = phoneVariants(phone)
 
   const { data: worker } = await db
     .from('moshe_workers')
@@ -151,12 +167,12 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
       refId: worker.id,
       name: worker.name,
       phone,
-      allowedProjectIds: null, // עובד רואה רק משימות שלו (מסוננות לפי worker_id)
+      allowedProjectIds: null, // מסוננות לפי worker_id בכלים עצמם
       allowedTools: TOOL_PERMISSIONS.worker,
     }
   }
 
-  // 5. Fallback — חיפוש ב-moshe_partners לפי phone
+  // 6. Fallback — חיפוש ב-moshe_partners
   const { data: partner } = await db
     .from('moshe_partners')
     .select('id, name, project_id')
@@ -164,7 +180,6 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
     .maybeSingle()
 
   if (partner) {
-    // שותף יכול לראות רק פרויקטים שיש לו בהם חלק
     const allProjectIds = await getPartnerAllProjectIds(partner.id)
     return {
       role: 'partner',
@@ -187,7 +202,23 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
 
 // ── עזרים ─────────────────────────────────────────────────────────────────────
 
-/** שולף את כל ה-project_ids שלשותף יש בהם השקעה */
+function buildAdminCtx(phone: string, name: string): UserContext {
+  return {
+    role: 'admin',
+    phone,
+    name,
+    allowedProjectIds: null,
+    allowedTools: TOOL_PERMISSIONS.admin,
+  }
+}
+
+function phoneVariants(phone: string): { localPhone: string; intlPhone: string } {
+  const localPhone = phone.startsWith('972') ? '0' + phone.slice(3) : phone
+  const intlPhone = phone.startsWith('0') ? '972' + phone.slice(1) : phone
+  return { localPhone, intlPhone }
+}
+
+/** שולף את כל ה-project_ids של שותף */
 async function getPartnerProjectIds(partnerId: string): Promise<string[]> {
   const { data } = await db
     .from('moshe_partners')
@@ -196,7 +227,7 @@ async function getPartnerProjectIds(partnerId: string): Promise<string[]> {
   return (data ?? []).map((r: any) => r.project_id).filter(Boolean)
 }
 
-/** שולף את כל הפרויקטים שהשותף מופיע בהם (שם זהה — שותף בכמה פרויקטים) */
+/** שולף את כל הפרויקטים שהשותף מופיע בהם */
 async function getPartnerAllProjectIds(partnerId: string): Promise<string[]> {
   const { data } = await db
     .from('moshe_partners')

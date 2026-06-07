@@ -27,15 +27,14 @@ import {
   getAllowedDeclarations,
   executeToolCall,
   executeConfirmedAction,
-  WRITE_TOOLS,
 } from '@/ai/tools/index'
+import { fetchSystemContext, formatSystemContext } from '@/ai/systemContext'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
-// בלם בטיחות — מקסימום סבבי Function-Calling
 const MAX_TOOL_ROUNDS = 6
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
@@ -69,23 +68,31 @@ function checkAuth(request: Request): NextResponse | null {
 
 // ── System instruction builder ─────────────────────────────────────────────────
 
-function buildSystemInstruction(ctx: UserContext): string {
+function buildSystemInstruction(ctx: UserContext, systemCtxText: string): string {
   const roleDescriptions: Record<string, string> = {
-    admin: 'מנהל כללי של המשרד — יש לך גישה מלאה לכל המידע והפעולות.',
-    moshe_admin: 'משה פרוש — מנהל פרויקטי הנדל"ן. יש לך גישה לכל פרטי הפרויקטים, הקונים, השותפים, העובדים וההלוואות.',
-    worker: `עובד בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות ולעדכן רק את המשימות והלוגים שלך עצמך.`,
-    partner: `שותף בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות מידע רק על הפרויקטים שבהם אתה שותף.`,
-    unknown: 'לא מזוהה.',
+    admin:       'מנהל כללי של המשרד — יש לך גישה מלאה לכל המידע והפעולות.',
+    moshe_admin: 'משה פרוש — מנהל פרויקטי הנדל"ן (הפורטל). יש לך גישה לכל פרטי הפרויקטים, הקונים, השותפים, העובדים וההלוואות.',
+    worker:      `עובד פורטל בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות ולעדכן רק את המשימות שלך עצמך.`,
+    partner:     `שותף בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות מידע רק על הפרויקטים שבהם אתה שותף.`,
+    unknown:     'לא מזוהה.',
   }
 
-  return (
-    'אתה עוזר פנימי של מערכת ניהול נדל"ן ומשרד. ענה בעברית בלבד, בקצרה ובאדיבות.\n' +
-    `זהות המשתמש: ${roleDescriptions[ctx.role] || ctx.role}\n` +
-    'כשנדרש מידע — השתמש בכלים הזמינים ואל תמציא נתונים.\n' +
-    'כשכלי מחזיר שגיאה — הסבר בנימוס.\n' +
-    'כאשר כלי מחזיר pending=true — נסח למשתמש הודעת אישור ברורה על בסיס confirmation_message, ' +
-    'וסיים ב: "כדי לאשר — כתוב *כן*. לביטול — כתוב *לא*."'
-  )
+  return [
+    'אתה עוזר פנימי של מערכת ניהול נדל"ן ומשרד. ענה בעברית בלבד, בקצרה ובאדיבות.',
+    `זהות המשתמש: ${roleDescriptions[ctx.role] || ctx.role}`,
+    '',
+    '📌 הגדרות חשובות:',
+    '• "פורטל" = פורטל משה פרוש (פרויקטי נדל"ן)',
+    '• "עובד" בהקשר פורטל = עובד של משה (moshe_workers). "עובד" בהקשר משרד = עובד כללי (tasks).',
+    '• "יתרת הלוואות" = סכום ההלוואה מינוס מה ששולם חזרה — ללא חישוב ריבית!',
+    '',
+    'כשנדרש מידע — השתמש בכלים הזמינים ואל תמציא נתונים.',
+    'כשכלי מחזיר שגיאה — הסבר בנימוס.',
+    'כאשר כלי מחזיר pending=true — נסח למשתמש הודעת אישור ברורה, וסיים ב:',
+    '"כדי לאשר — כתוב *כן*. לביטול — כתוב *לא*."',
+    '',
+    systemCtxText,
+  ].join('\n')
 }
 
 // ── Main Handler ───────────────────────────────────────────────────────────────
@@ -114,17 +121,17 @@ export async function POST(request: Request) {
   }
 
   const contactId = (body.contact_id || '').trim()
+  const ctx = await resolveUserContext(contactId)
+
+  if (ctx.role === 'unknown') {
+    return NextResponse.json({
+      reply_text: 'מצטער, המספר שלך אינו רשום במערכת. פנה למנהל לקבלת גישה.',
+    })
+  }
 
   // ── מצב 2: ביצוע פעולה מאושרת ────────────────────────────────────────────
   if (body.confirmed_action) {
     const { type, params } = body.confirmed_action
-
-    // אימות זהות גם לאישורים
-    const ctx = await resolveUserContext(contactId)
-    if (ctx.role === 'unknown') {
-      return NextResponse.json({ reply_text: 'מצטער, לא הצלחתי לזהות אותך במערכת.' })
-    }
-
     try {
       const result = await executeConfirmedAction(type, params)
       const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
@@ -154,31 +161,23 @@ export async function POST(request: Request) {
     )
   }
 
-  // זיהוי המשתמש
-  const ctx = await resolveUserContext(contactId)
-
-  if (ctx.role === 'unknown') {
-    return NextResponse.json({
-      reply_text: 'מצטער, המספר שלך אינו רשום במערכת. פנה למנהל לקבלת גישה.',
-    })
-  }
-
-  // הכנת הכלים המותרים
   const allowedDeclarations = getAllowedDeclarations(ctx)
   if (allowedDeclarations.length === 0) {
     return NextResponse.json({ reply_text: 'אין לך הרשאות לבצע פעולות כרגע.' })
   }
 
   try {
+    // שולף context דינמי מה-DB (פרויקטים, עובדים, שותפים, לקוחות)
+    const systemCtxData = await fetchSystemContext()
+    const systemCtxText = formatSystemContext(systemCtxData)
+
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       tools: [{ functionDeclarations: allowedDeclarations }],
-      systemInstruction: buildSystemInstruction(ctx),
+      systemInstruction: buildSystemInstruction(ctx, systemCtxText),
     })
 
     const chat = model.startChat()
-
-    // שולחים את הודעת המשתמש (עם contact_id לתיעוד בלבד)
     let result = await chat.sendMessage(messageText)
 
     // ── לולאת Function-Calling ─────────────────────────────────────────────
@@ -195,7 +194,6 @@ export async function POST(request: Request) {
         calls.map(async (call) => {
           const output = await executeToolCall(call.name, call.args as Record<string, any>, ctx)
 
-          // זיהוי פעולת כתיבה ממתינה לאישור
           if ((output as any).pending === true && (output as any).action_type) {
             pendingAction = {
               type: (output as any).action_type as string,
@@ -218,7 +216,6 @@ export async function POST(request: Request) {
     const replyText =
       result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה. נסה לנסח מחדש.'
 
-    // אם יש פעולה ממתינה — מחזירים אותה ל-n8n יחד עם התשובה
     const response: Record<string, any> = { reply_text: replyText }
     if (pendingAction) {
       response.pending_action = pendingAction

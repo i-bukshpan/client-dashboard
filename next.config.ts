@@ -7,10 +7,8 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '50mb',
     },
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
+    // Skip type checking during production builds (we check locally with tsc)
     ignoreBuildErrors: true,
   },
 };
