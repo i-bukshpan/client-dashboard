@@ -1,7 +1,7 @@
 -- migration 029: extra admin phone number for bot
 -- Run in Supabase SQL editor
 
-INSERT INTO bot_contacts (phone, role, name, notes)
+INSERT INTO bot_contacts (phone, user_type, name, notes)
 VALUES (
   '972504283555',
   'admin',
@@ -9,5 +9,5 @@ VALUES (
   'גישת admin נוספת - מוגדרת ידנית'
 )
 ON CONFLICT (phone) DO UPDATE SET
-  role = 'admin',
+  user_type = 'admin',
   notes = 'גישת admin נוספת - מוגדרת ידנית';

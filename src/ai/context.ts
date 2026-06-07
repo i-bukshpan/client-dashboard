@@ -113,13 +113,13 @@ export async function resolveUserContext(contactId: string): Promise<UserContext
   // 4. טבלת bot_contacts (רישום ידני גמיש)
   const { data: botContact } = await db
     .from('bot_contacts')
-    .select('role, ref_id, name')
+    .select('user_type, ref_id, name')
     .eq('phone', phone)
     .eq('is_active', true)
     .maybeSingle()
 
   if (botContact) {
-    const role = botContact.role as UserRole
+    const role = botContact.user_type as UserRole
 
     // admin מהDB — גישה מלאה
     if (role === 'admin') return buildAdminCtx(phone, botContact.name ?? 'מנהל')
