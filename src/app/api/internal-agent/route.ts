@@ -1,131 +1,45 @@
-import {
-  GoogleGenerativeAI,
-  SchemaType,
-  type FunctionDeclaration,
-  type FunctionCall,
-  type Part,
-} from '@google/generative-ai'
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
-
 /**
  * POST /api/internal-agent
  *
- * Endpoint של "Internal AI Agent" המופעל מ-n8n (וואטסאפ).
- * מקבל הודעת טקסט ממשתמש, מריץ לולאת Function-Calling מול Gemini,
- * מפעיל פונקציות ליבה באתר (כרגע: getProjectBalance), ומחזיר תשובה טקסטואלית מוכנה.
+ * ה-endpoint המרכזי של סוכן ה-AI.
+ * מופעל מ-n8n (ווטסאפ) ומטפל בשני מצבים:
  *
- * גוף הבקשה (JSON):
- *   { "message_text": "מה המאזן של פרויקט רחוב הרצל?", "contact_id": "972500000000" }
+ * מצב 1 — הודעה רגילה:
+ *   { "message_text": "מה המאזן של פרויקט X?", "contact_id": "972504XXXXXX" }
+ *   → מזהה את המשתמש, מריץ לולאת Function-Calling, מחזיר תשובה.
+ *   אם יש פעולת כתיבה — מחזיר pending_action לאישור ב-n8n.
  *
- * תשובה (JSON):
- *   { "reply_text": "המאזן של פרויקט רחוב הרצל הוא ₪1,250,000" }
+ * מצב 2 — אישור פעולה:
+ *   { "confirmed_action": { "type": "addExpense", "params": {...} }, "contact_id": "..." }
+ *   → מבצע את הפעולה ישירות ומחזיר אישור.
+ *
+ * Auth: Bearer / x-api-key עם SUPABASE_SERVICE_ROLE_KEY
  */
+
+import {
+  GoogleGenerativeAI,
+  type FunctionCall,
+  type Part,
+} from '@google/generative-ai'
+import { NextResponse } from 'next/server'
+import { resolveUserContext, type UserContext } from '@/ai/context'
+import {
+  getAllowedDeclarations,
+  executeToolCall,
+  executeConfirmedAction,
+  WRITE_TOOLS,
+} from '@/ai/tools/index'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const db = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
 
-// כמה סבבי Function-Calling מותר לפני שעוצרים (בלם בטיחות מפני לולאה אינסופית)
-const MAX_TOOL_ROUNDS = 5
+// בלם בטיחות — מקסימום סבבי Function-Calling
+const MAX_TOOL_ROUNDS = 6
 
-// ──────────────────────────────────────────────────────────────
-// 1. הגדרת ה-Tool (Function Declaration) שחשוף ל-Gemini
-// ──────────────────────────────────────────────────────────────
-const getProjectBalanceDeclaration: FunctionDeclaration = {
-  name: 'getProjectBalance',
-  description:
-    'מחזיר את המאזן הפיננסי הנוכחי (בש"ח) של פרויקט נדל"ן מסוים. ' +
-    'המאזן = סך התקבולים שנגבו מקונים פחות סך ההוצאות ששולמו. ' +
-    'יש להשתמש בכלי זה בכל פעם שהמשתמש שואל על יתרה / מאזן / כמה כסף יש בפרויקט.',
-  parameters: {
-    type: SchemaType.OBJECT,
-    properties: {
-      project: {
-        type: SchemaType.STRING,
-        description:
-          'מזהה הפרויקט (UUID) או שם הפרויקט כפי שהמשתמש ציין אותו, למשל "רחוב הרצל 12" או "פרויקט הצפון".',
-      },
-    },
-    required: ['project'],
-  },
-}
+// ── Auth ───────────────────────────────────────────────────────────────────────
 
-// ──────────────────────────────────────────────────────────────
-// 2. מימוש בפועל של ה-Tool — שאילתת DB אמיתית מול Supabase
-//    (מחזיר תמיד אובייקט פשוט שיוחזר למודל כ-functionResponse)
-// ──────────────────────────────────────────────────────────────
-async function getProjectBalance(args: { project?: string }): Promise<Record<string, unknown>> {
-  const query = (args.project || '').trim()
-  if (!query) {
-    return { found: false, error: 'לא צוין שם או מזהה פרויקט.' }
-  }
-
-  // איתור הפרויקט: ניסיון לפי UUID מדויק, אחרת חיפוש לפי שם (ILIKE)
-  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query)
-
-  const projectQuery = looksLikeUuid
-    ? db.from('moshe_projects').select('id, name').eq('id', query).limit(1)
-    : db.from('moshe_projects').select('id, name').ilike('name', `%${query}%`).limit(2)
-
-  const { data: projects, error: projErr } = await projectQuery
-  if (projErr) {
-    return { found: false, error: `שגיאת מסד נתונים: ${projErr.message}` }
-  }
-  if (!projects || projects.length === 0) {
-    return { found: false, error: `לא נמצא פרויקט בשם "${query}".` }
-  }
-  if (projects.length > 1) {
-    return {
-      found: false,
-      ambiguous: true,
-      error: `נמצאו כמה פרויקטים תואמים ל-"${query}". יש לדייק.`,
-      candidates: projects.map((p) => p.name),
-    }
-  }
-
-  const project = projects[0]
-
-  // חישוב המאזן: תקבולים שנגבו מקונים פחות הוצאות ששולמו (תואם ל-real_balance בלוח הבקרה)
-  const [{ data: buyerPayments }, { data: projectPayments }] = await Promise.all([
-    db.from('moshe_buyer_payments').select('amount, is_received').eq('project_id', project.id),
-    db.from('moshe_project_payments').select('amount, is_paid').eq('project_id', project.id),
-  ])
-
-  const received = (buyerPayments ?? [])
-    .filter((p) => p.is_received)
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-  const paid = (projectPayments ?? [])
-    .filter((p) => p.is_paid)
-    .reduce((sum, p) => sum + Number(p.amount), 0)
-
-  const balance = received - paid
-
-  return {
-    found: true,
-    project_name: project.name,
-    balance,
-    received,
-    paid,
-    currency: 'ILS',
-    balance_formatted: '₪' + balance.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
-  }
-}
-
-// מיפוי שם-הכלי -> המימוש שלו (להוספת כלים נוספים בעתיד)
-const toolImplementations: Record<string, (args: any) => Promise<Record<string, unknown>>> = {
-  getProjectBalance,
-}
-
-// ──────────────────────────────────────────────────────────────
-// Auth סלחני — תואם לשאר ה-endpoints הפנימיים (Bearer / x-api-key)
-// ──────────────────────────────────────────────────────────────
 function checkAuth(request: Request): NextResponse | null {
   const authHeader = request.headers.get('Authorization')
   const apiKeyHeader = request.headers.get('x-api-key')
@@ -146,16 +60,36 @@ function checkAuth(request: Request): NextResponse | null {
   }
   if (!providedToken || providedToken !== expectedKey) {
     return NextResponse.json(
-      { error: 'Unauthorized', message: 'Missing or invalid API key (Authorization Bearer / x-api-key).' },
+      { error: 'Unauthorized', message: 'Missing or invalid API key.' },
       { status: 401 }
     )
   }
   return null
 }
 
-// ──────────────────────────────────────────────────────────────
-// 3. ה-Handler הראשי: לולאת ה-Function-Calling
-// ──────────────────────────────────────────────────────────────
+// ── System instruction builder ─────────────────────────────────────────────────
+
+function buildSystemInstruction(ctx: UserContext): string {
+  const roleDescriptions: Record<string, string> = {
+    admin: 'מנהל כללי של המשרד — יש לך גישה מלאה לכל המידע והפעולות.',
+    moshe_admin: 'משה פרוש — מנהל פרויקטי הנדל"ן. יש לך גישה לכל פרטי הפרויקטים, הקונים, השותפים, העובדים וההלוואות.',
+    worker: `עובד בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות ולעדכן רק את המשימות והלוגים שלך עצמך.`,
+    partner: `שותף בשם ${ctx.name || 'לא ידוע'} — אתה יכול לראות מידע רק על הפרויקטים שבהם אתה שותף.`,
+    unknown: 'לא מזוהה.',
+  }
+
+  return (
+    'אתה עוזר פנימי של מערכת ניהול נדל"ן ומשרד. ענה בעברית בלבד, בקצרה ובאדיבות.\n' +
+    `זהות המשתמש: ${roleDescriptions[ctx.role] || ctx.role}\n` +
+    'כשנדרש מידע — השתמש בכלים הזמינים ואל תמציא נתונים.\n' +
+    'כשכלי מחזיר שגיאה — הסבר בנימוס.\n' +
+    'כאשר כלי מחזיר pending=true — נסח למשתמש הודעת אישור ברורה על בסיס confirmation_message, ' +
+    'וסיים ב: "כדי לאשר — כתוב *כן*. לביטול — כתוב *לא*."'
+  )
+}
+
+// ── Main Handler ───────────────────────────────────────────────────────────────
+
 export async function POST(request: Request) {
   const authError = checkAuth(request)
   if (authError) return authError
@@ -167,57 +101,107 @@ export async function POST(request: Request) {
     )
   }
 
-  // קלט
-  let body: { message_text?: string; contact_id?: string }
+  let body: {
+    message_text?: string
+    contact_id?: string
+    confirmed_action?: { type: string; params: Record<string, any> }
+  }
+
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Bad Request', message: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const messageText = (body.message_text || '').trim()
   const contactId = (body.contact_id || '').trim()
 
+  // ── מצב 2: ביצוע פעולה מאושרת ────────────────────────────────────────────
+  if (body.confirmed_action) {
+    const { type, params } = body.confirmed_action
+
+    // אימות זהות גם לאישורים
+    const ctx = await resolveUserContext(contactId)
+    if (ctx.role === 'unknown') {
+      return NextResponse.json({ reply_text: 'מצטער, לא הצלחתי לזהות אותך במערכת.' })
+    }
+
+    try {
+      const result = await executeConfirmedAction(type, params)
+      const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
+      return NextResponse.json({ reply_text: replyText })
+    } catch (err: any) {
+      console.error('[internal-agent] confirmed action error:', err)
+      return NextResponse.json(
+        { error: 'Action execution failed', message: err?.message },
+        { status: 500 }
+      )
+    }
+  }
+
+  // ── מצב 1: הודעה רגילה ────────────────────────────────────────────────────
+  const messageText = (body.message_text || '').trim()
   if (!messageText) {
-    return NextResponse.json({ error: 'Bad Request', message: 'Missing "message_text".' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Bad Request', message: 'Missing "message_text" or "confirmed_action".' },
+      { status: 400 }
+    )
+  }
+
+  if (!contactId) {
+    return NextResponse.json(
+      { error: 'Bad Request', message: 'Missing "contact_id".' },
+      { status: 400 }
+    )
+  }
+
+  // זיהוי המשתמש
+  const ctx = await resolveUserContext(contactId)
+
+  if (ctx.role === 'unknown') {
+    return NextResponse.json({
+      reply_text: 'מצטער, המספר שלך אינו רשום במערכת. פנה למנהל לקבלת גישה.',
+    })
+  }
+
+  // הכנת הכלים המותרים
+  const allowedDeclarations = getAllowedDeclarations(ctx)
+  if (allowedDeclarations.length === 0) {
+    return NextResponse.json({ reply_text: 'אין לך הרשאות לבצע פעולות כרגע.' })
   }
 
   try {
-    // הגדרת המודל עם הכלים וה-system instruction
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
-      tools: [{ functionDeclarations: [getProjectBalanceDeclaration] }],
-      systemInstruction:
-        'אתה עוזר פיננסי פנימי של חברת נדל"ן, עונה בעברית בלבד, בקצרה ובאדיבות. ' +
-        'כשנדרש מידע פיננסי על פרויקט — השתמש בכלים הזמינים ואל תמציא נתונים. ' +
-        'אם כלי מחזיר שגיאה או שלא נמצא פרויקט, הסבר זאת למשתמש בנימוס.',
+      tools: [{ functionDeclarations: allowedDeclarations }],
+      systemInstruction: buildSystemInstruction(ctx),
     })
 
-    // פותחים שיחה — ה-ChatSession מנהל את ההיסטוריה (turns) אוטומטית
     const chat = model.startChat()
 
-    // הסבב הראשון: שולחים את הודעת המשתמש
-    let result = await chat.sendMessage(
-      contactId ? `[contact_id: ${contactId}] ${messageText}` : messageText
-    )
+    // שולחים את הודעת המשתמש (עם contact_id לתיעוד בלבד)
+    let result = await chat.sendMessage(messageText)
 
-    // ── הלופ: כל עוד המודל מבקש להריץ פונקציות, מריצים ומחזירים תוצאות ──
+    // ── לולאת Function-Calling ─────────────────────────────────────────────
     let rounds = 0
+    let pendingAction: { type: string; params: Record<string, any> } | null = null
+
     while (rounds < MAX_TOOL_ROUNDS) {
       const calls: FunctionCall[] | undefined = result.response.functionCalls()
-
-      // אין בקשות לכלים -> Gemini החזיר תשובה טקסטואלית סופית
       if (!calls || calls.length === 0) break
 
       rounds++
 
-      // מריצים כל פונקציה שהמודל ביקש, ומרכיבים functionResponse לכל אחת
       const responseParts: Part[] = await Promise.all(
         calls.map(async (call) => {
-          const impl = toolImplementations[call.name]
-          const output = impl
-            ? await impl(call.args as any)
-            : { error: `כלי לא מוכר: ${call.name}` }
+          const output = await executeToolCall(call.name, call.args as Record<string, any>, ctx)
+
+          // זיהוי פעולת כתיבה ממתינה לאישור
+          if ((output as any).pending === true && (output as any).action_type) {
+            pendingAction = {
+              type: (output as any).action_type as string,
+              params: (output as any).action_params as Record<string, any>,
+            }
+          }
 
           return {
             functionResponse: {
@@ -228,15 +212,19 @@ export async function POST(request: Request) {
         })
       )
 
-      // שולחים את כל תוצאות הכלים חזרה למודל בסבב הבא
       result = await chat.sendMessage(responseParts)
     }
 
     const replyText =
-      result.response.text().trim() ||
-      'מצטער, לא הצלחתי להפיק תשובה. נסה לנסח מחדש.'
+      result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה. נסה לנסח מחדש.'
 
-    return NextResponse.json({ reply_text: replyText })
+    // אם יש פעולה ממתינה — מחזירים אותה ל-n8n יחד עם התשובה
+    const response: Record<string, any> = { reply_text: replyText }
+    if (pendingAction) {
+      response.pending_action = pendingAction
+    }
+
+    return NextResponse.json(response)
   } catch (err: any) {
     console.error('[internal-agent] error:', err)
     return NextResponse.json(
