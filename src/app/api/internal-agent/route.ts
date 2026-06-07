@@ -154,11 +154,16 @@ export async function POST(request: Request) {
   }
 
   // ── 1. בדיקת סשן: האם יש פעולה ממתינה? ─────────────────────────────────────────
-  const { data: pendingAction } = await db
+  const { data: pendingAction, error: pendingError } = await db
     .from('bot_pending_actions')
     .select('*')
     .eq('phone', ctx.phone)
     .maybeSingle()
+
+  if (pendingError) {
+    console.error('[internal-agent] DB Error fetching pending action:', pendingError)
+    // אנו לא עוצרים פה כדי לא לתקוע את הבוט אם הטבלה חסרה, אבל רושמים ללוג
+  }
 
   if (pendingAction) {
     const isConfirm = /^(כן|yes|confirm|מאשר|אישור)$/i.test(messageText)
@@ -246,15 +251,23 @@ export async function POST(request: Request) {
     // ── 4. אם יש פעולה לשמירה -> שומר ב-DB ומחזיר JSON אינטראקטיבי ───────────
     if (actionToSave) {
       // עדכון ב-DB (upsert)
-      await db.from('bot_pending_actions').upsert({
+      const { error: upsertError } = await db.from('bot_pending_actions').upsert({
         phone: ctx.phone,
         action_type: actionToSave.type,
         action_params: actionToSave.params,
         created_at: new Date().toISOString()
       }, { onConflict: 'phone' })
 
+      if (upsertError) {
+        console.error('[internal-agent] DB Error saving pending action:', upsertError)
+        return NextResponse.json({ reply_text: `שגיאת מערכת בשמירת הפעולה (האם הרצת את 030_bot_pending_actions.sql?): ${upsertError.message}` })
+      }
+
+      // הוספת טקסט עזר למקרה ש-n8n לא מציג את הכפתורים
+      const finalReplyText = replyText + '\n\n*(כדי לאשר, כתוב "מאשר". לביטול כתוב "ביטול")*'
+
       return NextResponse.json({
-        reply_text: replyText,
+        reply_text: finalReplyText,
         requires_interactive: true,
         interactive_message: {
           text: replyText,
