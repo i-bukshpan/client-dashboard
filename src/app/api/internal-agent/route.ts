@@ -5,13 +5,13 @@
  * מופעל מ-n8n (ווטסאפ) ומטפל בשני מצבים:
  *
  * מצב 1 — הודעה רגילה:
- *   { "message_text": "מה המאזן של פרויקט X?", "contact_id": "972504XXXXXX" }
- *   → מזהה את המשתמש, מריץ לולאת Function-Calling, מחזיר תשובה.
- *   אם יש פעולת כתיבה — מחזיר pending_action לאישור ב-n8n.
+ *   מזהה את המשתמש, טוען היסטוריית שיחה, מריץ לולאת Function-Calling.
+ *   אם יש פעולת כתיבה — שומר ל-DB ומחזיר פורמט אינטראקטיבי ל-n8n (כפתורי כן/לא).
  *
- * מצב 2 — אישור פעולה:
- *   { "confirmed_action": { "type": "addExpense", "params": {...} }, "contact_id": "..." }
- *   → מבצע את הפעולה ישירות ומחזיר אישור.
+ * מצב 2 — תשובה לפעולה ממתינה (Stateful):
+ *   לפני הפעלת ה-AI, בודק ב-DB אם יש למשתמש הזה פעולה שממתינה לאישור.
+ *   אם המשתמש אישר ("כן" / "מאשר"), ה-API מבצע את הפעולה מיד.
+ *   אם המשתמש סירב או שלח הודעה אחרת, מבטל את ההמתנה.
  *
  * Auth: Bearer / x-api-key עם SUPABASE_SERVICE_ROLE_KEY
  */
@@ -20,6 +20,7 @@ import {
   GoogleGenerativeAI,
   type FunctionCall,
   type Part,
+  type Content,
 } from '@google/generative-ai'
 import { NextResponse } from 'next/server'
 import { resolveUserContext, type UserContext } from '@/ai/context'
@@ -29,11 +30,16 @@ import {
   executeConfirmedAction,
 } from '@/ai/tools/index'
 import { fetchSystemContext, formatSystemContext } from '@/ai/systemContext'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '')
+const db = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const MAX_TOOL_ROUNDS = 6
 
@@ -88,11 +94,20 @@ function buildSystemInstruction(ctx: UserContext, systemCtxText: string): string
     '',
     'כשנדרש מידע — השתמש בכלים הזמינים ואל תמציא נתונים.',
     'כשכלי מחזיר שגיאה — הסבר בנימוס.',
-    'כאשר כלי מחזיר pending=true — נסח למשתמש הודעת אישור ברורה, וסיים ב:',
-    '"כדי לאשר — כתוב *כן*. לביטול — כתוב *לא*."',
+    'כאשר כלי מחזיר pending=true — פשוט תחזיר הודעה קצרה ושאל את המשתמש אם לאשר. המערכת כבר תייצר את הכפתורים.',
     '',
     systemCtxText,
   ].join('\n')
+}
+
+// ── Helper: Format History ────────────────────────────────────────────────────
+
+function formatHistory(history?: Array<{ role: string; text: string }>): Content[] {
+  if (!history || !Array.isArray(history)) return []
+  return history.map(item => ({
+    role: item.role === 'model' || item.role === 'ai' ? 'model' : 'user',
+    parts: [{ text: item.text }],
+  }))
 }
 
 // ── Main Handler ───────────────────────────────────────────────────────────────
@@ -111,7 +126,7 @@ export async function POST(request: Request) {
   let body: {
     message_text?: string
     contact_id?: string
-    confirmed_action?: { type: string; params: Record<string, any> }
+    history?: Array<{ role: string; text: string }>
   }
 
   try {
@@ -120,7 +135,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Bad Request', message: 'Invalid JSON body.' }, { status: 400 })
   }
 
+  const messageText = (body.message_text || '').trim()
   const contactId = (body.contact_id || '').trim()
+
+  if (!messageText || !contactId) {
+    return NextResponse.json(
+      { error: 'Bad Request', message: 'Missing "message_text" or "contact_id".' },
+      { status: 400 }
+    )
+  }
+
   const ctx = await resolveUserContext(contactId)
 
   if (ctx.role === 'unknown') {
@@ -129,45 +153,42 @@ export async function POST(request: Request) {
     })
   }
 
-  // ── מצב 2: ביצוע פעולה מאושרת ────────────────────────────────────────────
-  if (body.confirmed_action) {
-    const { type, params } = body.confirmed_action
-    try {
-      const result = await executeConfirmedAction(type, params)
-      const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
-      return NextResponse.json({ reply_text: replyText })
-    } catch (err: any) {
-      console.error('[internal-agent] confirmed action error:', err)
-      return NextResponse.json(
-        { error: 'Action execution failed', message: err?.message },
-        { status: 500 }
-      )
+  // ── 1. בדיקת סשן: האם יש פעולה ממתינה? ─────────────────────────────────────────
+  const { data: pendingAction } = await db
+    .from('bot_pending_actions')
+    .select('*')
+    .eq('phone', ctx.phone)
+    .maybeSingle()
+
+  if (pendingAction) {
+    const isConfirm = /^(כן|yes|confirm|מאשר|אישור)$/i.test(messageText)
+    const isCancel = /^(לא|no|cancel|ביטול|מבטל)$/i.test(messageText)
+
+    // מוחקים את הפעולה מה-DB בכל מקרה (או שבוצע, או שבוטל, או שהמשתמש עבר נושא)
+    await db.from('bot_pending_actions').delete().eq('phone', ctx.phone)
+
+    if (isConfirm) {
+      try {
+        const result = await executeConfirmedAction(pendingAction.action_type, pendingAction.action_params)
+        const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
+        return NextResponse.json({ reply_text: replyText })
+      } catch (err: any) {
+        console.error('[internal-agent] confirmed action error:', err)
+        return NextResponse.json({ reply_text: `שגיאה בביצוע הפעולה: ${err.message}` })
+      }
+    } else if (isCancel) {
+      return NextResponse.json({ reply_text: 'הפעולה בוטלה.' })
     }
+    // אם לא 'כן' ולא 'לא', נמשיך לעבד את ההודעה כרגיל.
   }
 
-  // ── מצב 1: הודעה רגילה ────────────────────────────────────────────────────
-  const messageText = (body.message_text || '').trim()
-  if (!messageText) {
-    return NextResponse.json(
-      { error: 'Bad Request', message: 'Missing "message_text" or "confirmed_action".' },
-      { status: 400 }
-    )
-  }
-
-  if (!contactId) {
-    return NextResponse.json(
-      { error: 'Bad Request', message: 'Missing "contact_id".' },
-      { status: 400 }
-    )
-  }
-
+  // ── 2. הרצת ה-AI ─────────────────────────────────────────────────────────────
   const allowedDeclarations = getAllowedDeclarations(ctx)
   if (allowedDeclarations.length === 0) {
     return NextResponse.json({ reply_text: 'אין לך הרשאות לבצע פעולות כרגע.' })
   }
 
   try {
-    // שולף context דינמי מה-DB (פרויקטים, עובדים, שותפים, לקוחות)
     const systemCtxData = await fetchSystemContext()
     const systemCtxText = formatSystemContext(systemCtxData)
 
@@ -177,12 +198,15 @@ export async function POST(request: Request) {
       systemInstruction: buildSystemInstruction(ctx, systemCtxText),
     })
 
-    const chat = model.startChat()
+    const chat = model.startChat({
+      history: formatHistory(body.history),
+    })
+
     let result = await chat.sendMessage(messageText)
 
-    // ── לולאת Function-Calling ─────────────────────────────────────────────
+    // ── 3. לולאת Function-Calling ──────────────────────────────────────────────
     let rounds = 0
-    let pendingAction: { type: string; params: Record<string, any> } | null = null
+    let actionToSave: { type: string; params: Record<string, any> } | null = null
 
     while (rounds < MAX_TOOL_ROUNDS) {
       const calls: FunctionCall[] | undefined = result.response.functionCalls()
@@ -190,38 +214,61 @@ export async function POST(request: Request) {
 
       rounds++
 
-      const responseParts: Part[] = await Promise.all(
+      const executedCalls = await Promise.all(
         calls.map(async (call) => {
           const output = await executeToolCall(call.name, call.args as Record<string, any>, ctx)
-
-          if ((output as any).pending === true && (output as any).action_type) {
-            pendingAction = {
-              type: (output as any).action_type as string,
-              params: (output as any).action_params as Record<string, any>,
-            }
-          }
-
-          return {
-            functionResponse: {
-              name: call.name,
-              response: output,
-            },
-          } satisfies Part
+          return { call, output }
         })
       )
+
+      const pendingExecution = executedCalls.find(({ output }) => (output as any).pending === true && (output as any).action_type)
+      if (pendingExecution) {
+        actionToSave = {
+          type: (pendingExecution.output as any).action_type as string,
+          params: (pendingExecution.output as any).action_params as Record<string, any>,
+        }
+      }
+
+      const responseParts: Part[] = executedCalls.map(({ call, output }) => {
+        return {
+          functionResponse: {
+            name: call.name,
+            response: output,
+          },
+        } satisfies Part
+      })
 
       result = await chat.sendMessage(responseParts)
     }
 
-    const replyText =
-      result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה. נסה לנסח מחדש.'
+    const replyText = result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה.'
 
-    const response: Record<string, any> = { reply_text: replyText }
-    if (pendingAction) {
-      response.pending_action = pendingAction
+    // ── 4. אם יש פעולה לשמירה -> שומר ב-DB ומחזיר JSON אינטראקטיבי ───────────
+    if (actionToSave) {
+      // עדכון ב-DB (upsert)
+      await db.from('bot_pending_actions').upsert({
+        phone: ctx.phone,
+        action_type: actionToSave.type,
+        action_params: actionToSave.params,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'phone' })
+
+      return NextResponse.json({
+        reply_text: replyText,
+        requires_interactive: true,
+        interactive_message: {
+          text: replyText,
+          buttons: [
+            { id: "confirm", title: "✅ מאשר" },
+            { id: "cancel", title: "❌ ביטול" }
+          ]
+        }
+      })
     }
 
-    return NextResponse.json(response)
+    // ── 5. תשובה רגילה ──────────────────────────────────────────────────────────
+    return NextResponse.json({ reply_text: replyText })
+    
   } catch (err: any) {
     console.error('[internal-agent] error:', err)
     return NextResponse.json(
