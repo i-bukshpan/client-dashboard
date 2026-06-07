@@ -10,7 +10,7 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Check, Landmark, CalendarDays, Pe
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { createLoan, deleteLoan, toggleLoanPayment, addLoanPayment, deleteLoanPayment, updateLoan, updateLoanPayment } from '@/app/moshe/actions'
+import { createLoan, deleteLoan, toggleLoanPayment, addLoanPayment, deleteLoanPayment, updateLoan, updateLoanPayment, deleteMultipleLoanPayments } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 import type { MosheLoan, MosheLoanPayment, MoshePartner } from '@/types/moshe'
 
@@ -349,7 +349,8 @@ function LoanPaymentsList({ loan, projectId, partners }: {
   const [showAdd, setShowAdd] = useState(false)
   const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '', is_interest: false, add_as_expense: false, partner_action_type: 'none', partner_id: '', action_notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editRow, setEditRow] = useState({ amount: '', due_date: '', notes: '' })
+  const [editRow, setEditRow] = useState({ amount: '', due_date: '', paid_at: '', notes: '' })
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const today = new Date()
 
   const sorted = [...loan.payments].sort((a, b) => {
@@ -372,6 +373,24 @@ function LoanPaymentsList({ loan, projectId, partners }: {
       const r = await deleteLoanPayment(id, projectId)
       if (r.error) toast.error(r.error)
       else toast.success('תשלום נמחק')
+      setSelectedIds(s => {
+        const next = new Set(s)
+        next.delete(id)
+        return next
+      })
+    })
+  }
+
+  function removeSelected() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`האם למחוק ${selectedIds.size} תשלומים נבחרים?`)) return
+    startTransition(async () => {
+      const r = await deleteMultipleLoanPayments(Array.from(selectedIds), projectId)
+      if (r.error) toast.error(r.error)
+      else {
+        toast.success(`${selectedIds.size} תשלומים נמחקו`)
+        setSelectedIds(new Set())
+      }
     })
   }
 
@@ -386,7 +405,12 @@ function LoanPaymentsList({ loan, projectId, partners }: {
 
   function startEdit(p: MosheLoanPayment) {
     setEditingId(p.id)
-    setEditRow({ amount: String(p.amount), due_date: p.due_date ?? '', notes: p.notes ?? '' })
+    setEditRow({ 
+      amount: String(p.amount), 
+      due_date: p.due_date ?? '', 
+      paid_at: p.paid_at ? new Date(p.paid_at).toISOString().slice(0, 16) : '',
+      notes: p.notes ?? '' 
+    })
   }
 
   function saveEdit(id: string) {
@@ -401,7 +425,15 @@ function LoanPaymentsList({ loan, projectId, partners }: {
   return (
     <div className="border-t border-slate-100">
       <div className="px-4 py-2 bg-slate-50/50 flex items-center justify-between">
-        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">לוח תשלומים</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">לוח תשלומים</p>
+          {selectedIds.size > 0 && (
+            <button onClick={removeSelected} disabled={pending}
+              className="text-[11px] text-red-500 font-bold hover:text-red-600 flex items-center gap-1">
+              <Trash2 className="w-3 h-3" /> מחק {selectedIds.size} נבחרים
+            </button>
+          )}
+        </div>
         <button onClick={() => setShowAdd(v => !v)}
           className="text-[11px] text-violet-600 font-bold hover:text-violet-700 flex items-center gap-1">
           <Plus className="w-3 h-3" /> הוסף תשלום
@@ -490,7 +522,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
 
         if (editingId === p.id) {
           return (
-            <div key={p.id} className="px-4 py-3 bg-violet-50/60 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-end border-b border-violet-100">
+            <div key={p.id} className="px-4 py-3 bg-violet-50/60 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 items-end border-b border-violet-100">
               <div>
                 <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
                 <Input type="number" dir="ltr" value={editRow.amount}
@@ -498,9 +530,15 @@ function LoanPaymentsList({ loan, projectId, partners }: {
                   className="h-9 sm:h-8 text-sm sm:text-xs border-violet-200 bg-white" />
               </div>
               <div>
-                <p className="text-[10px] text-slate-400 mb-1">תאריך</p>
+                <p className="text-[10px] text-slate-400 mb-1">יעד תשלום</p>
                 <Input type="date" value={editRow.due_date}
                   onChange={e => setEditRow(r => ({ ...r, due_date: e.target.value }))}
+                  className="h-9 sm:h-8 text-sm sm:text-xs border-violet-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">תאריך ביצוע בפועל</p>
+                <Input type="datetime-local" value={editRow.paid_at}
+                  onChange={e => setEditRow(r => ({ ...r, paid_at: e.target.value }))}
                   className="h-9 sm:h-8 text-sm sm:text-xs border-violet-200 bg-white" />
               </div>
               <div>
@@ -526,6 +564,21 @@ function LoanPaymentsList({ loan, projectId, partners }: {
             'flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0',
             p.is_paid ? 'bg-slate-50/30' : overdue ? 'bg-red-50/20' : ''
           )}>
+            <input 
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-violet-500"
+              checked={selectedIds.has(p.id)}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setSelectedIds(s => {
+                  const next = new Set(s)
+                  if (checked) next.add(p.id)
+                  else next.delete(p.id)
+                  return next
+                })
+              }}
+            />
+
             <button onClick={() => toggle(p)} disabled={pending}
               className={cn(
                 'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
@@ -534,10 +587,10 @@ function LoanPaymentsList({ loan, projectId, partners }: {
               {p.is_paid && <Check className="w-2.5 h-2.5" />}
             </button>
 
-            <div className="w-12 shrink-0 text-center">
+            <div className="w-16 shrink-0 text-center">
               {due ? (
-                <p className={cn('text-xs font-bold', overdue ? 'text-red-500' : p.is_paid ? 'text-slate-300' : 'text-slate-600')}>
-                  {format(due, 'dd/MM')}
+                <p className={cn('text-[11px] font-bold', overdue ? 'text-red-500' : p.is_paid ? 'text-slate-300' : 'text-slate-600')}>
+                  {format(due, 'd MMM yy', { locale: he })}
                 </p>
               ) : (
                 <CalendarDays className="w-3.5 h-3.5 text-slate-200 mx-auto" />

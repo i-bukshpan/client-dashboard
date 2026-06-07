@@ -1059,10 +1059,18 @@ export async function deleteLoanPayment(id: string, projectId: string) {
   return { success: true }
 }
 
+export async function deleteMultipleLoanPayments(ids: string[], projectId: string) {
+  const { error } = await db.from('moshe_loan_payments').delete().in('id', ids)
+  if (error) return { error: `שגיאה במחיקת תשלומים: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
 export async function updateLoanPayment(id: string, raw: any) {
   const schema = z.object({
     amount: z.string().min(1, 'חובה'),
     due_date: z.string().optional(),
+    paid_at: z.string().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
@@ -1076,6 +1084,7 @@ export async function updateLoanPayment(id: string, raw: any) {
     .update({
       amount: parseFloat(d.amount),
       due_date: d.due_date || null,
+      paid_at: d.paid_at || null,
       notes: d.notes || null,
     })
     .eq('id', id)
