@@ -542,6 +542,7 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   const schema = z.object({
     amount: z.string().min(1, 'סכום נדרש'),
     due_date: z.string().optional(),
+    paid_at: z.string().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
@@ -554,6 +555,7 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   const { error } = await db.from('moshe_project_payments').update({
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
+    paid_at: d.paid_at || null,
     notes: d.notes || null,
   }).eq('id', id)
 
@@ -565,6 +567,9 @@ export async function updateProjectPayment(id: string, raw: unknown) {
   }
   if ((oldPayment.due_date || '') !== (d.due_date || '')) {
     changes.push(`תאריך יעד: ${oldPayment.due_date || 'ללא'} ➔ ${d.due_date || 'ללא'}`)
+  }
+  if ((oldPayment.paid_at || '') !== (d.paid_at || '')) {
+    changes.push(`תאריך ביצוע בפועל: ${oldPayment.paid_at || 'ללא'} ➔ ${d.paid_at || 'ללא'}`)
   }
   if ((oldPayment.notes || '') !== (d.notes || '')) {
     changes.push(`הערות: "${oldPayment.notes || ''}" ➔ "${d.notes || ''}"`)
@@ -583,6 +588,7 @@ export async function updateBuyerPayment(id: string, raw: unknown) {
   const schema = z.object({
     amount: z.string().min(1, 'סכום נדרש'),
     due_date: z.string().optional(),
+    received_at: z.string().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
@@ -595,6 +601,7 @@ export async function updateBuyerPayment(id: string, raw: unknown) {
   const { error } = await db.from('moshe_buyer_payments').update({
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
+    received_at: d.received_at || null,
     notes: d.notes || null,
   }).eq('id', id)
 

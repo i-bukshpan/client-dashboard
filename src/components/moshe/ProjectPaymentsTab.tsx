@@ -25,7 +25,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
   const [showAdd, setShowAdd] = useState(false)
   const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editRow, setEditRow] = useState({ amount: '', due_date: '', notes: '' })
+  const [editRow, setEditRow] = useState({ amount: '', due_date: '', paid_at: '', notes: '' })
   const [partialId, setPartialId] = useState<string | null>(null)
   const [partialForm, setPartialForm] = useState({ amount: '', date: '', notes: '' })
 
@@ -60,7 +60,12 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
 
   function startEdit(p: MosheProjectPayment) {
     setEditingId(p.id)
-    setEditRow({ amount: String(p.amount), due_date: p.due_date ?? '', notes: p.notes ?? '' })
+    setEditRow({ 
+      amount: String(p.amount), 
+      due_date: p.due_date ?? '', 
+      paid_at: p.paid_at ? new Date(p.paid_at).toISOString().slice(0, 16) : '',
+      notes: p.notes ?? '' 
+    })
   }
 
   function submitPartial(id: string) {
@@ -156,7 +161,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
 
             if (editingId === p.id) {
               return (
-                <div key={p.id} className="px-4 py-3 bg-amber-50/60 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-end border-b border-amber-100">
+                <div key={p.id} className="px-4 py-3 bg-amber-50/60 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 items-end border-b border-amber-100">
                   <div>
                     <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
                     <Input type="number" dir="ltr" value={editRow.amount}
@@ -164,9 +169,15 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                       className="h-9 text-sm border-amber-200 bg-white" />
                   </div>
                   <div>
-                    <p className="text-[10px] text-slate-400 mb-1">תאריך</p>
+                    <p className="text-[10px] text-slate-400 mb-1">יעד תשלום</p>
                     <Input type="date" value={editRow.due_date}
                       onChange={e => setEditRow(r => ({ ...r, due_date: e.target.value }))}
+                      className="h-9 text-sm border-amber-200 bg-white" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1">תאריך ביצוע בפועל</p>
+                    <Input type="datetime-local" value={editRow.paid_at}
+                      onChange={e => setEditRow(r => ({ ...r, paid_at: e.target.value }))}
                       className="h-9 text-sm border-amber-200 bg-white" />
                   </div>
                   <div>
@@ -215,7 +226,7 @@ export function ProjectPaymentsTab({ projectId, payments }: Props) {
                       overdue ? 'bg-red-100' : p.is_paid ? 'bg-slate-100' : 'bg-amber-50'
                     )}>
                       <p className={cn('text-[9px] font-bold leading-none', overdue ? 'text-red-400' : 'text-slate-400')}>
-                        {format(due, 'MMM', { locale: he })}
+                        {format(due, 'MMM yy', { locale: he })}
                       </p>
                       <p className={cn('text-base font-black leading-tight', overdue ? 'text-red-600' : p.is_paid ? 'text-slate-400' : 'text-amber-700')}>
                         {format(due, 'd')}

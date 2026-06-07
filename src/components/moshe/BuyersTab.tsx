@@ -305,7 +305,7 @@ function BuyerPaymentsList({ buyer, projectId }: {
   const [showAdd, setShowAdd] = useState(false)
   const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editRow, setEditRow] = useState({ amount: '', due_date: '', notes: '' })
+  const [editRow, setEditRow] = useState({ amount: '', due_date: '', received_at: '', notes: '' })
   const [partialId, setPartialId] = useState<string | null>(null)
   const [partialForm, setPartialForm] = useState({ amount: '', date: '', notes: '' })
   const today = new Date()
@@ -344,7 +344,12 @@ function BuyerPaymentsList({ buyer, projectId }: {
 
   function startEdit(p: MosheBuyerPayment) {
     setEditingId(p.id)
-    setEditRow({ amount: String(p.amount), due_date: p.due_date ?? '', notes: p.notes ?? '' })
+    setEditRow({ 
+      amount: String(p.amount), 
+      due_date: p.due_date ?? '', 
+      received_at: p.received_at ? new Date(p.received_at).toISOString().slice(0, 16) : '',
+      notes: p.notes ?? '' 
+    })
   }
 
   function saveEdit(id: string) {
@@ -403,22 +408,39 @@ function BuyerPaymentsList({ buyer, projectId }: {
 
         if (editingId === p.id) {
           return (
-            <div key={p.id} className="px-4 py-2.5 bg-amber-50/40 border-b border-amber-100 grid grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 items-center">
-              <Input type="number" dir="ltr" value={editRow.amount}
-                onChange={e => setEditRow(r => ({ ...r, amount: e.target.value }))}
-                className="h-9 text-sm border-amber-200 bg-white" />
-              <Input type="date" value={editRow.due_date}
-                onChange={e => setEditRow(r => ({ ...r, due_date: e.target.value }))}
-                className="h-9 text-sm border-amber-200 bg-white" />
-              <Input value={editRow.notes}
-                onChange={e => setEditRow(r => ({ ...r, notes: e.target.value }))}
-                placeholder="הערות" className="h-9 text-sm border-amber-200 bg-white" />
-              <Button size="sm" onClick={() => saveEdit(p.id)} disabled={pending}
-                className="h-9 text-xs bg-amber-500 hover:bg-amber-400 text-white px-3">שמור</Button>
-              <button onClick={() => setEditingId(null)}
-                className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600">
-                <X className="w-3.5 h-3.5" />
-              </button>
+            <div key={p.id} className="px-4 py-3 bg-amber-50/40 border-b border-amber-100 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 items-end">
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
+                <Input type="number" dir="ltr" value={editRow.amount}
+                  onChange={e => setEditRow(r => ({ ...r, amount: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">יעד תשלום</p>
+                <Input type="date" value={editRow.due_date}
+                  onChange={e => setEditRow(r => ({ ...r, due_date: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">תאריך קבלה בפועל</p>
+                <Input type="datetime-local" value={editRow.received_at}
+                  onChange={e => setEditRow(r => ({ ...r, received_at: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">הערות</p>
+                <Input value={editRow.notes}
+                  onChange={e => setEditRow(r => ({ ...r, notes: e.target.value }))}
+                  placeholder="הערות" className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                <Button size="sm" onClick={() => saveEdit(p.id)} disabled={pending}
+                  className="flex-1 h-9 text-xs bg-amber-500 hover:bg-amber-400 text-white px-3">שמור</Button>
+                <button onClick={() => setEditingId(null)}
+                  className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white bg-amber-100/50 sm:bg-transparent">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           )
         }
@@ -439,8 +461,8 @@ function BuyerPaymentsList({ buyer, projectId }: {
 
             <div className="w-12 shrink-0 text-center">
               {due ? (
-                <p className={cn('text-xs font-bold', overdue ? 'text-red-500' : p.is_received ? 'text-slate-300' : 'text-slate-600')}>
-                  {format(due, 'dd/MM')}
+                <p className={cn('text-[11px] font-bold', overdue ? 'text-red-500' : p.is_received ? 'text-slate-300' : 'text-slate-600')}>
+                  {format(due, 'd MMM yy', { locale: he })}
                 </p>
               ) : (
                 <CalendarDays className="w-3.5 h-3.5 text-slate-200 mx-auto" />
