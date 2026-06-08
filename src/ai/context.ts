@@ -55,6 +55,8 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
     // יומן משה
     'getMosheCalendarEvents', 'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
+    // תזכורות
+    'createReminder', 'listMyReminders', 'deleteReminder',
   ],
   moshe_admin: [
     // פרויקטים
@@ -70,11 +72,15 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
     // יומן משה
     'getMosheCalendarEvents', 'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
+    // תזכורות
+    'createReminder', 'listMyReminders', 'deleteReminder',
   ],
   worker: [
     // עובד פורטל — רק על עצמו
     'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
     'getWorkerMessages',
+    // תזכורות
+    'listMyReminders', 'createReminder', 'deleteReminder',
   ],
   partner: [
     // שותף — רק הפרויקטים שלו

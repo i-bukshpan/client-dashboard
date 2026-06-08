@@ -76,6 +76,12 @@ import {
   markLoanPaymentPaidDeclaration, markLoanPaymentPaid, executeMarkLoanPaymentPaid,
 } from './loanTools'
 
+import {
+  createReminderDeclaration, createReminder, executeCreateReminder,
+  listMyRemindersDeclaration, listMyReminders,
+  deleteReminderDeclaration, deleteReminder, executeDeleteReminder,
+} from './reminderTools'
+
 // ── כלי כתיבה שדורשים אישור ───────────────────────────────────────────────────
 export const WRITE_TOOLS = new Set([
   'addIncome', 'addExpense',
@@ -87,6 +93,7 @@ export const WRITE_TOOLS = new Set([
   'completeWorkerTask', 'addWorkerLog', 'createWorkerMessage',
   'markLoanPaymentPaid',
   'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
+  'createReminder', 'deleteReminder',
 ])
 
 // ── מיפוי שם-כלי → הצהרה ─────────────────────────────────────────────────────
@@ -128,6 +135,9 @@ const declarationMap: Record<string, FunctionDeclaration> = {
   getLoansSummary: getLoansSummaryDeclaration,
   getPendingLoanPayments: getPendingLoanPaymentsDeclaration,
   markLoanPaymentPaid: markLoanPaymentPaidDeclaration,
+  createReminder: createReminderDeclaration,
+  listMyReminders: listMyRemindersDeclaration,
+  deleteReminder: deleteReminderDeclaration,
 }
 
 /**
@@ -249,6 +259,14 @@ export async function executeToolCall(
     case 'cancelMosheCalendarEvent':
       return cancelMosheCalendarEvent(args as any)
 
+    // Reminders
+    case 'listMyReminders':
+      return listMyReminders(ctx)
+    case 'createReminder':
+      return createReminder(args as any, { phone: ctx.phone, name: ctx.name })
+    case 'deleteReminder':
+      return deleteReminder(args as any, { phone: ctx.phone })
+
     default:
       return { error: `כלי לא מוכר: ${toolName}` }
   }
@@ -281,6 +299,8 @@ export async function executeConfirmedAction(
     case 'markLoanPaymentPaid':   return executeMarkLoanPaymentPaid(actionParams as any)
     case 'createMosheCalendarEvent': return executeCreateMosheCalendarEvent(actionParams as any)
     case 'cancelMosheCalendarEvent': return executeCancelMosheCalendarEvent(actionParams as any)
+    case 'createReminder':   return executeCreateReminder(actionParams as any)
+    case 'deleteReminder':   return executeDeleteReminder(actionParams as any)
     default:
       return { success: false, error: `פעולה לא מוכרת: ${actionType}` }
   }
