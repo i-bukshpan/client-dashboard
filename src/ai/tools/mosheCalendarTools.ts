@@ -98,13 +98,10 @@ export async function createMosheCalendarEvent(args: {
   }
 
   return {
-    message: `האם תרצה לקבוע פגישה/אירוע "${args.title}" בפורטל בתאריך ${new Date(args.start_time).toLocaleString('he-IL')}?`,
     pending: true,
-    options: [
-      { id: 'confirm', title: 'מאשר' },
-      { id: 'cancel', title: 'ביטול' },
-    ],
-    actionParams: args,
+    action_type: 'createMosheCalendarEvent',
+    action_params: args,
+    confirmation_message: `האם תרצה לקבוע פגישה/אירוע "${args.title}" בפורטל בתאריך ${new Date(args.start_time).toLocaleString('he-IL')}?`,
   }
 }
 
@@ -153,13 +150,10 @@ export async function cancelMosheCalendarEvent(args: { event_id: string }): Prom
   }
 
   return {
-    message: `האם לבטל את הפגישה "${event.title}" מיומן הפורטל?`,
     pending: true,
-    options: [
-      { id: 'confirm', title: 'בטל פגישה' },
-      { id: 'cancel', title: 'השאר פגישה' },
-    ],
-    actionParams: args,
+    action_type: 'cancelMosheCalendarEvent',
+    action_params: args,
+    confirmation_message: `האם לבטל את הפגישה "${event.title}" מיומן הפורטל?`,
   }
 }
 
