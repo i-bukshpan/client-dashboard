@@ -83,9 +83,27 @@ function buildSystemInstruction(ctx: UserContext, systemCtxText: string): string
     unknown:     'לא מזוהה.',
   }
 
+  // Israel local time for AI awareness
+  const nowIL = new Date().toLocaleString('sv', { timeZone: 'Asia/Jerusalem' }) // "2026-06-08 20:29:00"
+  const [datePart, timePart] = nowIL.split(' ')
+  const nowILiso = `${datePart}T${timePart}+03:00`
+  const nowDisplay = new Date().toLocaleString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+
   return [
     'אתה עוזר פנימי של מערכת ניהול נדל"ן ומשרד. ענה בעברית בלבד, בקצרה ובאדיבות.',
     `זהות המשתמש: ${roleDescriptions[ctx.role] || ctx.role}`,
+    '',
+    '🕐 **שעון ואזור זמן:**',
+    `• השעה הנוכחית בישראל: ${nowDisplay}`,
+    `• כשאתה מייצר תאריכים/שעות (scheduled_at, start_time, due_date וכו') — השתמש תמיד בפורמט ISO 8601 עם offset ישראלי: +03:00`,
+    `• דוגמה: "מחר ב-9 בבוקר" = ${datePart}T09:00:00+03:00 (אם היום ${datePart})`,
+    `• "עוד שעה" = ${nowILiso} + שעה אחת`,
+    `• "עוד 10 דקות" = ${nowILiso} + 10 דקות`,
+    `• ISO נוכחי לישראל: ${nowILiso}`,
     '',
     '📌 הגדרות חשובות:',
     '• "פורטל" = פורטל משה פרוש (פרויקטי נדל"ן)',
@@ -104,6 +122,7 @@ function buildSystemInstruction(ctx: UserContext, systemCtxText: string): string
     '💰 **כספים ומאזנים:** להוסיף תשלומים, לרשום הוצאות/הכנסות, ולהציג מאזן של פרויקט, שותף או הלוואות (למשל: "מה המאזן של פרויקט X?", "הוסף תשלום לקונה Y").',
     '⏰ **התראות ואיחורים:** להציג דוח התראות על איחורים בתשלומים של קונים, הלוואות או פרויקטים (למשל: "האם יש איחורי תשלומים?").',
     '👥 **עובדים ומשימות:** לראות ולעדכן משימות של עובדי הפורטל (למשל: "אילו משימות פתוחות יש לי?").',
+    '⏰ **תזכורות:** ליצור תזכורות אישיות (למשל: "תזכיר לי עוד שעה לגבי שיחה עם הקבלן").',
     'איך אפשר לעזור עכשיו?"',
     '',
     systemCtxText,

@@ -46,7 +46,17 @@ export async function createReminder(args: {
   const scheduledDate = new Date(args.scheduled_at)
   if (isNaN(scheduledDate.getTime())) return { error: 'תאריך לא תקין.' }
 
-  const displayTime = scheduledDate.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })
+  // Validate not in the past (allow 2 min grace)
+  if (scheduledDate.getTime() < Date.now() - 2 * 60 * 1000) {
+    return { error: `התאריך שציינת (${args.scheduled_at}) כבר עבר. אנא ציין תאריך עתידי.` }
+  }
+
+  // Display in Israel timezone
+  const displayTime = scheduledDate.toLocaleString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    weekday: 'short', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 
   return {
     pending: true,
@@ -55,7 +65,7 @@ export async function createReminder(args: {
       phone: ctx.phone,
       user_name: ctx.name || null,
       message: args.message.trim(),
-      scheduled_at: scheduledDate.toISOString(),
+      scheduled_at: scheduledDate.toISOString(), // always store as UTC
     },
     confirmation_message: `האם לרשום תזכורת: "${args.message.trim()}" לשליחה ב-${displayTime}?`,
   }
