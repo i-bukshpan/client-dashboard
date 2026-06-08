@@ -176,8 +176,8 @@ export async function POST(request: Request) {
   }
 
   if (pendingAction) {
-    const isConfirm = /^\s*(כן|yes|confirm|מאשר|אישור|ok|סבבה|v|✓|1)\s*$/i.test(messageText)
-    const isCancel = /^\s*(לא|no|cancel|ביטול|מבטל|0)\s*$/i.test(messageText)
+    const isCancel = /^\s*(לא|no|cancel|ביטול|מבטל|0|❌)/i.test(messageText) || messageText.includes("לא מאשר")
+    const isConfirm = /^\s*(כן|yes|confirm|מאשר|אישור|ok|סבבה|v|✓|✅|1)/i.test(messageText) && !isCancel
 
     // מוחקים את הפעולה מה-DB בכל מקרה (או שבוצע, או שבוטל, או שהמשתמש עבר נושא)
     await db.from('bot_pending_actions').delete().eq('phone', ctx.phone)
