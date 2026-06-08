@@ -46,6 +46,7 @@ import {
   markPaymentPaidDeclaration, markPaymentPaid, executeMarkPaymentPaid,
   addTransactionDeclaration, addTransaction, executeAddTransaction,
   addBuyerDeclaration, addBuyer, executeAddBuyer,
+  getOverdueAlertsDeclaration, getOverdueAlerts,
 } from './mosheProjectTools'
 
 import {
@@ -53,6 +54,12 @@ import {
   getPartnerSummaryDeclaration, getPartnerSummary,
   addPartnerTransactionDeclaration, addPartnerTransaction, executeAddPartnerTransaction,
 } from './partnerTools'
+
+import {
+  getMosheCalendarEventsDeclaration, getMosheCalendarEvents,
+  createMosheCalendarEventDeclaration, createMosheCalendarEvent, executeCreateMosheCalendarEvent,
+  cancelMosheCalendarEventDeclaration, cancelMosheCalendarEvent, executeCancelMosheCalendarEvent,
+} from './mosheCalendarTools'
 
 import {
   listWorkersDeclaration, listWorkers,
@@ -77,6 +84,7 @@ export const WRITE_TOOLS = new Set([
   'addPartnerTransaction',
   'completeWorkerTask', 'addWorkerLog',
   'markLoanPaymentPaid',
+  'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
 ])
 
 // ── מיפוי שם-כלי → הצהרה ─────────────────────────────────────────────────────
@@ -102,9 +110,13 @@ const declarationMap: Record<string, FunctionDeclaration> = {
   markPaymentPaid: markPaymentPaidDeclaration,
   addTransaction: addTransactionDeclaration,
   addBuyer: addBuyerDeclaration,
+  getOverdueAlerts: getOverdueAlertsDeclaration,
   listPartners: listPartnersDeclaration,
   getPartnerSummary: getPartnerSummaryDeclaration,
   addPartnerTransaction: addPartnerTransactionDeclaration,
+  getMosheCalendarEvents: getMosheCalendarEventsDeclaration,
+  createMosheCalendarEvent: createMosheCalendarEventDeclaration,
+  cancelMosheCalendarEvent: cancelMosheCalendarEventDeclaration,
   listWorkers: listWorkersDeclaration,
   getWorkerTasksMoshe: getWorkerTasksMosheDeclaration,
   completeWorkerTask: completeWorkerTaskDeclaration,
@@ -166,6 +178,8 @@ export async function executeToolCall(
       return getProjectSummary(args)
     case 'getPendingPayments':
       return getPendingPayments(args)
+    case 'getOverdueAlerts':
+      return getOverdueAlerts()
 
     // Partners
     case 'listPartners':
@@ -184,6 +198,10 @@ export async function executeToolCall(
       return getLoansSummary(args)
     case 'getPendingLoanPayments':
       return getPendingLoanPayments(args)
+
+    // Moshe Calendar
+    case 'getMosheCalendarEvents':
+      return getMosheCalendarEvents(args)
 
     // ── קריאות WRITE (מחזירות pending לאישור) ─────────────────────────────────
     case 'addIncome':
@@ -218,6 +236,10 @@ export async function executeToolCall(
       return addWorkerLog(args, ctx.refId)
     case 'markLoanPaymentPaid':
       return markLoanPaymentPaid(args)
+    case 'createMosheCalendarEvent':
+      return createMosheCalendarEvent(args as any)
+    case 'cancelMosheCalendarEvent':
+      return cancelMosheCalendarEvent(args as any)
 
     default:
       return { error: `כלי לא מוכר: ${toolName}` }
@@ -248,6 +270,8 @@ export async function executeConfirmedAction(
     case 'completeWorkerTask':    return executeCompleteWorkerTask(actionParams as any)
     case 'addWorkerLog':          return executeAddWorkerLog(actionParams as any)
     case 'markLoanPaymentPaid':   return executeMarkLoanPaymentPaid(actionParams as any)
+    case 'createMosheCalendarEvent': return executeCreateMosheCalendarEvent(actionParams as any)
+    case 'cancelMosheCalendarEvent': return executeCancelMosheCalendarEvent(actionParams as any)
     default:
       return { success: false, error: `פעולה לא מוכרת: ${actionType}` }
   }

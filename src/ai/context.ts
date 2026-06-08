@@ -45,25 +45,29 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     // פרויקטי פורטל (גישת admin מלאה)
     'listProjects', 'getProjectSummary', 'getProjectBalance',
     'addBuyer', 'addProjectPayment', 'markPaymentPaid',
-    'addTransaction', 'getPendingPayments',
+    'addTransaction', 'getPendingPayments', 'getOverdueAlerts',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
+    // יומן משה
+    'getMosheCalendarEvents', 'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
   ],
   moshe_admin: [
     // פרויקטים
     'listProjects', 'getProjectSummary', 'getProjectBalance',
     'addBuyer', 'addProjectPayment', 'markPaymentPaid',
-    'addTransaction', 'getPendingPayments',
+    'addTransaction', 'getPendingPayments', 'getOverdueAlerts',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
+    // יומן משה
+    'getMosheCalendarEvents', 'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
   ],
   worker: [
     // עובד פורטל — רק על עצמו

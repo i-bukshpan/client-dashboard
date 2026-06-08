@@ -545,3 +545,52 @@ export async function executeAddBuyer(params: {
   if (error) return { success: false, error: error.message }
   return { success: true, message: `קונה "${params.name}" נוסף בהצלחה.` }
 }
+
+// ─── getOverdueAlerts ─────────────────────────────────────────────────────────
+
+export const getOverdueAlertsDeclaration: FunctionDeclaration = {
+  name: 'getOverdueAlerts',
+  description:
+    'מציג התראות על איחורים בתשלומים בפורטל: תשלומים לקבלנים, תקבולים מקונים, ותשלומי הלוואות שעבר תאריך היעד שלהם. ' +
+    'השתמש כאשר המשתמש שואל "האם יש איחורי תשלומים?", "דוח חובות ואיחורים", "מי חייב לנו כסף שאיחר".',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {},
+    required: [],
+  },
+}
+
+export async function getOverdueAlerts(): Promise<Record<string, unknown>> {
+  const today = new Date().toISOString().split('T')[0]
+
+  const [
+    { data: projectPayments },
+    { data: buyerPayments },
+    { data: loanPayments },
+  ] = await Promise.all([
+    db.from('moshe_project_payments').select('id, amount, due_date, notes, moshe_projects(name)').eq('is_paid', false).lt('due_date', today),
+    db.from('moshe_buyer_payments').select('id, amount, due_date, notes, moshe_projects(name), moshe_buyers(name)').eq('is_received', false).lt('due_date', today),
+    db.from('moshe_loan_payments').select('id, amount, due_date, notes, moshe_projects(name), moshe_loans(lender)').eq('is_paid', false).lt('due_date', today),
+  ])
+
+  const formatList = (arr: any[], type: string) => (arr || []).map(p => ({
+    type,
+    amount: p.amount,
+    due_date: p.due_date,
+    project: p.moshe_projects?.name || 'לא ידוע',
+    name: p.moshe_buyers?.name || p.moshe_loans?.lender || '',
+    notes: p.notes || ''
+  }))
+
+  const overdueProject = formatList(projectPayments as any, 'תשלום פרויקט (הוצאה)')
+  const overdueBuyers = formatList(buyerPayments as any, 'תקבול מקונה (הכנסה)')
+  const overdueLoans = formatList(loanPayments as any, 'תשלום הלוואה')
+
+  const allOverdue = [...overdueProject, ...overdueBuyers, ...overdueLoans].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+
+  return {
+    found: true,
+    total_overdue_items: allOverdue.length,
+    overdue_items: allOverdue,
+  }
+}
