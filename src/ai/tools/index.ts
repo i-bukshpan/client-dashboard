@@ -66,6 +66,8 @@ import {
   getWorkerTasksMosheDeclaration, getWorkerTasksMoshe,
   completeWorkerTaskDeclaration, completeWorkerTask, executeCompleteWorkerTask,
   addWorkerLogDeclaration, addWorkerLog, executeAddWorkerLog,
+  getWorkerMessagesDeclaration, getWorkerMessages,
+  createWorkerMessageDeclaration, createWorkerMessage, executeCreateWorkerMessage,
 } from './workerTools'
 
 import {
@@ -82,7 +84,7 @@ export const WRITE_TOOLS = new Set([
   'createClient',
   'addBuyer', 'addProjectPayment', 'markPaymentPaid', 'addTransaction',
   'addPartnerTransaction',
-  'completeWorkerTask', 'addWorkerLog',
+  'completeWorkerTask', 'addWorkerLog', 'createWorkerMessage',
   'markLoanPaymentPaid',
   'createMosheCalendarEvent', 'cancelMosheCalendarEvent',
 ])
@@ -121,6 +123,8 @@ const declarationMap: Record<string, FunctionDeclaration> = {
   getWorkerTasksMoshe: getWorkerTasksMosheDeclaration,
   completeWorkerTask: completeWorkerTaskDeclaration,
   addWorkerLog: addWorkerLogDeclaration,
+  getWorkerMessages: getWorkerMessagesDeclaration,
+  createWorkerMessage: createWorkerMessageDeclaration,
   getLoansSummary: getLoansSummaryDeclaration,
   getPendingLoanPayments: getPendingLoanPaymentsDeclaration,
   markLoanPaymentPaid: markLoanPaymentPaidDeclaration,
@@ -192,6 +196,8 @@ export async function executeToolCall(
       return listWorkers(args)
     case 'getWorkerTasksMoshe':
       return getWorkerTasksMoshe(args, ctx.role === 'worker' ? ctx.refId : undefined)
+    case 'getWorkerMessages':
+      return getWorkerMessages(args, ctx.role === 'worker' ? ctx.refId : undefined)
 
     // Loans
     case 'getLoansSummary':
@@ -234,6 +240,8 @@ export async function executeToolCall(
       return completeWorkerTask(args, ctx.role === 'worker' ? ctx.refId : undefined)
     case 'addWorkerLog':
       return addWorkerLog(args, ctx.refId)
+    case 'createWorkerMessage':
+      return createWorkerMessage(args)
     case 'markLoanPaymentPaid':
       return markLoanPaymentPaid(args)
     case 'createMosheCalendarEvent':
@@ -269,6 +277,7 @@ export async function executeConfirmedAction(
     case 'addPartnerTransaction': return executeAddPartnerTransaction(actionParams as any)
     case 'completeWorkerTask':    return executeCompleteWorkerTask(actionParams as any)
     case 'addWorkerLog':          return executeAddWorkerLog(actionParams as any)
+    case 'createWorkerMessage':   return executeCreateWorkerMessage(actionParams as any)
     case 'markLoanPaymentPaid':   return executeMarkLoanPaymentPaid(actionParams as any)
     case 'createMosheCalendarEvent': return executeCreateMosheCalendarEvent(actionParams as any)
     case 'cancelMosheCalendarEvent': return executeCancelMosheCalendarEvent(actionParams as any)

@@ -50,6 +50,7 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
+    'getWorkerMessages', 'createWorkerMessage',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
     // יומן משה
@@ -64,6 +65,7 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
     'listWorkers', 'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
+    'getWorkerMessages', 'createWorkerMessage',
     // הלוואות
     'getLoansSummary', 'getPendingLoanPayments', 'markLoanPaymentPaid',
     // יומן משה
@@ -72,6 +74,7 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
   worker: [
     // עובד פורטל — רק על עצמו
     'getWorkerTasksMoshe', 'addWorkerLog', 'completeWorkerTask',
+    'getWorkerMessages',
   ],
   partner: [
     // שותף — רק הפרויקטים שלו

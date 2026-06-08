@@ -260,3 +260,135 @@ export async function executeAddWorkerLog(params: {
   if (error) return { success: false, error: error.message }
   return { success: true, message: 'דיווח העבודה נשמר בהצלחה. תודה!' }
 }
+
+// ─── getWorkerMessages (Internal Bot) ──────────────────────────────────────────
+
+export const getWorkerMessagesDeclaration: FunctionDeclaration = {
+  name: 'getWorkerMessages',
+  description:
+    'מחזיר הודעות, משימות ושליחויות מהבוט הפנימי של עובדי הפורטל. ' +
+    'השתמש כאשר המשתמש שואל "האם יש משהו בבוט", "מה יש בבוט לעובד X", "הודעות בבוט הפנימי".',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      worker_name: { type: SchemaType.STRING, description: 'שם העובד (אופציונלי)' },
+      status: { type: SchemaType.STRING, description: 'סטטוס: open, in_progress, done, cancelled' },
+    },
+    required: [],
+  },
+}
+
+export async function getWorkerMessages(args: { worker_name?: string; status?: string }, contextWorkerId?: string): Promise<Record<string, unknown>> {
+  let workerId = contextWorkerId
+
+  if (!workerId && args.worker_name) {
+    const { data: workers } = await db
+      .from('moshe_workers')
+      .select('id, name')
+      .ilike('name', `%${args.worker_name}%`)
+      .limit(1)
+    if (workers && workers.length > 0) workerId = workers[0].id
+  }
+
+  let query = db
+    .from('worker_messages')
+    .select(`
+      id, title, body, type, status, priority, due_date, location, created_at,
+      moshe_workers(name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  if (workerId) query = query.eq('worker_id', workerId)
+  if (args.status) query = query.eq('status', args.status)
+  else query = query.neq('status', 'done').neq('status', 'cancelled')
+
+  const { data, error } = await query
+  if (error) return { found: false, error: error.message }
+
+  return {
+    found: true,
+    count: (data ?? []).length,
+    messages: (data ?? []).map((m: any) => ({
+      id: m.id,
+      worker: m.moshe_workers?.name || 'לא ידוע',
+      type: m.type,
+      title: m.title,
+      body: m.body || '',
+      status: m.status,
+      priority: m.priority,
+      due_date: m.due_date || 'לא הוגדר',
+      location: m.location || '',
+      created_at: m.created_at,
+    })),
+  }
+}
+
+// ─── createWorkerMessage (Internal Bot) ────────────────────────────────────────
+
+export const createWorkerMessageDeclaration: FunctionDeclaration = {
+  name: 'createWorkerMessage',
+  description:
+    'שולח הודעה/משימה לבוט הפנימי של עובד בפורטל. ' +
+    'השתמש כאשר המנהל אומר "שלח משימה לעובד X בבוט", "הוסף שליחות לעובד בבוט".',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      worker_name: { type: SchemaType.STRING, description: 'שם העובד (חובה)' },
+      title: { type: SchemaType.STRING, description: 'כותרת המשימה/ההודעה (חובה)' },
+      body: { type: SchemaType.STRING, description: 'תוכן מורחב' },
+      type: { type: SchemaType.STRING, description: 'סוג: task, delivery, event, message (ברירת מחדל: task)' },
+      priority: { type: SchemaType.STRING, description: 'עדיפות: low, normal, high, urgent' },
+      due_date: { type: SchemaType.STRING, description: 'תאריך יעד בפורמט ISO' },
+      location: { type: SchemaType.STRING, description: 'מיקום/כתובת לשליחות' },
+    },
+    required: ['worker_name', 'title'],
+  },
+}
+
+export async function createWorkerMessage(args: {
+  worker_name?: string; title?: string; body?: string; type?: string; priority?: string; due_date?: string; location?: string
+}): Promise<Record<string, unknown>> {
+  if (!args.worker_name || !args.title) return { pending: false, error: 'שם העובד וכותרת הם חובה.' }
+
+  const { data: workers } = await db
+    .from('moshe_workers')
+    .select('id, name')
+    .ilike('name', `%${args.worker_name}%`)
+    .limit(1)
+
+  if (!workers || workers.length === 0) return { pending: false, error: `לא נמצא עובד בשם "${args.worker_name}".` }
+  const worker = workers[0]
+
+  return {
+    pending: true,
+    action_type: 'createWorkerMessage',
+    action_params: {
+      worker_id: worker.id,
+      title: args.title,
+      body: args.body || null,
+      type: args.type || 'task',
+      priority: args.priority || 'normal',
+      due_date: args.due_date || null,
+      location: args.location || null,
+    },
+    confirmation_message: `האם לשלוח את המשימה "${args.title}" לעובד ${worker.name} בבוט הפנימי?`,
+  }
+}
+
+export async function executeCreateWorkerMessage(params: {
+  worker_id: string; title: string; body?: string | null; type: string; priority: string; due_date?: string | null; location?: string | null
+}): Promise<Record<string, unknown>> {
+  const { error } = await db.from('worker_messages').insert({
+    worker_id: params.worker_id,
+    title: params.title,
+    body: params.body || null,
+    type: params.type,
+    priority: params.priority,
+    due_date: params.due_date || null,
+    location: params.location || null,
+    status: 'open',
+  })
+  if (error) return { success: false, error: error.message }
+  return { success: true, message: 'המשימה נשלחה בהצלחה לבוט הפנימי של העובד.' }
+}
