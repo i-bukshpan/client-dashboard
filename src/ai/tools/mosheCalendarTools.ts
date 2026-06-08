@@ -126,23 +126,39 @@ export async function executeCreateMosheCalendarEvent(
 
 export const cancelMosheCalendarEventDeclaration: FunctionDeclaration = {
   name: 'cancelMosheCalendarEvent',
-  description: 'מבטל פגישה/אירוע קיים מיומן הפורטל לפי מזהה ה-ID של הפגישה.',
+  description: 'מבטל פגישה/אירוע קיים מיומן הפורטל לפי מזהה ה-ID של הפגישה או השם שלה.',
   parameters: {
     type: SchemaType.OBJECT,
     properties: {
       event_id: { type: SchemaType.STRING, description: 'מזהה ה-ID של האירוע לביטול' },
+      event_title: { type: SchemaType.STRING, description: 'שם הפגישה לביטול (במידה ואין מזהה ID)' },
     },
-    required: ['event_id'],
+    required: [],
   },
 }
 
-export async function cancelMosheCalendarEvent(args: { event_id: string }): Promise<Record<string, unknown>> {
-  if (!args.event_id) return { error: 'חסר מזהה פגישה.' }
+export async function cancelMosheCalendarEvent(args: { event_id?: string; event_title?: string }): Promise<Record<string, unknown>> {
+  let eventId = args.event_id
+
+  if (!eventId && args.event_title) {
+    const { data: searchData } = await db
+      .from('moshe_calendar_events')
+      .select('id, title')
+      .ilike('title', `%${args.event_title}%`)
+      .gte('start_time', new Date().toISOString())
+      .limit(1)
+
+    if (searchData && searchData.length > 0) {
+      eventId = searchData[0].id
+    }
+  }
+
+  if (!eventId) return { error: `לא נמצאה פגישה עם השם "${args.event_title}" או שחסר מזהה.` }
 
   const { data: event, error: lookupError } = await db
     .from('moshe_calendar_events')
     .select('title')
-    .eq('id', args.event_id)
+    .eq('id', eventId)
     .single()
 
   if (lookupError || !event) {
@@ -152,7 +168,7 @@ export async function cancelMosheCalendarEvent(args: { event_id: string }): Prom
   return {
     pending: true,
     action_type: 'cancelMosheCalendarEvent',
-    action_params: args,
+    action_params: { event_id: eventId },
     confirmation_message: `האם לבטל את הפגישה "${event.title}" מיומן הפורטל?`,
   }
 }
