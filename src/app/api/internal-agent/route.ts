@@ -230,10 +230,6 @@ export async function POST(request: Request) {
       model: 'gemini-2.5-flash',
       tools: [{ functionDeclarations: allowedDeclarations }],
       systemInstruction: buildSystemInstruction(ctx, systemCtxText),
-      // Disable thinking mode — prevents internal reasoning from leaking into WhatsApp replies
-      generationConfig: {
-        thinkingConfig: { thinkingBudget: 0 },
-      } as any,
     })
 
     const chat = model.startChat({
@@ -279,14 +275,7 @@ export async function POST(request: Request) {
       result = await chat.sendMessage(responseParts)
     }
 
-    // Extract only the non-thought parts of the response (filter out thinking tokens)
-    const rawParts = result.response.candidates?.[0]?.content?.parts ?? []
-    const textFromParts = rawParts
-      .filter((p: any) => !p.thought && typeof p.text === 'string')
-      .map((p: any) => p.text)
-      .join('')
-      .trim()
-    const replyText = textFromParts || result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה.'
+    const replyText = result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה.'
 
     // ── 4. אם יש פעולה לשמירה -> שומר ב-DB ומחזיר JSON אינטראקטיבי ───────────
     if (actionToSave) {
