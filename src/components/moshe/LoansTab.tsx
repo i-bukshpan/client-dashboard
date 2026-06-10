@@ -10,9 +10,9 @@ import { Plus, Trash2, ChevronDown, ChevronUp, Check, Landmark, CalendarDays, Pe
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { createLoan, deleteLoan, toggleLoanPayment, addLoanPayment, deleteLoanPayment, updateLoan, updateLoanPayment, deleteMultipleLoanPayments } from '@/app/moshe/actions'
+import { createLoan, deleteLoan, toggleLoanPayment, addLoanPayment, deleteLoanPayment, updateLoan, updateLoanPayment, deleteMultipleLoanPayments, addLoanReceipt, updateLoanReceipt, toggleLoanReceipt, deleteLoanReceipt } from '@/app/moshe/actions'
 import { toast } from 'sonner'
-import type { MosheLoan, MosheLoanPayment, MoshePartner } from '@/types/moshe'
+import type { MosheLoan, MosheLoanPayment, MoshePartner, MosheLoanReceipt } from '@/types/moshe'
 
 function fmt(n: number) {
   return '₪' + Number(n).toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -20,7 +20,7 @@ function fmt(n: number) {
 
 interface Props {
   projectId: string
-  loans: (MosheLoan & { payments: MosheLoanPayment[] })[]
+  loans: (MosheLoan & { payments: MosheLoanPayment[], receipts: MosheLoanReceipt[] })[]
   partners: MoshePartner[]
 }
 
@@ -87,7 +87,7 @@ function LoanFormFields({ f, setF, partners, partnerMap }: { f: typeof EMPTY_FOR
 export function LoansTab({ projectId, loans, partners }: Props) {
   const [pending, startTransition] = useTransition()
   const [addOpen, setAddOpen] = useState(false)
-  const [editLoan, setEditLoan] = useState<(MosheLoan & { payments: MosheLoanPayment[] }) | null>(null)
+  const [editLoan, setEditLoan] = useState<(MosheLoan & { payments: MosheLoanPayment[], receipts: MosheLoanReceipt[] }) | null>(null)
   const [expandedLoan, setExpandedLoan] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
@@ -112,7 +112,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
     }
   }
 
-  function openEdit(loan: MosheLoan & { payments: MosheLoanPayment[] }) {
+  function openEdit(loan: MosheLoan & { payments: MosheLoanPayment[], receipts: MosheLoanReceipt[] }) {
     setEditLoan(loan)
     setEditForm({
       lender: loan.lender,
@@ -157,6 +157,8 @@ export function LoansTab({ projectId, loans, partners }: Props) {
     s + l.payments.filter(p => p.is_paid && !p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0), 0)
   const totalInterest = loans.reduce((s, l) =>
     s + l.payments.filter(p => p.is_paid && p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0), 0)
+  const totalReceived = loans.reduce((s, l) =>
+    s + l.receipts.filter(r => r.is_received).reduce((ss, r) => ss + Number(r.amount), 0), 0)
   const totalRemaining = loans.reduce((s, l) => {
     const paid = l.payments.filter(p => p.is_paid && !p.is_interest).reduce((ss, p) => ss + Number(p.amount), 0)
     return s + (Number(l.total_amount) - paid)
@@ -175,8 +177,8 @@ export function LoansTab({ projectId, loans, partners }: Props) {
           <p className="text-lg font-black text-emerald-700 mt-0.5 truncate">{fmt(totalPaid)}</p>
         </div>
         <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center overflow-hidden">
-          <p className="text-[10px] text-amber-500 font-bold uppercase truncate">שולם (ריבית)</p>
-          <p className="text-lg font-black text-amber-700 mt-0.5 truncate">{fmt(totalInterest)}</p>
+          <p className="text-[10px] text-amber-500 font-bold uppercase truncate">התקבל (קבלות)</p>
+          <p className="text-lg font-black text-amber-700 mt-0.5 truncate">{fmt(totalReceived)}</p>
         </div>
         <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center overflow-hidden">
           <p className="text-[10px] text-red-500 font-bold uppercase truncate">נותר לשלם (קרן)</p>
@@ -205,6 +207,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
       <div className="space-y-3">
         {loans.map(loan => {
           const paid = loan.payments.filter(p => p.is_paid && !p.is_interest).reduce((s, p) => s + Number(p.amount), 0)
+          const receivedAmt = loan.receipts.filter(r => r.is_received).reduce((s, r) => s + Number(r.amount), 0)
           const total = Number(loan.total_amount)
           const pct = total > 0 ? Math.round((paid / total) * 100) : 0
           const paidCount = loan.payments.filter(p => p.is_paid).length
@@ -234,7 +237,13 @@ export function LoansTab({ projectId, loans, partners }: Props) {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400 mt-1">
                       <span>{fmt(total)}</span>
                       {loan.interest_rate && <span>{loan.interest_rate}% ריבית ({interestLabel}: {fmt(calculatedInterest)})</span>}
-                      <span>{paidCount}/{loan.num_payments} תשלומים</span>
+                      <span>{paidCount}/{loan.num_payments} תשלומים חזרה</span>
+                      <span className={cn(
+                        "font-bold px-1.5 py-0.5 rounded",
+                        receivedAmt < total ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+                      )}>
+                        התקבל: {fmt(receivedAmt)} {receivedAmt < total ? `מתוך ${fmt(total)}` : ''}
+                      </span>
                       {arrangerName && <span className="text-indigo-500">דאג: {arrangerName}</span>}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400 mt-0.5">
@@ -285,7 +294,10 @@ export function LoansTab({ projectId, loans, partners }: Props) {
               </div>
 
               {isExpanded && (
-                <LoanPaymentsList loan={loan} projectId={projectId} partners={partners} />
+                <div className="border-t border-slate-100 divide-y divide-slate-100">
+                  <LoanReceiptsList loan={loan} projectId={projectId} />
+                  <LoanPaymentsList loan={loan} projectId={projectId} partners={partners} />
+                </div>
               )}
             </div>
           )
@@ -341,7 +353,7 @@ export function LoansTab({ projectId, loans, partners }: Props) {
 }
 
 function LoanPaymentsList({ loan, projectId, partners }: {
-  loan: MosheLoan & { payments: MosheLoanPayment[] }
+  loan: MosheLoan & { payments: MosheLoanPayment[], receipts: MosheLoanReceipt[] }
   projectId: string
   partners: MoshePartner[]
 }) {
@@ -423,7 +435,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
   }
 
   return (
-    <div className="border-t border-slate-100">
+    <div>
       <div className="px-4 py-2 bg-slate-50/50 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">לוח תשלומים</p>
@@ -614,6 +626,216 @@ function LoanPaymentsList({ loan, projectId, partners }: {
               className="w-6 h-6 rounded text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0">
               <Trash2 className="w-3 h-3" />
             </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function LoanReceiptsList({ loan, projectId }: {
+  loan: MosheLoan & { receipts: MosheLoanReceipt[] }
+  projectId: string
+}) {
+  const [pending, startTransition] = useTransition()
+  const [showAdd, setShowAdd] = useState(false)
+  const [newRow, setNewRow] = useState({ amount: '', due_date: '', notes: '' })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editRow, setEditRow] = useState({ amount: '', due_date: '', received_at: '', notes: '' })
+  const today = new Date()
+
+  const sorted = [...(loan.receipts || [])].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+  })
+
+  function toggle(p: MosheLoanReceipt) {
+    startTransition(async () => {
+      const r = await toggleLoanReceipt(p.id, projectId, !p.is_received)
+      if (r.error) toast.error(r.error)
+    })
+  }
+
+  function remove(id: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק קבלה זו?')) return
+    startTransition(async () => {
+      const r = await deleteLoanReceipt(id, projectId)
+      if (r.error) toast.error(r.error)
+      else toast.success('קבלה נמחקה')
+    })
+  }
+
+  async function addRow() {
+    if (!newRow.amount) return toast.error('סכום נדרש')
+    const r = await addLoanReceipt({ loan_id: loan.id, project_id: projectId, ...newRow })
+    if (r.error) { toast.error(r.error); return }
+    toast.success('קבלה נוספה')
+    setNewRow({ amount: '', due_date: '', notes: '' })
+    setShowAdd(false)
+  }
+
+  function startEdit(p: MosheLoanReceipt) {
+    setEditingId(p.id)
+    setEditRow({ 
+      amount: String(p.amount), 
+      due_date: p.due_date ?? '', 
+      received_at: p.received_at ? new Date(p.received_at).toISOString().slice(0, 16) : '',
+      notes: p.notes ?? '' 
+    })
+  }
+
+  function saveEdit(id: string) {
+    startTransition(async () => {
+      const r = await updateLoanReceipt(id, editRow)
+      if (r.error) { toast.error(r.error); return }
+      toast.success('קבלה עודכנה')
+      setEditingId(null)
+    })
+  }
+
+  const totalReceived = loan.receipts.reduce((s, r) => s + (r.is_received ? Number(r.amount) : 0), 0)
+  const remainingToReceive = Number(loan.total_amount) - totalReceived
+
+  async function markAllReceived() {
+    if (remainingToReceive <= 0) return
+    startTransition(async () => {
+      const r = await addLoanReceipt({ 
+        loan_id: loan.id, 
+        project_id: projectId, 
+        amount: String(remainingToReceive), 
+        due_date: new Date().toISOString().split('T')[0], 
+        notes: 'התקבל במלואו',
+        is_received: true
+      })
+      if (r.error) toast.error(r.error)
+      else toast.success('סומן כהתקבל במלואו')
+    })
+  }
+
+  return (
+    <div>
+      <div className="px-4 py-2 bg-slate-50/50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">קבלת הלוואה (תשלומים)</p>
+          {remainingToReceive > 0 && (
+            <button 
+              onClick={markAllReceived}
+              disabled={pending}
+              className="text-[10px] bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+            >
+              <Check className="w-3 h-3" />
+              סמן כהתקבל הכל
+            </button>
+          )}
+        </div>
+        <button onClick={() => setShowAdd(v => !v)}
+          className="text-[11px] text-blue-600 font-bold hover:text-blue-700 flex items-center gap-1">
+          <Plus className="w-3 h-3" /> הוסף קבלה
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="px-4 py-3 bg-blue-50/30 border-b border-slate-100 grid grid-cols-[1fr_1fr_2fr_auto] gap-2 items-end">
+          <Input type="number" placeholder="סכום ₪" dir="ltr" value={newRow.amount}
+            onChange={e => setNewRow(r => ({ ...r, amount: e.target.value }))}
+            className="h-8 text-xs border-slate-200 bg-white" />
+          <Input type="date" value={newRow.due_date}
+            onChange={e => setNewRow(r => ({ ...r, due_date: e.target.value }))}
+            className="h-8 text-xs border-slate-200 bg-white" />
+          <Input placeholder="הערות" value={newRow.notes}
+            onChange={e => setNewRow(r => ({ ...r, notes: e.target.value }))}
+            className="h-8 text-xs border-slate-200 bg-white" />
+          <Button size="sm" onClick={addRow} className="h-8 text-xs bg-blue-500 hover:bg-blue-400 text-white px-3">שמור</Button>
+        </div>
+      )}
+
+      {sorted.map(p => {
+        const due = p.due_date ? new Date(p.due_date) : null
+        const overdue = due && !p.is_received && due < today
+
+        if (editingId === p.id) {
+          return (
+            <div key={p.id} className="px-4 py-3 bg-amber-50/40 border-b border-amber-100 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 items-end">
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">סכום (₪)</p>
+                <Input type="number" dir="ltr" value={editRow.amount}
+                  onChange={e => setEditRow(r => ({ ...r, amount: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">תאריך</p>
+                <Input type="date" value={editRow.due_date}
+                  onChange={e => setEditRow(r => ({ ...r, due_date: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">תאריך קבלה בפועל</p>
+                <Input type="datetime-local" value={editRow.received_at}
+                  onChange={e => setEditRow(r => ({ ...r, received_at: e.target.value }))}
+                  className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 mb-1">הערות</p>
+                <Input value={editRow.notes}
+                  onChange={e => setEditRow(r => ({ ...r, notes: e.target.value }))}
+                  placeholder="הערות" className="h-9 text-sm border-amber-200 bg-white" />
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                <Button size="sm" onClick={() => saveEdit(p.id)} disabled={pending}
+                  className="flex-1 h-9 text-xs bg-amber-500 hover:bg-amber-400 text-white px-3">שמור</Button>
+                <button onClick={() => setEditingId(null)}
+                  className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white bg-amber-100/50 sm:bg-transparent">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <div key={p.id}>
+            <div className={cn(
+              'flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0 group',
+              p.is_received ? 'bg-slate-50/30' : overdue ? 'bg-red-50/20' : ''
+            )}>
+              <button onClick={() => toggle(p)} disabled={pending}
+                className={cn(
+                  'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                  p.is_received ? 'bg-blue-500 border-blue-500 text-white' : overdue ? 'border-red-300' : 'border-slate-200 hover:border-blue-400'
+                )}>
+                {p.is_received && <Check className="w-2.5 h-2.5" />}
+              </button>
+
+              <div className="w-12 shrink-0 text-center">
+                {due ? (
+                  <p className={cn('text-[11px] font-bold', overdue ? 'text-red-500' : p.is_received ? 'text-slate-300' : 'text-slate-600')}>
+                    {format(due, 'd MMM yy', { locale: he })}
+                  </p>
+                ) : (
+                  <CalendarDays className="w-3.5 h-3.5 text-slate-200 mx-auto" />
+                )}
+              </div>
+
+              <p className={cn('flex-1 text-xs truncate', p.is_received ? 'line-through text-slate-300' : 'text-slate-600')}>
+                {p.notes || '—'}
+              </p>
+
+              <p className={cn('font-bold text-xs shrink-0', p.is_received ? 'text-slate-300 line-through' : overdue ? 'text-red-600' : 'text-blue-700')}>
+                {fmt(Number(p.amount))}
+              </p>
+
+              <button onClick={() => startEdit(p)} disabled={pending}
+                className="w-6 h-6 rounded border border-slate-200 text-slate-400 hover:text-amber-500 hover:bg-amber-50 hover:border-amber-200 flex items-center justify-center shrink-0 transition-colors">
+                <Pencil className="w-3 h-3" />
+              </button>
+
+              <button onClick={() => remove(p.id)} disabled={pending}
+                className="w-6 h-6 rounded text-slate-200 hover:text-red-400 hover:bg-red-50 flex items-center justify-center shrink-0">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
           </div>
         )
       })}

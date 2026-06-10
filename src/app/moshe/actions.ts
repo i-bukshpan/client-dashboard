@@ -87,6 +87,32 @@ const transactionSchema = z.object({
   notes: z.string().optional(),
   partner_id: z.string().uuid().optional().or(z.literal('')),
   partner_tx_type: z.enum(['investment', 'withdrawal']).or(z.literal('')).optional(),
+  partner_tx_amount: z.string().optional(),
+})
+
+const neighborSchema = z.object({
+  project_id: z.string().uuid(),
+  name: z.string().min(1, 'שם השכן נדרש'),
+  phone: z.string().optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  notes: z.string().optional(),
+  total_amount: z.string().optional(),
+})
+
+const neighborPaymentSchema = z.object({
+  neighbor_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  amount: z.string().min(1, 'סכום נדרש'),
+  due_date: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+const loanReceiptSchema = z.object({
+  loan_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  amount: z.string().min(1, 'סכום נדרש'),
+  due_date: z.string().optional(),
+  notes: z.string().optional(),
 })
 
 const eventSchema = z.object({
@@ -484,7 +510,7 @@ export async function createTransaction(raw: unknown) {
       partner_id: d.partner_id,
       project_id: d.project_id,
       type: d.partner_tx_type,
-      amount: parseFloat(d.amount),
+      amount: parseFloat(d.partner_tx_amount || d.amount),
       date: d.date,
       notes: d.notes || null,
     })
@@ -815,8 +841,207 @@ export async function updateBuyer(id: string, raw: unknown) {
     notes: d.notes || null,
   }).eq('id', id)
 
-  if (error) return { error: `שגיאה בעדכון: ${error.message}` }
+  if (error) return { error: `שגיאה בעדכון הקונה: ${error.message}` }
   revalidatePath(`/moshe/projects/${(buyer as any)?.project_id}`)
+  return { success: true }
+}
+
+// ─── Neighbors ───────────────────────────────────────────────────
+
+export async function createNeighbor(raw: unknown) {
+  const parsed = neighborSchema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: neighbor, error } = await db.from('moshe_neighbors').insert({
+    project_id: d.project_id,
+    name: d.name,
+    phone: d.phone || null,
+    email: d.email || null,
+    notes: d.notes || null,
+    total_amount: d.total_amount ? parseFloat(d.total_amount) : null,
+  }).select('id').single()
+
+  if (error) return { error: `שגיאה בהוספת שכן: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'neighbor', `שכן חדש נוסף: ${d.name}`, neighbor.id)
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function updateNeighbor(id: string, raw: unknown) {
+  const parsed = neighborSchema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { error } = await db.from('moshe_neighbors').update({
+    name: d.name,
+    phone: d.phone || null,
+    email: d.email || null,
+    notes: d.notes || null,
+    total_amount: d.total_amount ? parseFloat(d.total_amount) : null,
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון שכן: ${error.message}` }
+  await writeAudit(d.project_id, 'update', 'neighbor', `שכן עודכן: ${d.name}`, id)
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function deleteNeighbor(id: string, projectId: string) {
+  await writeAudit(projectId, 'delete', 'neighbor', `שכן נמחק`, id)
+  const { error } = await db.from('moshe_neighbors').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת שכן: ${error.message}` }
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function addNeighborPayment(raw: unknown) {
+  const parsed = neighborPaymentSchema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: payment, error } = await db.from('moshe_neighbor_payments').insert({
+    neighbor_id: d.neighbor_id,
+    project_id: d.project_id,
+    amount: parseFloat(d.amount),
+    due_date: d.due_date || null,
+    notes: d.notes || null,
+  }).select('id').single()
+
+  if (error) return { error: `שגיאה בהוספת תשלום לשכן: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'neighbor_payment', `תשלום שכן חדש נוסף: ₪${Number(d.amount).toLocaleString('he-IL')}`, payment.id)
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function updateNeighborPayment(id: string, raw: unknown) {
+  const schema = z.object({
+    amount: z.string().min(1, 'סכום נדרש'),
+    due_date: z.string().optional(),
+    paid_at: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: oldPayment } = await db.from('moshe_neighbor_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
+  const { error } = await db.from('moshe_neighbor_payments').update({
+    amount: parseFloat(d.amount),
+    due_date: d.due_date || null,
+    paid_at: d.paid_at || null,
+    notes: d.notes || null,
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון תשלום: ${error.message}` }
+  revalidatePath(`/moshe/projects/${(oldPayment as any).project_id}`)
+  return { success: true }
+}
+
+export async function toggleNeighborPayment(id: string, projectId: string, isPaid: boolean) {
+  const { data: oldPayment } = await db.from('moshe_neighbor_payments').select('*').eq('id', id).single()
+  if (!oldPayment) return { error: 'תשלום לא נמצא' }
+
+  const { error } = await db.from('moshe_neighbor_payments').update({
+    is_paid: isPaid,
+    paid_at: isPaid ? new Date().toISOString() : null
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
+  await writeAudit(projectId, 'update', 'neighbor_payment', `תשלום שכן סומן כ${isPaid ? 'שולם' : 'לא שולם'}`, id, oldPayment)
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function deleteNeighborPayment(id: string, projectId: string) {
+  const { data: oldPayment } = await db.from('moshe_neighbor_payments').select('*').eq('id', id).single()
+  const { error } = await db.from('moshe_neighbor_payments').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת תשלום שכן: ${error.message}` }
+  await writeAudit(projectId, 'delete', 'neighbor_payment', `תשלום שכן נמחק`, id, oldPayment ?? null)
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+// ─── Loan Receipts ───────────────────────────────────────────────
+
+export async function addLoanReceipt(raw: unknown) {
+  const schema = z.object({
+    loan_id: z.string().uuid(),
+    project_id: z.string().uuid(),
+    amount: z.string().min(1, 'סכום נדרש'),
+    due_date: z.string().optional(),
+    notes: z.string().optional(),
+    is_received: z.boolean().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: receipt, error } = await db.from('moshe_loan_receipts').insert({
+    loan_id: d.loan_id,
+    project_id: d.project_id,
+    amount: parseFloat(d.amount),
+    due_date: d.due_date || null,
+    notes: d.notes || null,
+    is_received: d.is_received ?? false,
+    received_at: d.is_received ? new Date().toISOString() : null,
+  }).select('id').single()
+
+  if (error) return { error: `שגיאה בהוספת קבלת הלוואה: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'loan_receipt', `קבלת הלוואה תוכננה: ₪${Number(d.amount).toLocaleString('he-IL')}`, receipt.id)
+  revalidatePath(`/moshe/projects/${d.project_id}`)
+  return { success: true }
+}
+
+export async function updateLoanReceipt(id: string, raw: unknown) {
+  const schema = z.object({
+    amount: z.string().min(1, 'סכום נדרש'),
+    due_date: z.string().optional(),
+    received_at: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
+  const d = parsed.data
+
+  const { data: old } = await db.from('moshe_loan_receipts').select('*').eq('id', id).single()
+  if (!old) return { error: 'קבלה לא נמצאה' }
+
+  const { error } = await db.from('moshe_loan_receipts').update({
+    amount: parseFloat(d.amount),
+    due_date: d.due_date || null,
+    received_at: d.received_at || null,
+    notes: d.notes || null,
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון קבלה: ${error.message}` }
+  revalidatePath(`/moshe/projects/${(old as any).project_id}`)
+  return { success: true }
+}
+
+export async function toggleLoanReceipt(id: string, projectId: string, isReceived: boolean) {
+  const { data: old } = await db.from('moshe_loan_receipts').select('*').eq('id', id).single()
+  if (!old) return { error: 'קבלה לא נמצאה' }
+
+  const { error } = await db.from('moshe_loan_receipts').update({
+    is_received: isReceived,
+    received_at: isReceived ? new Date().toISOString() : null
+  }).eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון קבלה: ${error.message}` }
+  await writeAudit(projectId, 'update', 'loan_receipt', `קבלת הלוואה סומנה כ${isReceived ? 'התקבלה' : 'לא התקבלה'}`, id, old)
+  revalidatePath(`/moshe/projects/${projectId}`)
+  return { success: true }
+}
+
+export async function deleteLoanReceipt(id: string, projectId: string) {
+  const { data: old } = await db.from('moshe_loan_receipts').select('*').eq('id', id).single()
+  const { error } = await db.from('moshe_loan_receipts').delete().eq('id', id)
+  if (error) return { error: `שגיאה במחיקת קבלה: ${error.message}` }
+  await writeAudit(projectId, 'delete', 'loan_receipt', `קבלת הלוואה נמחקה`, id, old ?? null)
+  revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }
 }
 
@@ -1514,3 +1739,4 @@ export async function addWorkerMessageReply(messageId: string, body: string, sen
   revalidatePath('/worker-portal')
   return { success: true }
 }
+

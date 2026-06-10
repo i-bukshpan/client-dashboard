@@ -136,3 +136,38 @@ export interface PaymentRow {
   due_date: string
   notes: string
 }
+
+export interface MosheNeighbor {
+  id: string
+  project_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  notes: string | null
+  total_amount: number | null
+  created_at: string
+}
+
+export interface MosheNeighborPayment {
+  id: string
+  neighbor_id: string
+  project_id: string
+  amount: number
+  due_date: string | null
+  is_paid: boolean
+  paid_at: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface MosheLoanReceipt {
+  id: string
+  loan_id: string
+  project_id: string
+  amount: number
+  due_date: string | null
+  is_received: boolean
+  received_at: string | null
+  notes: string | null
+  created_at: string
+}

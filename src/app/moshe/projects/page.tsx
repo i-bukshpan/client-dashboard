@@ -27,17 +27,34 @@ export default async function ProjectsPage() {
     { data: projPayments },
     { data: buyerPayments },
     { data: buyers },
+    { data: transactions },
+    { data: partnerTransactions },
+    { data: loans },
+    { data: loanPayments },
+    { data: loanReceipts },
+    { data: neighborPayments },
   ] = await Promise.all([
     db.from('moshe_projects').select('*').order('created_at', { ascending: false }),
     db.from('moshe_project_payments').select('project_id, amount, is_paid'),
     db.from('moshe_buyer_payments').select('project_id, amount, is_received'),
     db.from('moshe_buyers').select('project_id'),
+    db.from('moshe_transactions').select('project_id, amount, type'),
+    db.from('moshe_partner_transactions').select('project_id, amount, type'),
+    db.from('moshe_loans').select('id, project_id, total_amount'),
+    db.from('moshe_loan_payments').select('loan_id, project_id, amount, is_paid, is_interest'),
+    db.from('moshe_loan_receipts').select('project_id, amount, is_received'),
+    db.from('moshe_neighbor_payments').select('project_id, amount, is_paid'),
   ])
 
   const pp = (projPayments as any[]) ?? []
   const bp = (buyerPayments as any[]) ?? []
   const proj = (projects as any[]) ?? []
   const buyersArr = (buyers as any[]) ?? []
+  const tx = (transactions as any[]) ?? []
+  const ptx = (partnerTransactions as any[]) ?? []
+  const lp = (loanPayments as any[]) ?? []
+  const lr = (loanReceipts as any[]) ?? []
+  const np = (neighborPayments as any[]) ?? []
 
   return (
     <div className="space-y-6">
@@ -67,11 +84,25 @@ export default async function ProjectsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {proj.map((p: any) => {
             const pPaid    = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-            const pTotal   = pp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
+                           + np.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
             const bRecv    = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
             const bTotal   = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
             const buyCount = buyersArr.filter((x: any) => x.project_id === p.id).length
-            const balance  = bRecv - pPaid
+            
+            const txInc    = tx.filter((x: any) => x.project_id === p.id && x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const txExp    = tx.filter((x: any) => x.project_id === p.id && x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+            
+            const pInv     = ptx.filter((x: any) => x.project_id === p.id && x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const pWth     = ptx.filter((x: any) => x.project_id === p.id && x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const pExp     = ptx.filter((x: any) => x.project_id === p.id && x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+
+            const lRecv    = lr.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const lPaid    = lp.filter((x: any) => x.project_id === p.id && x.is_paid && !x.is_interest).reduce((s: number, x: any) => s + Number(x.amount), 0)
+
+            const totalReceived = bRecv + txInc + pInv + lRecv
+            const totalPaid = pPaid + txExp + pExp + pWth + lPaid
+            const balance  = totalReceived - totalPaid
+
             const pct      = bTotal > 0 ? Math.round((bRecv / bTotal) * 100) : 0
             const st       = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 
@@ -105,11 +136,11 @@ export default async function ProjectsPage() {
                     <p className="text-sm font-black text-emerald-700 mt-0.5">{fmt(bRecv)}</p>
                   </div>
                   <div className="bg-red-50 rounded-xl p-2.5 text-center">
-                    <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider">שולם</p>
+                    <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider">שולם (ספקים/שכנים)</p>
                     <p className="text-sm font-black text-red-600 mt-0.5">{fmt(pPaid)}</p>
                   </div>
                   <div className={cn('rounded-xl p-2.5 text-center', balance >= 0 ? 'bg-blue-50' : 'bg-orange-50')}>
-                    <p className={cn('text-[9px] font-bold uppercase tracking-wider', balance >= 0 ? 'text-blue-600' : 'text-orange-600')}>מאזן</p>
+                    <p className={cn('text-[9px] font-bold uppercase tracking-wider', balance >= 0 ? 'text-blue-600' : 'text-orange-600')}>כסף בקופה</p>
                     <p className={cn('text-sm font-black mt-0.5', balance >= 0 ? 'text-blue-700' : 'text-orange-600')}>{fmt(balance)}</p>
                   </div>
                 </div>

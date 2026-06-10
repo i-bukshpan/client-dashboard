@@ -92,6 +92,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     notes: '',
     partner_id: '',
     partner_tx_type: '' as '' | 'investment' | 'withdrawal',
+    partner_tx_amount: '',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editRow, setEditRow] = useState({
@@ -139,7 +140,7 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
     const r = await createTransaction({ project_id: projectId, ...form })
     if (r.error) { toast.error(r.error); return }
     toast.success('עסקה נוספה')
-    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '', partner_tx_type: '' }))
+    setForm(f => ({ ...f, amount: '', category: '', notes: '', partner_id: '', partner_tx_type: '', partner_tx_amount: '' }))
     setShowForm(false)
   }
 
@@ -278,7 +279,25 @@ export function TransactionsTab({ projectId, transactions, partners = [], catego
                   })}
                 </div>
                 {form.partner_tx_type && (
-                  <p className="text-[10px] text-slate-400">התנועה תיווסף גם לרשימת תנועות השותף</p>
+                  <div className="space-y-2 mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                    <Label className="text-[11px] text-slate-500">סכום לחיוב/זיכוי השותף</Label>
+                    <div className="flex gap-2">
+                      <Input type="number" dir="ltr" 
+                        value={form.partner_tx_amount !== '' ? form.partner_tx_amount : form.amount} 
+                        onChange={e => setForm(f => ({ ...f, partner_tx_amount: e.target.value }))}
+                        className="h-8 text-xs flex-1" />
+                      <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]"
+                        onClick={() => {
+                          const base = parseFloat(form.amount)
+                          if (!isNaN(base)) {
+                            setForm(f => ({ ...f, partner_tx_amount: Math.round(base / 1.18).toString() }))
+                          }
+                        }}>
+                        ללא מע"מ (18%)
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-slate-400">התנועה תיווסף גם לרשימת תנועות השותף</p>
+                  </div>
                 )}
               </div>
             )}

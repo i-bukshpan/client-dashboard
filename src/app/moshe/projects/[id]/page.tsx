@@ -14,6 +14,7 @@ import { ProjectPrintButton } from '@/components/moshe/ProjectPrintView'
 import { ActivityLogTab } from '@/components/moshe/ActivityLogTab'
 import { PartnersTab } from '@/components/moshe/PartnersTab'
 import { LoansTab } from '@/components/moshe/LoansTab'
+import { NeighborsTab } from '@/components/moshe/NeighborsTab'
 
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,20 +36,7 @@ export const dynamic = 'force-dynamic'
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const [
-    { data: project },
-    { data: projPayments },
-    { data: buyers },
-    { data: buyerPayments },
-    { data: transactions },
-    { data: documents },
-    { data: activityLogs },
-    { data: partners },
-    { data: partnerTransactions },
-    { data: loans },
-    { data: loanPayments },
-    { data: categories },
-  ] = await Promise.all([
+  const results = await Promise.all([
     db.from('moshe_projects').select('*').eq('id', id).single(),
     db.from('moshe_project_payments').select('*').eq('project_id', id).order('due_date', { ascending: true, nullsFirst: false }),
     db.from('moshe_buyers').select('*').eq('project_id', id).order('created_at'),
@@ -61,7 +49,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     db.from('moshe_loans').select('*').eq('project_id', id).order('created_at'),
     db.from('moshe_loan_payments').select('*').eq('project_id', id),
     db.from('moshe_transaction_categories').select('name').order('name'),
+    db.from('moshe_neighbors').select('*').eq('project_id', id).order('created_at'),
+    db.from('moshe_neighbor_payments').select('*').eq('project_id', id),
+    db.from('moshe_loan_receipts').select('*').eq('project_id', id),
   ])
+
+  const project = results[0].data
+  const projPayments = results[1].data
+  const buyers = results[2].data
+  const buyerPayments = results[3].data
+  const transactions = results[4].data
+  const documents = results[5].data
+  const activityLogs = results[6].data
+  const partners = results[7].data
+  const partnerTransactions = results[8].data
+  const loans = results[9].data
+  const loanPayments = results[10].data
+  const categories = results[11].data
+  const neighbors = results[12].data
+  const neighborPayments = results[13].data
+  const loanReceipts = results[14].data
 
   if (!project) notFound()
 
@@ -77,6 +84,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const loansArr = (loans as any[]) ?? []
   const lp = (loanPayments as any[]) ?? []
   const categoryNames = ((categories as any[]) ?? []).map((c: any) => c.name)
+  const neighborsArr = (neighbors as any[]) ?? []
+  const neighborPaymentsArr = (neighborPayments as any[]) ?? []
+  const loanReceiptsArr = (loanReceipts as any[]) ?? []
 
   // Enrich buyers with their payments
   const buyersWithPayments = buyersArr.map((b: any) => ({
@@ -90,15 +100,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     transactions: ptx.filter((t: any) => t.partner_id === partner.id),
   }))
 
-  // Enrich loans with their payments
+  // Enrich loans with their payments and receipts
   const loansWithPayments = loansArr.map((loan: any) => ({
     ...loan,
     payments: lp.filter((pay: any) => pay.loan_id === loan.id),
+    receipts: loanReceiptsArr.filter((r: any) => r.loan_id === loan.id),
   }))
 
+  // Enrich neighbors with their payments
+  const neighborsWithPayments = neighborsArr.map((n: any) => ({
+    ...n,
+    payments: neighborPaymentsArr.filter((pay: any) => pay.neighbor_id === n.id),
+  }))
+
+  // Neighbors KPIs
+  const neighborPaid = neighborPaymentsArr.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const neighborScheduled = neighborPaymentsArr.reduce((s: number, x: any) => s + Number(x.amount), 0)
+
   // KPIs
-  const totalPaid     = pp.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalPaid     = pp.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborPaid
+  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborScheduled
   const totalReceived  = bp.filter((x: any) => x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalExpected  = bp.reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txIncome       = tx.filter((x: any) => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
@@ -108,7 +129,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const totalLoans      = loansArr.reduce((s: number, l: any) => s + Number(l.total_amount), 0)
   const loanPaidBack    = lp.filter((p: any) => p.is_paid && !p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const loanInterestPaid = lp.filter((p: any) => p.is_paid && p.is_interest).reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const loanNetReceived = totalLoans - loanPaidBack
+  const loanReceivedAmt = loanReceiptsArr.filter((r: any) => r.is_received).reduce((s: number, r: any) => s + Number(r.amount), 0)
+  const loanNetReceived = loanReceivedAmt - loanPaidBack
   const partnerNet      = partnersWithTx.reduce((s: number, p: any) => {
     const inv = p.transactions.filter((tx: any) => tx.type === 'investment').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
     const exp = p.transactions.filter((tx: any) => tx.type === 'expense').reduce((ss: number, tx: any) => ss + Number(tx.amount), 0)
@@ -122,11 +144,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const ptxExpense     = ptx.filter((x: any) => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const partnerNetTotal     = totalInvested - totalWithdrawn - ptxExpense
 
-  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
-  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn)
+  const realBalance     = (totalReceived + txIncome + totalInvested + loanReceivedAmt) - (totalPaid + txExpense + ptxExpense + totalWithdrawn + loanPaidBack)
+  const expectedBalance = (totalExpected + txIncome + totalInvested + loanReceivedAmt) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn + loanPaidBack)
 
-  // Cash in fund = loans received + buyers received + misc income + partner investments − payments out − expenses - partner withdrawals
-  const cashInFund = (loanNetReceived + totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
+  // Cash in fund is now identical to realBalance
+  const cashInFund = realBalance
 
   const st = STATUS_LABEL[p.status] ?? STATUS_LABEL.active
 
@@ -184,12 +206,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-2">
             {[
-              { label: 'מאזן אמיתי',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
-              { label: 'מאזן צפוי',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
-              { label: 'הכנסות בפועל', value: fmt(totalReceived + txIncome),  color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-              { label: 'הוצאות בפועל', value: fmt(totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
-              { label: 'יתרת הלוואות', value: fmt(loanNetReceived), color: 'text-violet-700', bg: 'bg-violet-50 border-violet-100' },
-              { label: 'כסף בקופה (אחרי הלוואות)', value: fmt(cashInFund), color: cashInFund >= 0 ? 'text-teal-700' : 'text-red-600', bg: cashInFund >= 0 ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100' },
+              { label: 'כסף בקופה',   value: fmt(realBalance),    color: realBalance >= 0 ? 'text-emerald-700' : 'text-red-600',  bg: realBalance >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100' },
+              { label: 'כסף בקופה (צפוי)',    value: fmt(expectedBalance), color: expectedBalance >= 0 ? 'text-blue-700' : 'text-orange-600', bg: 'bg-blue-50 border-blue-100' },
+              { label: 'הכנסות (קונים+כללי)', value: fmt(totalReceived + txIncome),  color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+              { label: 'הוצאות (ספקים+שכנים+כללי)', value: fmt(totalPaid + txExpense),     color: 'text-red-600',     bg: 'bg-red-50 border-red-100' },
+              { label: 'הלוואות (נטו שהתקבל)', value: fmt(loanNetReceived), color: 'text-violet-700', bg: 'bg-violet-50 border-violet-100' },
+              { label: 'שותפים (השקעות נטו)', value: fmt(partnerNetTotal), color: partnerNetTotal >= 0 ? 'text-teal-700' : 'text-red-600', bg: partnerNetTotal >= 0 ? 'bg-teal-50 border-teal-100' : 'bg-red-50 border-red-100' },
             ].map(kpi => (
               <div key={kpi.label} className={cn('rounded-xl border p-2 sm:p-3 text-center overflow-hidden', kpi.bg)}>
                 <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5 whitespace-normal break-words leading-tight min-h-[28px] flex items-center justify-center">{kpi.label}</p>
@@ -210,6 +232,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               { value: 'finance',   label: 'הוצאות/הכנסות' },
               { value: 'partners',  label: `שותפים (${partnersArr.length})` },
               { value: 'loans',     label: `הלוואות (${loansArr.length})` },
+              { value: 'neighbors', label: `שכנים (${neighborsArr.length})` },
               { value: 'documents', label: `מסמכים (${docs.length})` },
               { value: 'log',       label: `לוג (${logs.length})` },
             ].map(tab => (
@@ -250,6 +273,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         <TabsContent value="loans" className="focus-visible:outline-none">
           <LoansTab projectId={id} loans={loansWithPayments} partners={partnersArr} />
+        </TabsContent>
+
+        <TabsContent value="neighbors" className="focus-visible:outline-none">
+          <NeighborsTab projectId={id} neighbors={neighborsWithPayments} />
         </TabsContent>
 
         <TabsContent value="documents" className="focus-visible:outline-none">
