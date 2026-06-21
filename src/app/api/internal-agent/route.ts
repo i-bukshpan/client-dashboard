@@ -203,9 +203,30 @@ export async function POST(request: Request) {
 
     if (isConfirm) {
       try {
-        const result = await executeConfirmedAction(pendingAction.action_type, pendingAction.action_params)
-        const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
-        return NextResponse.json({ reply_text: replyText })
+        if (pendingAction.action_type === 'batch') {
+          const actions = pendingAction.action_params.actions || []
+          const errors: string[] = []
+          
+          for (const action of actions) {
+            try {
+              const result = await executeConfirmedAction(action.type, action.params)
+              if ((result as any).error) errors.push((result as any).error)
+            } catch (err: any) {
+              errors.push(err.message)
+            }
+          }
+          
+          if (errors.length > 0) {
+            return NextResponse.json({ reply_text: `חלק מהפעולות נכשלו:\n${errors.join('\n')}` })
+          } else {
+            return NextResponse.json({ reply_text: 'כל הפעולות בוצעו בהצלחה.' })
+          }
+        } else {
+          // תמיכה לאחור בפורמט הישן (פעולה בודדת)
+          const result = await executeConfirmedAction(pendingAction.action_type, pendingAction.action_params)
+          const replyText = (result as any).message || (result as any).error || 'הפעולה בוצעה.'
+          return NextResponse.json({ reply_text: replyText })
+        }
       } catch (err: any) {
         console.error('[internal-agent] confirmed action error:', err)
         return NextResponse.json({ reply_text: `שגיאה בביצוע הפעולה: ${err.message}` })
@@ -240,7 +261,7 @@ export async function POST(request: Request) {
 
     // ── 3. לולאת Function-Calling ──────────────────────────────────────────────
     let rounds = 0
-    let actionToSave: { type: string; params: Record<string, any> } | null = null
+    let actionsToSave: Array<{ type: string; params: Record<string, any> }> = []
 
     while (rounds < MAX_TOOL_ROUNDS) {
       const calls: FunctionCall[] | undefined = result.response.functionCalls()
@@ -255,12 +276,12 @@ export async function POST(request: Request) {
         })
       )
 
-      const pendingExecution = executedCalls.find(({ output }) => (output as any).pending === true && (output as any).action_type)
-      if (pendingExecution) {
-        actionToSave = {
-          type: (pendingExecution.output as any).action_type as string,
-          params: (pendingExecution.output as any).action_params as Record<string, any>,
-        }
+      const pendingExecutions = executedCalls.filter(({ output }) => (output as any).pending === true && (output as any).action_type)
+      if (pendingExecutions.length > 0) {
+        actionsToSave.push(...pendingExecutions.map(e => ({
+          type: (e.output as any).action_type as string,
+          params: (e.output as any).action_params as Record<string, any>,
+        })))
       }
 
       const responseParts: Part[] = executedCalls.map(({ call, output }) => {
@@ -277,13 +298,13 @@ export async function POST(request: Request) {
 
     const replyText = result.response.text().trim() || 'מצטער, לא הצלחתי להפיק תשובה.'
 
-    // ── 4. אם יש פעולה לשמירה -> שומר ב-DB ומחזיר JSON אינטראקטיבי ───────────
-    if (actionToSave) {
+    // ── 4. אם יש פעולות לשמירה -> שומר ב-DB ומחזיר JSON אינטראקטיבי ───────────
+    if (actionsToSave.length > 0) {
       // עדכון ב-DB (upsert)
       const { error: upsertError } = await db.from('bot_pending_actions').upsert({
         phone: ctx.phone,
-        action_type: actionToSave.type,
-        action_params: actionToSave.params,
+        action_type: 'batch',
+        action_params: { actions: actionsToSave },
         created_at: new Date().toISOString()
       }, { onConflict: 'phone' })
 

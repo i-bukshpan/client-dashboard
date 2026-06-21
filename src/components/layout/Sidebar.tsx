@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Building2,
+  Bot,
 } from 'lucide-react'
 import { SidebarUnreadBadge } from './SidebarUnreadBadge'
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/admin/goals', icon: Target, label: 'יעדים ומדדים' },
   { href: '/admin/tasks', icon: CheckSquare, label: 'משימות' },
   { href: '/admin/team', icon: UserCog, label: 'ניהול צוות' },
+  { href: '/admin/bot-users', icon: Bot, label: 'הרשאות בוט' },
   { href: '/admin/chat', icon: MessageSquare, label: 'צ׳אט פנימי' },
   // Employee routes
   { href: '/employee/dashboard', icon: LayoutDashboard, label: 'לוח בקרה' },

@@ -129,7 +129,7 @@ export function NeighborsTab({ projectId, neighbors }: Props) {
       <div className="space-y-3">
         {neighbors.map(neighbor => {
           const paid = neighbor.payments.filter(p => p.is_paid).reduce((s, p) => s + Number(p.amount), 0)
-          const total = neighbor.payments.reduce((s, p) => s + Number(p.amount), 0)
+          const total = neighbor.total_amount ? Number(neighbor.total_amount) : neighbor.payments.reduce((s, p) => s + Number(p.amount), 0)
           const pct = total > 0 ? Math.round((paid / total) * 100) : 0
           const isExpanded = expandedNeighbor === neighbor.id
           const today = new Date()

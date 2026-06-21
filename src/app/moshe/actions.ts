@@ -1113,6 +1113,8 @@ export async function createPartnerTransaction(raw: unknown) {
     amount: z.string().min(1, 'סכום נדרש'),
     date: z.string().min(1, 'תאריך נדרש'),
     notes: z.string().optional(),
+    has_invoice: z.boolean().optional(),
+    add_vat_expense: z.boolean().optional(),
   })
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
@@ -1125,9 +1127,26 @@ export async function createPartnerTransaction(raw: unknown) {
     amount: parseFloat(d.amount),
     date: d.date,
     notes: d.notes || null,
+    has_invoice: d.has_invoice || false,
   })
 
   if (error) return { error: `שגיאה בהוספת תנועה: ${error.message}` }
+
+  // Auto-add VAT expense if requested
+  if (d.add_vat_expense && d.type === 'withdrawal') {
+    const vatAmount = parseFloat(d.amount) * 0.18
+    const { error: vatError } = await db.from('moshe_transactions').insert({
+      partner_id: d.partner_id,
+      project_id: d.project_id,
+      type: 'expense',
+      amount: vatAmount,
+      date: d.date,
+      category: 'מע"מ משיכות',
+      notes: `מע"מ עבור משיכה מול חשבונית (סכום משיכה מקורי: ₪${Number(d.amount).toLocaleString('he-IL')})`,
+    })
+    if (vatError) console.error('[createPartnerTransaction] Error inserting vat:', vatError.message)
+  }
+
   await writeAudit(d.project_id, 'create', 'partner_transaction',
     `${d.type === 'investment' ? 'השקעה' : 'משיכה'} של שותף: ₪${Number(d.amount).toLocaleString('he-IL')}`)
   revalidatePath(`/moshe/projects/${d.project_id}`)

@@ -294,6 +294,8 @@ function PartnerTransactionsList({ partner, projectId }: {
     amount: '',
     date: new Date().toISOString().split('T')[0],
     notes: '',
+    has_invoice: false,
+    add_vat_expense: false,
   })
 
   const sorted = [...partner.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -303,7 +305,7 @@ function PartnerTransactionsList({ partner, projectId }: {
     const r = await createPartnerTransaction({ partner_id: partner.id, project_id: projectId, ...form })
     if (r.error) { toast.error(r.error); return }
     toast.success('תנועה נוספה')
-    setForm(f => ({ ...f, amount: '', notes: '' }))
+    setForm(f => ({ ...f, amount: '', notes: '', has_invoice: false, add_vat_expense: false }))
     setShowAdd(false)
   }
 
@@ -362,6 +364,24 @@ function PartnerTransactionsList({ partner, projectId }: {
                 className="h-8 text-xs border-slate-200 bg-white" />
             </div>
           </div>
+          {form.type === 'withdrawal' && (
+            <div className="flex items-center gap-4 pt-1">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={form.has_invoice}
+                  onChange={e => setForm(f => ({ ...f, has_invoice: e.target.checked, add_vat_expense: e.target.checked ? f.add_vat_expense : false }))}
+                  className="w-3.5 h-3.5 accent-indigo-500 rounded-sm" />
+                <span className="text-[11px] text-slate-600">משיכה מול חשבונית</span>
+              </label>
+              {form.has_invoice && (
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={form.add_vat_expense}
+                    onChange={e => setForm(f => ({ ...f, add_vat_expense: e.target.checked }))}
+                    className="w-3.5 h-3.5 accent-indigo-500 rounded-sm" />
+                  <span className="text-[11px] text-slate-600">הוסף 18% מע"מ כהוצאה</span>
+                </label>
+              )}
+            </div>
+          )}
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)} className="h-7 text-xs">ביטול</Button>
             <Button size="sm" onClick={handleAdd} className="h-7 text-xs bg-indigo-500 hover:bg-indigo-400 text-white px-3">שמור</Button>
@@ -379,7 +399,10 @@ function PartnerTransactionsList({ partner, projectId }: {
             {t.type === 'investment' ? <TrendingUp className="w-3.5 h-3.5 text-indigo-600" /> : <TrendingDown className={cn("w-3.5 h-3.5", t.type === 'withdrawal' ? 'text-orange-500' : 'text-red-500')} />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-slate-700 truncate">{t.notes || TYPE_LABELS[t.type]}</p>
+            <p className="text-xs font-medium text-slate-700 truncate">
+              {t.notes || TYPE_LABELS[t.type]}
+              {(t as any).has_invoice && <span className="mr-1.5 text-[9px] bg-slate-100 text-slate-500 px-1 rounded border border-slate-200 inline-block align-middle">חשבונית</span>}
+            </p>
             <p className="text-[10px] text-slate-400">{format(new Date(t.date), 'dd/MM/yyyy')}</p>
           </div>
           <p className={cn('font-bold text-xs shrink-0', t.type === 'investment' ? 'text-indigo-700' : t.type === 'withdrawal' ? 'text-orange-600' : 'text-red-600')}>

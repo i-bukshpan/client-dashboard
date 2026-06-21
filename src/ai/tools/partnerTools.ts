@@ -175,13 +175,15 @@ export const addPartnerTransactionDeclaration: FunctionDeclaration = {
       amount: { type: SchemaType.NUMBER, description: 'סכום (חובה)' },
       date: { type: SchemaType.STRING, description: 'תאריך YYYY-MM-DD' },
       notes: { type: SchemaType.STRING, description: 'הערות' },
+      has_invoice: { type: SchemaType.BOOLEAN, description: 'האם המשיכה מול חשבונית (רלוונטי למשיכות בלבד)' },
+      add_vat_expense: { type: SchemaType.BOOLEAN, description: 'האם להוסיף 18% מע"מ כהוצאה אוטומטית (רלוונטי למשיכות מול חשבונית)' },
     },
     required: ['partner_name', 'project', 'type', 'amount'],
   },
 }
 
 export async function addPartnerTransaction(args: {
-  partner_name?: string; project?: string; type?: string; amount?: number; date?: string; notes?: string
+  partner_name?: string; project?: string; type?: string; amount?: number; date?: string; notes?: string; has_invoice?: boolean; add_vat_expense?: boolean
 }): Promise<Record<string, unknown>> {
   if (!args.partner_name || !args.project || !args.type || !args.amount) {
     return { pending: false, error: 'חסרים פרמטרים חובה.' }
@@ -206,6 +208,17 @@ export async function addPartnerTransaction(args: {
   const date = args.date || new Date().toISOString().split('T')[0]
   const typeLabel: Record<string, string> = { investment: 'השקעה', withdrawal: 'משיכה', expense: 'הוצאה' }
 
+  let confirmationMessage = `האם לרשום ${typeLabel[args.type]} של ₪${args.amount.toLocaleString('he-IL')} ` +
+    `לשותף "${partner.name}" בפרויקט "${project.name}" בתאריך ${date}?`
+
+  if (args.type === 'withdrawal' && args.has_invoice) {
+    confirmationMessage += ` (משיכה מול חשבונית)`
+    if (args.add_vat_expense) {
+      const vat = args.amount * 0.18
+      confirmationMessage += ` בנוסף תרשם הוצאת מע"מ בסך ₪${vat.toLocaleString('he-IL')} לשותף.`
+    }
+  }
+
   return {
     pending: true,
     action_type: 'addPartnerTransaction',
@@ -216,15 +229,15 @@ export async function addPartnerTransaction(args: {
       amount: args.amount,
       date,
       notes: args.notes || '',
+      has_invoice: args.has_invoice,
+      add_vat_expense: args.add_vat_expense,
     },
-    confirmation_message:
-      `האם לרשום ${typeLabel[args.type]} של ₪${args.amount.toLocaleString('he-IL')} ` +
-      `לשותף "${partner.name}" בפרויקט "${project.name}" בתאריך ${date}?`,
+    confirmation_message: confirmationMessage,
   }
 }
 
 export async function executeAddPartnerTransaction(params: {
-  partner_id: string; project_id: string; type: string; amount: number; date: string; notes?: string
+  partner_id: string; project_id: string; type: string; amount: number; date: string; notes?: string; has_invoice?: boolean; add_vat_expense?: boolean
 }): Promise<Record<string, unknown>> {
   const { error } = await db.from('moshe_partner_transactions').insert({
     partner_id: params.partner_id,
@@ -233,7 +246,23 @@ export async function executeAddPartnerTransaction(params: {
     amount: params.amount,
     date: params.date,
     notes: params.notes || null,
+    has_invoice: params.has_invoice || false,
   })
   if (error) return { success: false, error: error.message }
+
+  if (params.add_vat_expense && params.type === 'withdrawal') {
+    const vat = params.amount * 0.18
+    const { error: vatError } = await db.from('moshe_transactions').insert({
+      partner_id: params.partner_id,
+      project_id: params.project_id,
+      type: 'expense',
+      amount: vat,
+      date: params.date,
+      category: 'מע"מ משיכות',
+      notes: `מע"מ עבור משיכה מול חשבונית (סכום משיכה מקורי: ₪${params.amount.toLocaleString('he-IL')})`,
+    })
+    if (vatError) console.error('[executeAddPartnerTransaction] Error inserting vat:', vatError.message)
+  }
+
   return { success: true, message: 'התנועה הכספית נרשמה בהצלחה.' }
 }
