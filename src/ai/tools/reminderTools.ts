@@ -29,7 +29,7 @@ export const createReminderDeclaration: FunctionDeclaration = {
       },
       scheduled_at: {
         type: SchemaType.STRING,
-        description: 'תאריך ושעת שליחה בפורמט ISO 8601, למשל 2026-06-15T08:00:00 (חובה)',
+        description: 'תאריך ושעת שליחה בפורמט ISO 8601, למשל 2026-06-15T08:00:00. השעה תעוגל אוטומטית לכפולות של 5 דקות. (חובה)',
       },
     },
     required: ['message', 'scheduled_at'],
@@ -46,9 +46,14 @@ export async function createReminder(args: {
   const scheduledDate = new Date(args.scheduled_at)
   if (isNaN(scheduledDate.getTime())) return { error: 'תאריך לא תקין.' }
 
+  // Round to nearest 5 minutes
+  const ms5 = 1000 * 60 * 5;
+  const roundedTime = Math.round(scheduledDate.getTime() / ms5) * ms5;
+  scheduledDate.setTime(roundedTime);
+
   // Validate not in the past (allow 2 min grace)
   if (scheduledDate.getTime() < Date.now() - 2 * 60 * 1000) {
-    return { error: `התאריך שציינת (${args.scheduled_at}) כבר עבר. אנא ציין תאריך עתידי.` }
+    return { error: `התאריך שציינת (${args.scheduled_at}) כבר עבר או מעוגל לעבר. אנא ציין תאריך עתידי.` }
   }
 
   // Display in Israel timezone

@@ -80,15 +80,16 @@ function todayRange() {
 async function fetchPendingReminders() {
   // Use current time in ISO UTC
   const now = new Date()
-  const nowISO = now.toISOString()
+  const next5Mins = new Date(now.getTime() + 5 * 60 * 1000)
+  const targetISO = next5Mins.toISOString()
 
-  // Fetch all unsent reminders whose scheduled_at has passed
+  // Fetch all unsent reminders whose scheduled_at has passed or is in the next 5 mins
   // We compare using UTC timestamps — Supabase stores TIMESTAMPTZ correctly
   const { data, error } = await db
     .from('bot_reminders')
     .select('id, phone, message, is_recurring, recur_cron')
     .eq('is_sent', false)
-    .lte('scheduled_at', nowISO)
+    .lt('scheduled_at', targetISO)
     .order('scheduled_at', { ascending: true })
     .limit(50)
 
