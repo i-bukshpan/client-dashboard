@@ -16,6 +16,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import parser from 'cron-parser'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -88,7 +89,7 @@ async function fetchPendingReminders() {
   // We compare using UTC timestamps — Supabase stores TIMESTAMPTZ correctly
   const { data, error } = await db
     .from('bot_reminders')
-    .select('id, phone, message, is_recurring, recur_cron')
+    .select('id, phone, message, reminder_type, is_recurring, recur_cron')
     .eq('is_sent', false)
     .lt('scheduled_at', targetISO)
     .order('scheduled_at', { ascending: true })
@@ -108,19 +109,33 @@ async function fetchPendingReminders() {
     .update({ is_sent: true, sent_at: now })
     .in('id', ids)
 
-  // For recurring reminders, schedule next occurrence (simple: add 1 day for daily)
+  // For recurring reminders, schedule next occurrence
   for (const r of (data as any[])) {
-    if (r.is_recurring && r.recur_cron === 'daily') {
-      const nextAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      await db.from('bot_reminders').insert({
-        phone: r.phone,
-        message: r.message,
-        reminder_type: 'daily_tasks',
-        scheduled_at: nextAt,
-        is_sent: false,
-        is_recurring: true,
-        recur_cron: 'daily',
-      })
+    if (r.is_recurring && r.recur_cron) {
+      let nextAtISO = null
+      
+      if (r.recur_cron === 'daily') {
+        nextAtISO = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      } else {
+        try {
+          const interval = parser.parseExpression(r.recur_cron, { currentDate: new Date(), tz: 'Asia/Jerusalem' })
+          nextAtISO = interval.next().toISOString()
+        } catch (err) {
+          console.error('[reminder-cron] Failed to parse cron:', r.recur_cron)
+        }
+      }
+
+      if (nextAtISO) {
+        await db.from('bot_reminders').insert({
+          phone: r.phone,
+          message: r.message,
+          reminder_type: r.reminder_type || 'custom',
+          scheduled_at: nextAtISO,
+          is_sent: false,
+          is_recurring: true,
+          recur_cron: r.recur_cron,
+        })
+      }
     }
   }
 

@@ -29,7 +29,11 @@ export const createReminderDeclaration: FunctionDeclaration = {
       },
       scheduled_at: {
         type: SchemaType.STRING,
-        description: 'תאריך ושעת שליחה בפורמט ISO 8601, למשל 2026-06-15T08:00:00. השעה תעוגל אוטומטית לכפולות של 5 דקות. (חובה)',
+        description: 'תאריך ושעת שליחה בפורמט ISO 8601, למשל 2026-06-15T08:00:00. השעה תעוגל אוטומטית לכפולות של 5 דקות. בתזכורת מחזורית - זהו מועד ההתחלה. (חובה)',
+      },
+      cron_expression: {
+        type: SchemaType.STRING,
+        description: 'אופציונלי. ביטוי cron חוקי עבור תזכורות מחזוריות. למשל "0 9 * * 0" לכל יום ראשון ב-9:00, או "0 9 1 * *" לכל ראשון לחודש ב-9:00. אם נשלח, התזכורת תחזור על עצמה לפי ה-cron.',
       },
     },
     required: ['message', 'scheduled_at'],
@@ -39,6 +43,7 @@ export const createReminderDeclaration: FunctionDeclaration = {
 export async function createReminder(args: {
   message?: string
   scheduled_at?: string
+  cron_expression?: string
 }, ctx: { phone: string; name?: string }): Promise<Record<string, unknown>> {
   if (!args.message?.trim()) return { error: 'חסר תוכן לתזכורת.' }
   if (!args.scheduled_at) return { error: 'חסר תאריך שליחה.' }
@@ -63,6 +68,11 @@ export async function createReminder(args: {
     hour: '2-digit', minute: '2-digit',
   })
 
+  let confMsg = `האם לרשום תזכורת: "${args.message.trim()}" לשליחה ב-${displayTime}?`
+  if (args.cron_expression) {
+    confMsg = `האם לרשום תזכורת מחזורית: "${args.message.trim()}" שתתחיל ב-${displayTime} (לפי מחזוריות: ${args.cron_expression})?`
+  }
+
   return {
     pending: true,
     action_type: 'createReminder',
@@ -71,8 +81,9 @@ export async function createReminder(args: {
       user_name: ctx.name || null,
       message: args.message.trim(),
       scheduled_at: scheduledDate.toISOString(), // always store as UTC
+      cron_expression: args.cron_expression || null,
     },
-    confirmation_message: `האם לרשום תזכורת: "${args.message.trim()}" לשליחה ב-${displayTime}?`,
+    confirmation_message: confMsg,
   }
 }
 
@@ -81,7 +92,9 @@ export async function executeCreateReminder(params: {
   user_name?: string | null
   message: string
   scheduled_at: string
+  cron_expression?: string | null
 }): Promise<Record<string, unknown>> {
+  const isRecurring = !!params.cron_expression;
   const { error } = await db.from('bot_reminders').insert({
     phone: params.phone,
     user_name: params.user_name || null,
@@ -89,7 +102,8 @@ export async function executeCreateReminder(params: {
     reminder_type: 'custom',
     scheduled_at: params.scheduled_at,
     is_sent: false,
-    is_recurring: false,
+    is_recurring: isRecurring,
+    recur_cron: params.cron_expression || null,
   })
   if (error) return { success: false, error: error.message }
   return { success: true, message: `✅ התזכורת נרשמה! תקבל הודעה ב-WhatsApp בזמן שנקבע.` }
@@ -112,7 +126,7 @@ export const listMyRemindersDeclaration: FunctionDeclaration = {
 export async function listMyReminders(ctx: { phone: string }): Promise<Record<string, unknown>> {
   const { data, error } = await db
     .from('bot_reminders')
-    .select('id, message, scheduled_at, reminder_type, is_recurring')
+    .select('id, message, scheduled_at, reminder_type, is_recurring, recur_cron')
     .eq('phone', ctx.phone)
     .eq('is_sent', false)
     .gte('scheduled_at', new Date().toISOString())
@@ -126,7 +140,7 @@ export async function listMyReminders(ctx: { phone: string }): Promise<Record<st
     message: r.message,
     scheduled: new Date(r.scheduled_at).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }),
     type: r.reminder_type === 'custom' ? 'ידנית' : 'אוטומטית',
-    recurring: r.is_recurring ? 'כן' : 'לא',
+    recurring: r.is_recurring ? (r.recur_cron || 'כן') : 'לא',
   }))
 
   return {
