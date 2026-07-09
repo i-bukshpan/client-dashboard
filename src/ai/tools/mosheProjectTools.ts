@@ -120,6 +120,8 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
     { data: partnerTransactions },
     { data: loans },
     { data: loanPayments },
+    { data: neighborPayments },
+    { data: loanReceipts },
   ] = await Promise.all([
     db.from('moshe_project_payments').select('amount, is_paid').eq('project_id', project.id),
     db.from('moshe_buyer_payments').select('amount, is_received').eq('project_id', project.id),
@@ -127,6 +129,8 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
     db.from('moshe_partner_transactions').select('amount, type').eq('project_id', project.id),
     db.from('moshe_loans').select('id, total_amount').eq('project_id', project.id),
     db.from('moshe_loan_payments').select('loan_id, amount, is_paid, is_interest').eq('project_id', project.id),
+    db.from('moshe_neighbor_payments').select('amount, is_paid').eq('project_id', project.id),
+    db.from('moshe_loan_receipts').select('amount, is_received').eq('project_id', project.id),
   ])
 
   const pp  = (projPayments ?? []) as any[]
@@ -135,17 +139,26 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
   const ptx = (partnerTransactions ?? []) as any[]
   const lo  = (loans ?? []) as any[]
   const lp  = (loanPayments ?? []) as any[]
+  const np  = (neighborPayments ?? []) as any[]
+  const lr  = (loanReceipts ?? []) as any[]
+
+  // Neighbors KPIs
+  const neighborPaid = np.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const neighborScheduled = np.reduce((s: number, x: any) => s + Number(x.amount), 0)
 
   // ── נוסחאות זהות לדף פרויקט באתר החי ──────────────────────────────────────
-  const totalPaid      = pp.filter(x => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalPaid      = pp.filter(x => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborPaid
+  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborScheduled
   const totalReceived  = bp.filter(x => x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalExpected  = bp.reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txIncome       = tx.filter(x => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txExpense      = tx.filter(x => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  
+  // Partners
   const totalInvested  = ptx.filter(x => x.type === 'investment').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalWithdrawn = ptx.filter(x => x.type === 'withdrawal').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const ptxExpense     = ptx.filter(x => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const partnerNetTotal = totalInvested - totalWithdrawn - ptxExpense
 
   // הלוואות — בלי ריבית (is_interest=false OR is_interest IS NULL)
   const totalLoans   = lo.reduce((s: number, l: any) => s + Number(l.total_amount), 0)
@@ -155,12 +168,13 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
   const loanInterestPaid = lp
     .filter((p: any) => p.is_paid && p.is_interest)
     .reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const loanNetReceived = totalLoans - loanPaidBack  // יתרת ההלוואה (בלי ריבית)
+  const loanReceivedAmt = lr.filter((r: any) => r.is_received).reduce((s: number, r: any) => s + Number(r.amount), 0)
+  const loanNetReceived = loanReceivedAmt - loanPaidBack  // יתרת ההלוואה (בלי ריבית)
 
   // KPIs — בדיוק כמו בדף הפרויקט
-  const realBalance     = (totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
-  const expectedBalance = (totalExpected + txIncome + totalInvested) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn)
-  const cashInFund      = (loanNetReceived + totalReceived + txIncome + totalInvested) - (totalPaid + txExpense + ptxExpense + totalWithdrawn)
+  const realBalance     = (totalReceived + txIncome + totalInvested + loanReceivedAmt) - (totalPaid + txExpense + ptxExpense + totalWithdrawn + loanPaidBack)
+  const expectedBalance = (totalExpected + txIncome + totalInvested + loanReceivedAmt) - (totalScheduled + txExpense + ptxExpense + totalWithdrawn + loanPaidBack)
+  const cashInFund      = realBalance
 
   const f = (n: number) => '₪' + n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
 
@@ -171,7 +185,7 @@ export async function getProjectBalance(args: { project?: string }): Promise<Rec
     real_balance:       { value: realBalance,     formatted: f(realBalance) },
     expected_balance:   { value: expectedBalance, formatted: f(expectedBalance) },
     income_received:    { value: totalReceived + txIncome,  formatted: f(totalReceived + txIncome) },
-    expenses_paid:      { value: totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested, formatted: f(totalPaid + txExpense + ptxExpense + totalWithdrawn - totalInvested) },
+    expenses_paid:      { value: totalPaid + txExpense, formatted: f(totalPaid + txExpense) },
     loan_net_remaining: { value: loanNetReceived, formatted: f(loanNetReceived), note: 'ללא ריבית' },
     cash_in_fund:       { value: cashInFund,      formatted: f(cashInFund) },
     // פרטים נוספים
@@ -592,5 +606,71 @@ export async function getOverdueAlerts(): Promise<Record<string, unknown>> {
     found: true,
     total_overdue_items: allOverdue.length,
     overdue_items: allOverdue,
+  }
+}
+
+// ─── getPortalActivityLog ─────────────────────────────────────────────────────────
+
+export const getPortalActivityLogDeclaration: FunctionDeclaration = {
+  name: 'getPortalActivityLog',
+  description:
+    'שולף את היסטוריית הפעולות האחרונות שבוצעו בפורטל (יומן פעולות/אקטיביטי). ' +
+    'השתמש כאשר המשתמש מבקש "מה הפעולות האחרונות שבוצעו", "תביא לי את 10 הפעולות האחרונות", "היסטוריית פעולות בפורטל".',
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      limit: { type: SchemaType.NUMBER, description: 'מספר הפעולות לשלוף. ברירת מחדל: 10' },
+      project: { type: SchemaType.STRING, description: 'אופציונלי - סינון לפי שם פרויקט מסוים' }
+    },
+    required: [],
+  },
+}
+
+export async function getPortalActivityLog(args: { limit?: number; project?: string }): Promise<Record<string, unknown>> {
+  const limit = args.limit || 10;
+  
+  let query = db
+    .from('moshe_audit_log')
+    .select(`
+      id,
+      user_name,
+      action_type,
+      entity_type,
+      description,
+      created_at,
+      moshe_projects(name)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (args.project) {
+     const { data: projects } = await db
+      .from('moshe_projects')
+      .select('id')
+      .ilike('name', `%${args.project}%`)
+      .limit(1)
+      
+    if (projects && projects.length > 0) {
+      query = query.eq('project_id', projects[0].id)
+    } else {
+      return { found: false, error: `לא נמצא פרויקט בשם "${args.project}".` }
+    }
+  }
+
+  const { data, error } = await query;
+  
+  if (error) return { found: false, error: error.message }
+  
+  return {
+    found: true,
+    count: (data ?? []).length,
+    activities: (data ?? []).map((log: any) => ({
+      user: log.user_name || 'מערכת',
+      action_type: log.action_type,
+      entity_type: log.entity_type,
+      project_name: log.moshe_projects?.name || 'כללי',
+      description: log.description,
+      date: log.created_at,
+    }))
   }
 }

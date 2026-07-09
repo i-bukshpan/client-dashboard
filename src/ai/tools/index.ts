@@ -47,6 +47,7 @@ import {
   addTransactionDeclaration, addTransaction, executeAddTransaction,
   addBuyerDeclaration, addBuyer, executeAddBuyer,
   getOverdueAlertsDeclaration, getOverdueAlerts,
+  getPortalActivityLogDeclaration, getPortalActivityLog,
 } from './mosheProjectTools'
 
 import {
@@ -120,6 +121,7 @@ const declarationMap: Record<string, FunctionDeclaration> = {
   addTransaction: addTransactionDeclaration,
   addBuyer: addBuyerDeclaration,
   getOverdueAlerts: getOverdueAlertsDeclaration,
+  getPortalActivityLog: getPortalActivityLogDeclaration,
   listPartners: listPartnersDeclaration,
   getPartnerSummary: getPartnerSummaryDeclaration,
   addPartnerTransaction: addPartnerTransactionDeclaration,
@@ -194,6 +196,8 @@ export async function executeToolCall(
       return getPendingPayments(args)
     case 'getOverdueAlerts':
       return getOverdueAlerts()
+    case 'getPortalActivityLog':
+      return getPortalActivityLog(args)
 
     // Partners
     case 'listPartners':

@@ -45,7 +45,7 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     // פרויקטי פורטל (גישת admin מלאה)
     'listProjects', 'getProjectSummary', 'getProjectBalance',
     'addBuyer', 'addProjectPayment', 'markPaymentPaid',
-    'addTransaction', 'getPendingPayments', 'getOverdueAlerts',
+    'addTransaction', 'getPendingPayments', 'getOverdueAlerts', 'getPortalActivityLog',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
@@ -62,7 +62,7 @@ const TOOL_PERMISSIONS: Record<UserRole, string[]> = {
     // פרויקטים
     'listProjects', 'getProjectSummary', 'getProjectBalance',
     'addBuyer', 'addProjectPayment', 'markPaymentPaid',
-    'addTransaction', 'getPendingPayments', 'getOverdueAlerts',
+    'addTransaction', 'getPendingPayments', 'getOverdueAlerts', 'getPortalActivityLog',
     // שותפים
     'getPartnerSummary', 'listPartners', 'addPartnerTransaction',
     // עובדי פורטל
