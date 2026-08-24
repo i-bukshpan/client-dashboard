@@ -1,3 +1,73 @@
+// ── v2: Dashboard Config Types ───────────────────────────────────────────────
+
+/** All widget types the dashboard engine can render. */
+export type WidgetType =
+  | 'bar_chart'
+  | 'line_chart'
+  | 'pie_chart'
+  | 'stat_card'
+  | 'data_table'
+
+/** Grid position and size for a widget (CSS grid coordinates). */
+export interface WidgetPosition {
+  /** Zero-based column start index */
+  col: number
+  /** Zero-based row start index */
+  row: number
+  /** Number of columns to span (1-4) */
+  w: number
+  /** Number of rows to span (1-4) */
+  h: number
+}
+
+/** A single dashboard widget definition. */
+export interface DashboardWidget {
+  /** Unique identifier for this widget (used as React key and for updates) */
+  id: string
+  /** The type of visualization to render */
+  type: WidgetType
+  /** Human-readable title displayed above the widget */
+  title: string
+  /** Name of the Google Sheet tab this widget reads data from */
+  sheet: string
+  /** Grid position/size */
+  position: WidgetPosition
+  /** Tailwind color token or hex color for the widget accent */
+  color?: string
+
+  // ── Chart-specific fields (relevant to bar/line/pie charts) ───────────────
+  /** Column name to use for the X-axis (bar/line charts) */
+  x_column?: string
+  /** Column name to use for the Y-axis / value (bar/line/stat cards) */
+  y_column?: string
+  /** Column name to use for pie chart labels */
+  label_column?: string
+  /** Column name to use for pie chart values */
+  value_column?: string
+
+  // ── Stat card-specific fields ─────────────────────────────────────────────
+  /** Lucide icon name for stat cards (e.g. 'trending-up', 'dollar-sign') */
+  icon?: string
+  /** Semantic color for stat cards: 'green' | 'red' | 'blue' | 'amber' */
+  card_color?: 'green' | 'red' | 'blue' | 'amber' | 'purple'
+
+  // ── Data table-specific fields ────────────────────────────────────────────
+  /** Ordered list of column names to display (all columns if omitted) */
+  columns?: string[]
+  /** Maximum number of rows to show */
+  max_rows?: number
+}
+
+/** Root dashboard configuration object stored in clients.dashboard_config_json */
+export interface DashboardConfig {
+  /** Schema version for forward-compatibility */
+  version: 1
+  /** Ordered list of widgets to render */
+  widgets: DashboardWidget[]
+}
+
+// ── Core DB types ─────────────────────────────────────────────────────────────
+
 export type Role = 'admin' | 'employee'
 export type TaskStatus = 'todo' | 'in_progress' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
@@ -32,6 +102,11 @@ export interface Client {
   advisory_goal: string | null
   advisory_track: string | null
   status: string | null
+  // ── v2: Google Workspace fields ──────────────────────────────────────────
+  /** ID of the client's Google Spreadsheet. null = not yet set up. */
+  google_sheet_id: string | null
+  /** Dynamic dashboard layout config. Empty object = no dashboard yet. */
+  dashboard_config_json: DashboardConfig | Record<string, never>
   created_by: string
   created_at: string
 }

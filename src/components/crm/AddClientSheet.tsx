@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { Loader2, Plus, UserPlus, Mail, Phone, IdCard, MapPin } from 'lucide-react'
-import { createClientFolder } from '@/lib/google-drive'
 import { createClientAction } from '@/app/admin/crm/create-client'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -39,12 +38,7 @@ export function AddClientSheet() {
   async function onSubmit(data: FormData) {
     setLoading(true)
     try {
-      let drive_folder_id: string | null = null
-      try {
-        drive_folder_id = await createClientFolder(data.name)
-      } catch { /* fallback gracefully */ }
-
-      const result = await createClientAction({ ...data, drive_folder_id })
+      const result = await createClientAction(data)
 
       if (result.error) {
         toast.error(result.error)

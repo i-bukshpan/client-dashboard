@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getClientFiles, formatFileSize, getMimeIcon, getFolderLink } from '@/lib/google-drive'
-import type { DriveFile } from '@/lib/google-drive'
+import { formatFileSize, getMimeIcon, getFolderLink, type ClientDriveFile as DriveFile } from '@/lib/workspace-utils'
 import { FolderOpen, ExternalLink, RefreshCw, Upload, File } from 'lucide-react'
 
 interface Props {
@@ -24,8 +23,11 @@ export function ClientDocuments({ folderId, clientName }: Props) {
     }
     setLoading(true)
     try {
-      const data = await getClientFiles(folderId)
-      setFiles(data)
+      const res = await fetch(`/api/workspace/drive-files?folderId=${folderId}`)
+      const json = await res.json()
+      if (res.ok) {
+        setFiles(json.files || [])
+      }
     } catch (error) {
       console.error('Error loading files:', error)
     } finally {

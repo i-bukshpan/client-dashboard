@@ -4,6 +4,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { createClientFolder } from '@/lib/google-drive'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,6 +32,17 @@ export async function createClientAction(raw: unknown) {
   if (!user) return { error: 'משתמש לא מחובר' }
 
   const data = parsed.data
+
+  // Automatically create Google Drive folder on the server if not provided
+  let folderId = data.drive_folder_id || null
+  if (!folderId) {
+    try {
+      folderId = await createClientFolder(data.name)
+    } catch (e: any) {
+      console.warn('[createClientAction] Failed to auto-create Google Drive folder:', e.message)
+    }
+  }
+
   const { error } = await supabaseAdmin
     .from('clients')
     .insert({
@@ -40,7 +52,7 @@ export async function createClientAction(raw: unknown) {
       id_number: data.id_number || null,
       address: data.address || null,
       notes: data.notes || null,
-      drive_folder_id: data.drive_folder_id || null,
+      drive_folder_id: folderId,
       created_by: user.id,
     })
 
@@ -50,5 +62,6 @@ export async function createClientAction(raw: unknown) {
   }
 
   revalidatePath('/admin/crm')
+  revalidatePath('/workspace/clients')
   return { success: true }
 }

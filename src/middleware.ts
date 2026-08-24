@@ -42,6 +42,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/share/dashboard') ||
+    pathname.startsWith('/share/brief') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
@@ -133,6 +135,19 @@ export async function middleware(request: NextRequest) {
         if (isMosheEmail(user.email)) {
           return NextResponse.redirect(new URL('/moshe', request.url))
         }
+        return NextResponse.redirect(new URL('/employee/dashboard', request.url))
+      }
+    }
+    return supabaseResponse
+  }
+
+  // /workspace/* — Nehemiah OS v2, admin only (same guard as /admin)
+  if (pathname.startsWith('/workspace')) {
+    if (!isAdminEmail(user.email)) {
+      const { data: profile } = await supabase
+        .from('profiles').select('role').eq('id', user.id).single()
+      const role = (profile as any)?.role
+      if (role !== 'admin') {
         return NextResponse.redirect(new URL('/employee/dashboard', request.url))
       }
     }

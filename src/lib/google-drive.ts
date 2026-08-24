@@ -1,92 +1,187 @@
 /**
- * Google Drive API integration.
- * Currently uses MOCK data. Replace the mock implementations with real
- * Google Drive API calls once service-account credentials are provided in .env.local.
+ * src/lib/google-drive.ts
+ *
+ * Real Google Drive API integration.
+ * - Reads & Listings: Service Account (fast, server-to-server)
+ * - File Uploads: Uses OAuth2 Refresh Token (Nehemiah's personal account) to avoid
+ *   the Service Account 0GB storage quota restriction on personal @gmail.com accounts.
  */
 
-export interface DriveFile {
-  id: string
-  name: string
-  mimeType: string
-  modifiedTime: string
-  size: string | null
-  webViewLink: string
-  iconLink: string
+import { Readable } from 'stream'
+import { createV2DriveClient } from '@/lib/v2/google-auth'
+import type { ClientDriveFile as DriveFile } from '@/lib/workspace-utils'
+import { formatFileSize, getMimeIcon, getFolderLink } from '@/lib/workspace-utils'
+
+export type { DriveFile }
+export { formatFileSize, getMimeIcon, getFolderLink }
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function getDriveClient() {
+  return createV2DriveClient()
 }
 
-const MOCK_FILES: DriveFile[] = [
-  {
-    id: 'file-001',
-    name: 'חוזה שירות.pdf',
-    mimeType: 'application/pdf',
-    modifiedTime: '2024-03-15T10:00:00Z',
-    size: '245000',
-    webViewLink: '#',
-    iconLink: 'https://drive-thirdparty.googleusercontent.com/16/type/application/pdf',
-  },
-  {
-    id: 'file-002',
-    name: 'דוח שנתי 2023.xlsx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    modifiedTime: '2024-02-20T14:30:00Z',
-    size: '124000',
-    webViewLink: '#',
-    iconLink: 'https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.ms-excel',
-  },
-  {
-    id: 'file-003',
-    name: 'תיק לקוח.docx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    modifiedTime: '2024-01-10T09:00:00Z',
-    size: '58000',
-    webViewLink: '#',
-    iconLink: 'https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.ms-word',
-  },
-]
+function getDriveUploadClient() {
+  return createV2DriveClient()
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * List files in a client's Drive folder.
- * MOCK: returns sample files regardless of folderId.
+ * List all items (subfolders and files) directly inside a Drive folder.
+ * Returns subfolders first, followed by files ordered by modified time desc.
  */
 export async function getClientFiles(folderId: string): Promise<DriveFile[]> {
-  await new Promise((r) => setTimeout(r, 600)) // simulate latency
   if (!folderId) return []
-  return MOCK_FILES
+
+  const drive = getDriveClient()
+
+  const response = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: 'files(id, name, mimeType, modifiedTime, size, webViewLink, iconLink)',
+    orderBy: 'folder, modifiedTime desc',
+    pageSize: 100,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  })
+
+  const files = response.data.files ?? []
+
+  const items = files.map((f) => {
+    const isFolder = f.mimeType === 'application/vnd.google-apps.folder'
+    return {
+      id: f.id ?? '',
+      name: f.name ?? 'Untitled',
+      mimeType: f.mimeType ?? 'application/octet-stream',
+      modifiedTime: f.modifiedTime ?? new Date().toISOString(),
+      size: f.size ?? null,
+      webViewLink:
+        f.webViewLink ??
+        (isFolder
+          ? `https://drive.google.com/drive/folders/${f.id}`
+          : `https://drive.google.com/file/d/${f.id}`),
+      iconLink: f.iconLink ?? '',
+      isFolder,
+    }
+  })
+
+  // Ensure folders are at top, then newest files
+  return items.sort((a, b) => {
+    if (a.isFolder && !b.isFolder) return -1
+    if (!a.isFolder && b.isFolder) return 1
+    return new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime()
+  })
 }
 
 /**
- * Create a new Drive folder for a client inside the parent folder.
- * MOCK: returns a fake folder ID.
+ * Upload a file directly to a specific Google Drive folder.
+ * Uses Nehemiah's personal OAuth2 Refresh Token so the file is stored under
+ * his personal Google Drive quota (bypassing the Service Account 0GB quota limit).
+ */
+export async function uploadFileToDrive(
+  folderId: string,
+  fileName: string,
+  mimeType: string,
+  buffer: Buffer
+): Promise<DriveFile> {
+  const drive = getDriveUploadClient()
+
+  const stream = new Readable()
+  stream.push(buffer)
+  stream.push(null)
+
+  const response = await drive.files.create({
+    supportsAllDrives: true,
+    requestBody: {
+      name: fileName,
+      parents: [folderId],
+    },
+    media: {
+      mimeType: mimeType || 'application/octet-stream',
+      body: stream,
+    },
+    fields: 'id, name, mimeType, modifiedTime, size, webViewLink, iconLink',
+  })
+
+  const f = response.data
+  return {
+    id: f.id ?? '',
+    name: f.name ?? fileName,
+    mimeType: f.mimeType ?? mimeType,
+    modifiedTime: f.modifiedTime ?? new Date().toISOString(),
+    size: f.size ?? String(buffer.length),
+    webViewLink: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}`,
+    iconLink: f.iconLink ?? '',
+    isFolder: false,
+  }
+}
+
+/** Downloads a non-Google binary file from Drive into server memory. */
+export async function downloadFileFromDrive(fileId: string): Promise<Buffer> {
+  const drive = getDriveClient()
+  const response = await drive.files.get(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' }
+  )
+  return Buffer.from(response.data as ArrayBuffer)
+}
+
+/**
+ * Create a new folder inside the configured parent folder.
+ * Returns the new folder's Drive ID.
  */
 export async function createClientFolder(clientName: string): Promise<string> {
-  await new Promise((r) => setTimeout(r, 800))
-  const fakeId = `folder-${Date.now()}-${clientName.replace(/\s+/g, '-').toLowerCase()}`
-  console.log('[Drive Mock] Created folder:', fakeId)
-  return fakeId
+  const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID
+  if (!parentFolderId) {
+    throw new Error(
+      '[google-drive] GOOGLE_DRIVE_PARENT_FOLDER_ID is not set in .env.local'
+    )
+  }
+
+  const drive = getDriveUploadClient()
+
+  const response = await drive.files.create({
+    supportsAllDrives: true,
+    requestBody: {
+      name: clientName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId],
+    },
+    fields: 'id',
+  })
+
+  const folderId = response.data.id
+  if (!folderId) throw new Error('[google-drive] Failed to create folder — no ID returned')
+
+  return folderId
 }
 
-/**
- * Get the shareable link for a folder.
- * MOCK: returns a placeholder Google Drive URL.
- */
-export function getFolderLink(folderId: string): string {
-  return `https://drive.google.com/drive/folders/${folderId}`
+/** Creates a v2-owned Drive folder without relying on any legacy CRM record. */
+export async function createWorkspaceFolder(name: string, parentFolderId?: string): Promise<string> {
+  const drive = getDriveUploadClient()
+  const response = await drive.files.create({
+    supportsAllDrives: true,
+    requestBody: {
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      ...(parentFolderId ? { parents: [parentFolderId] } : {}),
+    },
+    fields: 'id',
+  })
+  const folderId = response.data.id
+  if (!folderId) throw new Error('[google-drive] Failed to create workspace folder')
+  return folderId
 }
 
-export function formatFileSize(bytes: string | null): string {
-  if (!bytes) return '—'
-  const n = parseInt(bytes)
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
+/** Moves a Google-native file into one v2 Drive folder. */
+export async function moveWorkspaceFile(fileId: string, folderId: string): Promise<void> {
+  const drive = getDriveUploadClient()
+  const current = await drive.files.get({ fileId, fields: 'parents', supportsAllDrives: true })
+  await drive.files.update({
+    fileId,
+    addParents: folderId,
+    removeParents: (current.data.parents ?? []).join(',') || undefined,
+    supportsAllDrives: true,
+    fields: 'id, parents',
+  })
 }
-
-export function getMimeIcon(mimeType: string): string {
-  if (mimeType.includes('pdf')) return '📄'
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊'
-  if (mimeType.includes('word') || mimeType.includes('document')) return '📝'
-  if (mimeType.includes('image')) return '🖼️'
-  if (mimeType.includes('folder')) return '📁'
-  return '📎'
-}
-
