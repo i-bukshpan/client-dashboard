@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Loader2, TrendingUp, Lock, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { Loader2, TrendingUp, Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -17,19 +18,82 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [hasSession, setHasSession] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    async function checkAuth() {
+      try {
+        // 1. Check if code parameter is present in URL search params (PKCE fallback)
+        if (typeof window !== 'undefined') {
+          const searchParams = new URLSearchParams(window.location.search)
+          const code = searchParams.get('code')
+          if (code) {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+            if (!exchangeError && data?.session) {
+              setHasSession(true)
+              setIsCheckingSession(false)
+              return
+            }
+          }
+        }
+
+        // 2. Check existing session
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          setHasSession(true)
+        }
+      } catch (err: any) {
+        console.error('Auth verification error:', err)
+      } finally {
+        setIsCheckingSession(false)
+      }
+    }
+
+    checkAuth()
+
+    // 3. Listen to auth state changes (e.g. PASSWORD_RECOVERY event from Supabase client)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (session && (event === 'SIGNED_IN' || event === 'USER_UPDATED'))) {
+        setHasSession(true)
+        setIsCheckingSession(false)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (password.length < 6) { setError('הסיסמה חייבת להכיל לפחות 6 תווים'); return }
-    if (password !== confirm) { setError('הסיסמאות אינן תואמות'); return }
+    if (password.length < 6) {
+      setError('הסיסמה חייבת להכיל לפחות 6 תווים')
+      return
+    }
+    if (password !== confirm) {
+      setError('הסיסמאות אינן תואמות')
+      return
+    }
+
     setLoading(true)
     setError(null)
+
     const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({ password })
+    const { error: updateError } = await supabase.auth.updateUser({ password })
+
     setLoading(false)
-    if (error) { setError(error.message); return }
+    if (updateError) {
+      setError(updateError.message || 'שגיאה בעדכון הסיסמה, אנא נסה שוב')
+      return
+    }
+
     setDone(true)
-    setTimeout(() => router.push('/login'), 2500)
+    setTimeout(() => {
+      router.push('/login')
+    }, 2500)
   }
 
   return (
@@ -57,8 +121,26 @@ export default function ResetPasswordPage() {
                 <p className="text-slate-800 font-semibold">הסיסמה עודכנה בהצלחה!</p>
                 <p className="text-slate-500 text-sm">מעביר אותך לדף הכניסה...</p>
               </div>
+            ) : isCheckingSession ? (
+              <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-600" />
+                <p className="text-xs text-slate-500 font-medium">מאמת קישור איפוס...</p>
+              </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
+                {!hasSession && (
+                  <div className="bg-amber-50 text-amber-800 border border-amber-200/60 rounded-lg p-3 text-xs leading-relaxed flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      שים לב: אם הקישור פג תוקף, תוכל לבקש קישור איפוס חדש ב-
+                      <Link href="/forgot-password" className="underline font-semibold ms-1 hover:text-amber-950">
+                        שכחת סיסמה
+                      </Link>
+                      .
+                    </span>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-slate-700 font-medium text-sm">סיסמה חדשה</Label>
                   <div className="relative">

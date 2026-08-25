@@ -20,10 +20,11 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) return
     setLoading(true)
     setError(null)
-    const supabase = createClient()
-    const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ndfm.ibsites.co.il'
+    const origin = typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://ndfm.ibsites.co.il')
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${appUrl}/reset-password`,
+      redirectTo: `${origin}/auth/callback?next=/reset-password`,
     })
     setLoading(false)
     if (error) { setError(error.message); return }

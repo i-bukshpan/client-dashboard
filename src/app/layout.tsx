@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 }
 
 import { Toaster } from 'sonner'
+import { AuthRecoveryListener } from '@/components/auth/AuthRecoveryListener'
 
 export default function RootLayout({
   children,
@@ -31,6 +32,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
+        <AuthRecoveryListener />
         {children}
         <Toaster position="bottom-left" richColors />
         

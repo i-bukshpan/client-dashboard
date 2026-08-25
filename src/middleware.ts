@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
+import { isAdminEmail, isMosheEmail } from '@/lib/auth-helpers'
 
 const adminDb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,12 +30,6 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
-
-  const isAdminEmail = (email?: string | null) => {
-    const configured = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase()
-    return Boolean(email && configured && email.trim().toLowerCase() === configured)
-  }
-  const isMosheEmail = (email?: string | null) => email === process.env.MOSHE_EMAIL
 
   // Public routes
   if (

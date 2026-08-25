@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
+import { isAdminEmail } from '@/lib/auth-helpers'
 
 import type { Profile } from '@/types/database'
 
@@ -20,8 +21,8 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single()
 
-  const isAdminEmail = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
-  const role = isAdminEmail ? 'admin' : (profile as any)?.role
+  const isAdmin = isAdminEmail(user.email)
+  const role = isAdmin ? 'admin' : (profile as any)?.role
 
   if (role !== 'admin') redirect('/employee/dashboard')
 

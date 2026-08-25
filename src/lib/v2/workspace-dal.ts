@@ -4,6 +4,7 @@ import { cache } from 'react'
 import { createClient as createSupabaseClient, type User } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isAdminEmail, getAdminEmail } from '@/lib/auth-helpers'
 import type { DashboardConfig } from '@/types/dashboard'
 
 const ClientIdSchema = z.string().uuid()
@@ -52,18 +53,14 @@ export interface WorkspaceAdminSession {
   role: 'admin'
 }
 
-function normalizedEmail(value?: string | null): string {
-  return value?.trim().toLowerCase() ?? ''
-}
-
 /**
  * Ensures that the environment-configured administrator also has the profile
  * row required by database foreign keys and RLS. The authenticated user's ID
  * is used dynamically; no administrator UUID is hardcoded.
  */
 export async function ensureConfiguredWorkspaceAdminProfile(user: User): Promise<boolean> {
-  const configuredAdminEmail = normalizedEmail(process.env.NEXT_PUBLIC_ADMIN_EMAIL)
-  if (!configuredAdminEmail || normalizedEmail(user.email) !== configuredAdminEmail) return false
+  if (!isAdminEmail(user.email)) return false
+  const configuredAdminEmail = getAdminEmail()
 
   const metadataName = typeof user.user_metadata?.full_name === 'string'
     ? user.user_metadata.full_name.trim()

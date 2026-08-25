@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { ensureConfiguredWorkspaceAdminProfile } from '@/lib/v2/workspace-dal'
+import { isMosheEmail, isAdminEmail } from '@/lib/auth-helpers'
 
 const db = adminDb(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,11 +26,12 @@ export async function loginWithEmail(formData: FormData) {
   revalidatePath('/', 'layout')
 
   // Moshe portal
-  if (email === process.env.MOSHE_EMAIL) redirect('/moshe')
+  if (isMosheEmail(email) || isMosheEmail(user.email)) redirect('/moshe')
 
   // Environment-configured admin: dynamically upsert the matching auth user
   // into public.profiles so RLS and created_by/updated_by foreign keys work.
-  if (await ensureConfiguredWorkspaceAdminProfile(user)) {
+  if (isAdminEmail(email) || isAdminEmail(user.email) || (await ensureConfiguredWorkspaceAdminProfile(user))) {
+    await ensureConfiguredWorkspaceAdminProfile(user)
     redirect('/admin/dashboard')
   }
 

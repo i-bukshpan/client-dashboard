@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { createClient as adminDb } from '@supabase/supabase-js'
 import { MosheShell } from '@/components/moshe/MosheShell'
+import { isAdminEmail, isMosheEmail } from '@/lib/auth-helpers'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -18,8 +19,8 @@ export default async function MosheLayout({ children }: { children: React.ReactN
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const isAdmin = user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
-  const isMoshe = user.email === process.env.MOSHE_EMAIL
+  const isAdmin = isAdminEmail(user.email)
+  const isMoshe = isMosheEmail(user.email)
 
   if (!isAdmin && !isMoshe) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()

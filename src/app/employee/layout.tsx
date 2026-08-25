@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
+import { isAdminEmail, isMosheEmail } from '@/lib/auth-helpers'
 import type { Profile } from '@/types/database'
-// Removed hardcoded employeeNav, now using standard Sidebar
 
 export default async function EmployeeLayout({
   children,
@@ -13,6 +13,9 @@ export default async function EmployeeLayout({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  if (isAdminEmail(user.email)) redirect('/admin/dashboard')
+  if (isMosheEmail(user.email)) redirect('/moshe')
 
   const { data: profile } = await supabase
     .from('profiles')
