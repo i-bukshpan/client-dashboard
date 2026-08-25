@@ -47,6 +47,8 @@ import { listWorkspaceTasks } from '@/lib/v2/workspace-tasks'
 import { getClientWorkspaceSettings } from '@/lib/v2/client-settings'
 import { listMonthlyBriefs } from '@/lib/v2/monthly-brief'
 import { MonthlyBriefPanel } from '@/components/workspace/MonthlyBriefPanel'
+import { ClientContextCard } from '@/components/workspace/ClientContextCard'
+import { clientContextSchema } from '@/lib/v2/client-context-schema'
 import {
   getWorkspaceClient,
   WorkspaceAccessError,
@@ -146,6 +148,11 @@ export default async function WorkspaceClientPage({
   const pendingBriefQuestions = monthlyBriefs
     .find((brief) => brief.state === 'needs_input')
     ?.missingInformation.map((item) => item.question) ?? []
+
+  // Parse client context to determine onboarding state
+  const clientContextResult = clientContextSchema.safeParse(c.client_context_json)
+  const clientContext = clientContextResult.success ? clientContextResult.data : null
+  const isOnboarding = !clientContext
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -251,6 +258,25 @@ export default async function WorkspaceClientPage({
           />
         </div>
 
+        {/* Client context card (onboarding status) */}
+        <div className="px-5 py-4 border-b border-border/50">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">
+            פרופיל עסקי
+          </p>
+          {clientContext ? (
+            <ClientContextCard context={clientContext} />
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 px-3 py-2.5">
+              <div className="w-4 h-4 rounded-full bg-indigo-200 flex items-center justify-center shrink-0">
+                <span className="text-[9px] text-indigo-600 font-black">?</span>
+              </div>
+              <p className="text-[10px] text-indigo-600/80 leading-tight">
+                פרופיל עסקי טרם הוגדר — פתח את AI Agent להתחלת האפיון
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Quick links */}
         <div className="px-5 py-4 space-y-2">
           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
@@ -292,7 +318,7 @@ export default async function WorkspaceClientPage({
       </aside>
 
       {/* ── Right: Main workspace ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden flex flex-col min-w-0 min-h-0">
         {/* Client name breadcrumb */}
         <div className="px-6 py-3 border-b border-border bg-card/60 backdrop-blur-sm shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm">
@@ -306,19 +332,19 @@ export default async function WorkspaceClientPage({
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="drive" className="flex-1 overflow-hidden flex flex-col">
-          <div className="px-6 pt-4 pb-0 border-b border-border bg-background shrink-0">
-            <TabsList className="h-9 bg-transparent border-0 p-0 gap-1">
+        <Tabs defaultValue="drive" className="flex-1 overflow-hidden flex flex-col min-h-0 min-w-0">
+          <div className="px-6 pt-4 pb-0 border-b border-border bg-background shrink-0 overflow-x-auto scrollbar-thin">
+            <TabsList className="h-9 bg-transparent border-0 p-0 gap-1 flex-nowrap w-max min-w-full justify-start">
               <TabsTrigger
                 value="drive"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:text-amber-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:text-amber-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
                 Drive
               </TabsTrigger>
               <TabsTrigger
                 value="sheets"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <TableIcon className="w-3.5 h-3.5" />
                 Sheets
@@ -330,14 +356,14 @@ export default async function WorkspaceClientPage({
               </TabsTrigger>
               <TabsTrigger
                 value="ai"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:text-indigo-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:text-indigo-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <Bot className="w-3.5 h-3.5" />
                 AI Agent
               </TabsTrigger>
               <TabsTrigger
                 value="dashboard"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 data-[state=active]:text-violet-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 data-[state=active]:text-violet-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
                 Dashboard
@@ -349,14 +375,14 @@ export default async function WorkspaceClientPage({
               </TabsTrigger>
               <TabsTrigger
                 value="calendar"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:text-blue-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:text-blue-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <CalendarDays className="w-3.5 h-3.5" />
                 יומן
               </TabsTrigger>
               <TabsTrigger
                 value="tasks"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:text-amber-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:text-amber-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <ClipboardCheck className="w-3.5 h-3.5" />
                 משימות
@@ -364,14 +390,14 @@ export default async function WorkspaceClientPage({
               </TabsTrigger>
               <TabsTrigger
                 value="settings"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-slate-500 data-[state=active]:text-slate-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-slate-500 data-[state=active]:text-slate-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <Settings2 className="w-3.5 h-3.5" />
                 הגדרות
               </TabsTrigger>
               <TabsTrigger
                 value="monthly-brief"
-                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 data-[state=active]:text-violet-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 data-[state=active]:text-violet-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
                 <FileText className="w-3.5 h-3.5" />
                 בריף חודשי
@@ -381,7 +407,7 @@ export default async function WorkspaceClientPage({
           </div>
 
           {/* Drive tab */}
-          <TabsContent value="drive" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="drive" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <DriveExplorer
               key={c.drive_folder_id ?? 'no-drive'}
               clientId={c.id}
@@ -392,7 +418,7 @@ export default async function WorkspaceClientPage({
           </TabsContent>
 
           {/* Sheets tab */}
-          <TabsContent value="sheets" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="sheets" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <SheetsViewer
               key={c.google_sheet_id ?? 'no-sheet'}
               clientId={c.id}
@@ -402,17 +428,18 @@ export default async function WorkspaceClientPage({
           </TabsContent>
 
           {/* AI Agent tab */}
-          <TabsContent value="ai" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="ai" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden min-h-0">
             <ClientAIChat
               clientId={c.id}
               clientName={c.name}
               hasSheet={!!c.google_sheet_id}
+              isOnboarding={isOnboarding}
               pendingBriefQuestions={pendingBriefQuestions}
             />
           </TabsContent>
 
           {/* Dashboard tab */}
-          <TabsContent value="dashboard" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="dashboard" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <DashboardEngine
               clientId={c.id}
               clientName={c.name}
@@ -421,7 +448,7 @@ export default async function WorkspaceClientPage({
             />
           </TabsContent>
 
-          <TabsContent value="calendar" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="calendar" keepMounted className="flex-1 overflow-hidden p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <WorkspaceCalendar
               clients={[{ id: c.id, name: c.name, email: c.email }]}
               initialClientId={c.id}
@@ -429,15 +456,15 @@ export default async function WorkspaceClientPage({
             />
           </TabsContent>
 
-          <TabsContent value="tasks" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="tasks" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <WorkspaceTaskBoard tasks={clientTasks} clients={[{ id: c.id, name: c.name }]} lockedClientId={c.id} compact />
           </TabsContent>
 
-          <TabsContent value="settings" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="settings" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <ClientSettingsPanel initialSettings={clientSettings} />
           </TabsContent>
 
-          <TabsContent value="monthly-brief" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden">
+          <TabsContent value="monthly-brief" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">
             <MonthlyBriefPanel clientId={c.id} briefs={monthlyBriefs} />
           </TabsContent>
         </Tabs>

@@ -1,0 +1,102 @@
+# ============================================================
+#  n8n — Docker Compose for Nehemiah OS V2
+#  שמור קובץ זה בתיקיה נפרדת: /opt/nehemiah-n8n/
+#  הרצה: docker compose up -d
+# ============================================================
+# 
+#  ENV vars שדרושות — הוסף ל-.env (באותה תיקיה):
+#    N8N_ENCRYPTION_KEY=   # מפתח אקראי 32+ תווים, e.g.: openssl rand -hex 32
+#    N8N_BASIC_AUTH_PASSWORD=  # סיסמה לממשק הניהול של n8n
+#    SUPABASE_SERVICE_ROLE_KEY=
+#    NEXT_PUBLIC_SUPABASE_URL=
+#    GEMINI_API_KEY=
+#    GOOGLE_DRIVE_CLIENT_EMAIL=
+#    GOOGLE_DRIVE_PRIVATE_KEY=  # בין מרכאות, עם \n literal
+#    NEHEMIAH_APP_URL=https://your-domain.com  # כתובת ה-Next.js app
+#    N8N_WEBHOOK_URL=https://n8n.your-domain.com  # כתובת ה-n8n עצמו (לwebhooks)
+
+name: nehemiah-n8n
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: nehemiah-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"          # ממשק הניהול + webhooks
+    environment:
+      # ── General ──────────────────────────────────────────
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=Asia/Jerusalem
+
+      # ── Basic Auth (מגן על ממשק הניהול) ──────────────────
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=nehemiah
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+      # ── Persistence: SQLite (פשוט, מתאים לשרת אחד) ──────
+      # לעבור ל-Postgres בעתיד אם יש צורך בגיבוי קל יותר
+      - DB_TYPE=sqlite
+      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+
+      # ── הגבלות ──────────────────────────────────────────
+      - EXECUTIONS_MODE=regular        # לא queue — מספיק לשרת אחד
+      - N8N_METRICS=false              # חסוך משאבים
+      - N8N_DIAGNOSTICS_ENABLED=false  # ללא telemetry
+
+      # ── Credentials שזמינות לכל ה-workflows ─────────────
+      # (הוסף אותם כ-Credentials ב-UI של n8n, לא כ-env vars)
+      # env vars כאן הם רק לנוחות ב-Code Nodes
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - NEHEMIAH_APP_URL=${NEHEMIAH_APP_URL}
+      - GOOGLE_CLIENT_EMAIL=${GOOGLE_DRIVE_CLIENT_EMAIL}
+      - GOOGLE_PRIVATE_KEY=${GOOGLE_DRIVE_PRIVATE_KEY}
+
+    volumes:
+      - n8n_data:/home/node/.n8n    # persistence: workflows + DB + credentials
+      - /opt/nehemiah-n8n/backups:/backups  # גיבויי workflows (JSON exports)
+
+    # בריאות — בדיקה כל 30 שניות
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # הגבלת משאבים — מונע מ-n8n לאכול את השרת
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+
+volumes:
+  n8n_data:
+    driver: local
+
+# ============================================================
+#  הוראות הגדרה אחרי הרמה:
+#
+#  1. docker compose up -d
+#  2. גש ל-http://localhost:5678 (או ה-domain שלך)
+#  3. הגדר Credentials:
+#     - Supabase: URL + Service Role Key
+#     - Google Service Account: client_email + private_key
+#     - HTTP Request (Gemini): API Key header
+#  4. ייבא workflows מהתיקיה /opt/nehemiah-n8n/workflows/
+#
+#  גיבוי workflows:
+#    docker exec nehemiah-n8n n8n export:workflow --all --output=/backups/workflows-backup.json
+#
+#  עדכון n8n:
+#    docker compose pull && docker compose up -d
+# ============================================================

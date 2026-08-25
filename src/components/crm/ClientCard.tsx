@@ -6,9 +6,23 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Mail, Phone, FolderOpen, CheckSquare, Calendar, CalendarDays, Pencil } from 'lucide-react'
+import { Mail, Phone, FolderOpen, CheckSquare, Calendar, CalendarDays, Pencil, Trash2, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { EditClientSheet } from './EditClientSheet'
+import { deleteClient } from '@/app/admin/crm/actions'
+import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import type { Client } from '@/types/database'
 
 interface Props {
@@ -19,8 +33,28 @@ interface Props {
 
 export function ClientCard({ client, openTasks, lastAppt }: Props) {
   const [editOpen, setEditOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const router = useRouter()
   const initials = client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
   const joinedDate = client.created_at ? format(new Date(client.created_at), 'MM/yyyy') : null
+
+  async function handleDelete() {
+    setDeleting(true)
+    const toastId = toast.loading(`מוחק את כל הנתונים של ${client.name}...`)
+    try {
+      const res = await deleteClient(client.id)
+      if (res.error) {
+        toast.error(res.error, { id: toastId })
+      } else {
+        toast.success(`הלקוח ${client.name} וכל המידע שלו נמחקו בהצלחה`, { id: toastId })
+        router.refresh()
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'שגיאה במחיקה', { id: toastId })
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <>
@@ -55,6 +89,34 @@ export function ClientCard({ client, openTasks, lastAppt }: Props) {
               >
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger
+                  className="w-7 h-7 rounded-lg inline-flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 text-muted-foreground"
+                  title="מחק לקוח וכל הנתונים"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>מחיקת לקוח לצמיתות</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      האם אתה בטוח שברצונך למחוק את הלקוח <strong>{client.name}</strong>?
+                      פעולה זו תמחק לצמיתות את <strong>כל המידע</strong> המשויך ללקוח, כולל משימות, פגישות, מסמכים והיסטוריה.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>ביטול</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                    >
+                      כן, מחק את כל המידע
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
 

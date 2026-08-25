@@ -3,7 +3,7 @@ import 'server-only'
 import { randomUUID } from 'crypto'
 import { google } from '@ai-sdk/google'
 import { generateObject } from 'ai'
-import { addSheetTab, appendRows, formatRange, getSheetData, getSheetRows, getSpreadsheetMeta, updateRange } from '@/lib/google-sheets'
+import { addSheetTab, appendRows, clearRange, formatRange, getSheetData, getSheetRows, getSpreadsheetMeta, updateRange } from '@/lib/google-sheets'
 import { getClientFiles, uploadFileToDrive } from '@/lib/google-drive'
 import { getClientWorkspaceSettings } from '@/lib/v2/client-settings'
 import { listWorkspaceCalendarEvents } from '@/lib/v2/google-calendar'
@@ -187,3 +187,12 @@ export async function approveMonthlyBrief(clientId: string, briefId: string): Pr
   ])
   return saveBrief({ ...approved, snapshotFileId: snapshot.id, documentFileId: document.id })
 }
+
+export async function clearMonthlyBriefs(clientId: string): Promise<void> {
+  const client = await getWorkspaceClient(clientId)
+  if (!client.google_sheet_id) return
+  const tabs = await getSpreadsheetMeta(client.google_sheet_id)
+  if (!tabs.some((tab) => tab.title === BRIEFS_TAB)) return
+  await clearRange(client.google_sheet_id, formatRange(BRIEFS_TAB, 'A2:ZZ1000'))
+}
+

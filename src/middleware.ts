@@ -30,7 +30,10 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
 
-  const isAdminEmail = (email?: string | null) => email === process.env.NEXT_PUBLIC_ADMIN_EMAIL
+  const isAdminEmail = (email?: string | null) => {
+    const configured = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase()
+    return Boolean(email && configured && email.trim().toLowerCase() === configured)
+  }
   const isMosheEmail = (email?: string | null) => email === process.env.MOSHE_EMAIL
 
   // Public routes

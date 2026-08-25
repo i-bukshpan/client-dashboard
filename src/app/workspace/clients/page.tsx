@@ -1,4 +1,5 @@
-import { Users } from 'lucide-react'
+import { Users, Brain, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
 import { AddClientSheet } from '@/components/crm/AddClientSheet'
 import { WorkspaceClientCard } from '@/components/workspace/WorkspaceClientCard'
 import { listWorkspaceClients } from '@/lib/v2/workspace-dal'
@@ -8,6 +9,11 @@ export const dynamic = 'force-dynamic'
 
 export default async function WorkspaceClientsPage() {
   const clients = await listWorkspaceClients()
+
+  const pendingOnboarding = clients.filter((c) => {
+    const ctx = c.client_context_json
+    return !ctx || typeof ctx !== 'object' || !('version' in ctx)
+  })
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
@@ -21,6 +27,40 @@ export default async function WorkspaceClientsPage() {
         </div>
         <AddClientSheet />
       </div>
+
+      {/* Onboarding alert banner */}
+      {pendingOnboarding.length > 0 && (
+        <div dir="rtl" className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+            <Brain className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-amber-800">
+              {pendingOnboarding.length} לקוח{pendingOnboarding.length !== 1 ? 'ות' : ''} ממתינ{pendingOnboarding.length !== 1 ? 'ים' : ''} לאפיון ראשוני
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              הסוכן טרם למד על הלקוחות הבאים. פתח כל לקוח ועבור לטאב AI Agent להתחלת תהליך האפיון.
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {pendingOnboarding.slice(0, 8).map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/workspace/clients/${c.id}?tab=ai`}
+                  className="text-[11px] px-2.5 py-1 rounded-full bg-white border border-amber-300 text-amber-700 font-semibold hover:bg-amber-100 transition-colors"
+                >
+                  {c.name}
+                </Link>
+              ))}
+              {pendingOnboarding.length > 8 && (
+                <span className="text-[11px] px-2.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-600 font-medium">
+                  ועוד {pendingOnboarding.length - 8}...
+                </span>
+              )}
+            </div>
+          </div>
+          <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-1" />
+        </div>
+      )}
 
       {/* Client grid */}
       {!clients || clients.length === 0 ? (

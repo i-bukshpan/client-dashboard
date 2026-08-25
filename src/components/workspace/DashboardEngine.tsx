@@ -58,12 +58,16 @@ import {
   Calendar,
   FileDown,
   Share2,
+  RotateCcw,
 } from 'lucide-react'
 import {
   getSheetRowsAction,
   getDashboardConfigAction,
 } from '@/app/admin/crm/[id]/actions-workspace'
-import { analyzeAndGenerateDashboardAction } from '@/app/workspace/actions/dashboard-intelligence'
+import {
+  analyzeAndGenerateDashboardAction,
+  resetClientAgentDataAction,
+} from '@/app/workspace/actions/dashboard-intelligence'
 import { createDashboardShareAction, exportDashboardPdfAction } from '@/app/workspace/actions/dashboard-snapshot'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -434,11 +438,12 @@ function BarChartWidget({
     })
 
     return Object.entries(map)
-      .slice(0, 16)
       .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 16)
   }, [data, xKey, yKey])
 
-  const color = widget.color || '#6366f1'
+  const color = widget.color || '#10b981'
 
   return (
     <Card className="border-border/60 shadow-sm flex flex-col h-full overflow-hidden">
@@ -450,26 +455,27 @@ function BarChartWidget({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="p-4 flex-1 min-h-[260px]">
+      <CardContent className="p-4 flex-1 min-h-[280px]">
         {chartData.length === 0 ? (
           <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
             אין נתונים להצגה
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={260}>
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 45 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10, fill: '#64748b' }}
                 interval={0}
-                textAnchor="middle"
-                height={30}
+                angle={-25}
+                textAnchor="end"
+                height={45}
               />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: '#64748b' }}
                 tickFormatter={(v) =>
-                  v >= 1000000 ? `₪${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `₪${(v / 1000).toFixed(0)}k` : `₪${v}`
+                  v >= 1000000 ? `₪${(v / 1000000).toFixed(1)}M` : v <= -1000000 ? `-₪${(Math.abs(v) / 1000000).toFixed(1)}M` : v >= 1000 ? `₪${(v / 1000).toFixed(0)}k` : v <= -1000 ? `-₪${(Math.abs(v) / 1000).toFixed(0)}k` : `₪${v}`
                 }
               />
               <Tooltip
@@ -496,13 +502,19 @@ function LineChartWidget({
   const yKey = widget.y_column || Object.keys(data[0] || {})[1] || 'value'
 
   const chartData = useMemo(() => {
-    return data.slice(0, 50).map((row) => ({
-      name: String(row[xKey] || ''),
-      value: parseNumericValue(row[yKey]),
-    }))
+    const map: Record<string, number> = {}
+    data.forEach((row) => {
+      let rawDate = String(row[xKey] || '').trim()
+      if (!rawDate) return
+      map[rawDate] = (map[rawDate] || 0) + parseNumericValue(row[yKey])
+    })
+
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value }))
+      .slice(-20)
   }, [data, xKey, yKey])
 
-  const color = widget.color || '#10b981'
+  const color = widget.color || '#6366f1'
 
   return (
     <Card className="border-border/60 shadow-sm flex flex-col h-full overflow-hidden">
@@ -514,24 +526,25 @@ function LineChartWidget({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="p-4 flex-1 min-h-[260px]">
+      <CardContent className="p-4 flex-1 min-h-[280px]">
         {chartData.length === 0 ? (
           <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
             אין נתונים להצגה
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={260}>
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+          <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
+            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10, fill: '#64748b' }}
                 interval={0}
-                textAnchor="middle"
-                height={30}
+                angle={-20}
+                textAnchor="end"
+                height={40}
               />
               <YAxis
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 10, fill: '#64748b' }}
                 tickFormatter={(v) =>
                   v >= 1000000 ? `₪${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `₪${(v / 1000).toFixed(0)}k` : `₪${v}`
                 }
@@ -954,6 +967,18 @@ export function DashboardEngine({
     }
   }
 
+  async function handleResetDashboard() {
+    if (!window.confirm('האם אתה בטוח שברצונך לאפס את הדשבורד החכם? כל הווידג\'טים ימחקו ותוכל לבנות אותו מחדש מאפס.')) return
+    const toastId = toast.loading('מאפס את הדשבורד...')
+    try {
+      const result = await resetClientAgentDataAction(clientId, { resetDashboard: true })
+      setConfig(null)
+      toast.success('הדשבורד אופס בהצלחה!', { id: toastId })
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'איפוס דשבורד נכשל', { id: toastId })
+    }
+  }
+
   return (
     <div className="flex flex-col h-full space-y-4 overflow-y-auto pr-1">
       {/* Header bar & Live Filters Toolbar */}
@@ -986,6 +1011,16 @@ export function DashboardEngine({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               רענן נתונים
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleResetDashboard()}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-red-600 hover:border-red-200 hover:bg-red-50/50 transition-colors font-semibold"
+              title="איפוס הדשבורד ובנייה מחדש מאפס"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              איפוס
             </Button>
             <Button variant="outline" size="sm" onClick={() => void handleExportPdf()} disabled={isExporting} className="h-8 gap-1.5 text-xs font-semibold">
               {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}

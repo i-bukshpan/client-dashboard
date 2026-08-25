@@ -107,6 +107,8 @@ export interface Client {
   google_sheet_id: string | null
   /** Dynamic dashboard layout config. Empty object = no dashboard yet. */
   dashboard_config_json: DashboardConfig | Record<string, never>
+  /** Structured client onboarding context. Empty object = discovery not yet completed. */
+  client_context_json: Record<string, unknown>
   created_by: string
   created_at: string
 }

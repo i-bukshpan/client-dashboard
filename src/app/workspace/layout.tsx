@@ -6,7 +6,7 @@
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck } from 'lucide-react'
+import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck, Sun } from 'lucide-react'
 import {
   requireWorkspaceAdmin,
   WorkspaceAccessError,
@@ -50,6 +50,13 @@ export default async function WorkspaceLayout({
 
         {/* Nav links */}
         <nav className="flex items-center gap-1">
+          <Link
+            href="/workspace/brief"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Sun className="w-3.5 h-3.5 text-amber-500" />
+            בריף יומי
+          </Link>
           <Link
             href="/workspace/clients"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"

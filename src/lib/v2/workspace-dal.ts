@@ -52,6 +52,35 @@ export interface WorkspaceAdminSession {
   role: 'admin'
 }
 
+function normalizedEmail(value?: string | null): string {
+  return value?.trim().toLowerCase() ?? ''
+}
+
+/**
+ * Ensures that the environment-configured administrator also has the profile
+ * row required by database foreign keys and RLS. The authenticated user's ID
+ * is used dynamically; no administrator UUID is hardcoded.
+ */
+export async function ensureConfiguredWorkspaceAdminProfile(user: User): Promise<boolean> {
+  const configuredAdminEmail = normalizedEmail(process.env.NEXT_PUBLIC_ADMIN_EMAIL)
+  if (!configuredAdminEmail || normalizedEmail(user.email) !== configuredAdminEmail) return false
+
+  const metadataName = typeof user.user_metadata?.full_name === 'string'
+    ? user.user_metadata.full_name.trim()
+    : ''
+  const { error } = await getWorkspaceAdminDb()
+    .from('profiles')
+    .upsert({
+      id: user.id,
+      email: user.email ?? configuredAdminEmail,
+      full_name: metadataName || user.email?.split('@')[0] || 'Workspace Admin',
+      role: 'admin',
+    }, { onConflict: 'id' })
+
+  if (error) throw new Error(`[workspace-dal] Admin profile synchronization failed: ${error.message}`)
+  return true
+}
+
 /**
  * Authorizes a Nehemiah OS v2 request.
  * This must be called by every workspace/v2 page, Route Handler and Server Action.
@@ -67,8 +96,7 @@ export const requireWorkspaceAdmin = cache(async (): Promise<WorkspaceAdminSessi
     throw new WorkspaceAccessError('UNAUTHENTICATED', 'נדרשת התחברות למערכת')
   }
 
-  const configuredAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase()
-  if (configuredAdminEmail && user.email?.trim().toLowerCase() === configuredAdminEmail) {
+  if (await ensureConfiguredWorkspaceAdminProfile(user)) {
     return { user, role: 'admin' }
   }
 
@@ -96,13 +124,15 @@ export interface WorkspaceClientRecord {
   drive_folder_id: string | null
   google_sheet_id: string | null
   dashboard_config_json: DashboardConfig | Record<string, never>
+  /** Structured onboarding context. Empty object = discovery not yet completed. */
+  client_context_json: Record<string, unknown>
   portfolio_value: number | null
   advisory_goal: string | null
   risk_level: string | null
   created_at: string
 }
 
-const WORKSPACE_CLIENT_COLUMNS = 'id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, dashboard_config_json, portfolio_value, advisory_goal, risk_level, created_at'
+const WORKSPACE_CLIENT_COLUMNS = 'id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at'
 
 export function parseWorkspaceClientId(value: string): string {
   const result = ClientIdSchema.safeParse(value)

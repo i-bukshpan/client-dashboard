@@ -73,18 +73,37 @@ export async function deleteClient(id: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'משתמש לא מחובר' }
 
-  const { error } = await supabaseAdmin
-    .from('clients')
-    .delete()
-    .eq('id', id)
+  try {
+    // 1. Delete all cascading dependencies first
+    await Promise.allSettled([
+      supabaseAdmin.from('tasks').delete().eq('client_id', id),
+      supabaseAdmin.from('appointments').delete().eq('client_id', id),
+      supabaseAdmin.from('documents').delete().eq('client_id', id),
+      supabaseAdmin.from('portfolio_history').delete().eq('client_id', id),
+      supabaseAdmin.from('notifications').delete().eq('client_id', id),
+      supabaseAdmin.from('advisory_plans').delete().eq('client_id', id),
+      supabaseAdmin.from('client_portal_users').delete().eq('client_id', id),
+    ])
 
-  if (error) {
-    console.error('Delete Client Error:', error)
-    return { error: `שגיאה במחיקת הלקוח: ${error.message}` }
+    // 2. Delete the client record
+    const { error } = await supabaseAdmin
+      .from('clients')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Delete Client Error:', error)
+      return { error: `שגיאה במחיקת הלקוח: ${error.message}` }
+    }
+
+    revalidatePath('/admin/crm')
+    revalidatePath('/workspace/clients')
+    revalidatePath('/')
+    return { success: true }
+  } catch (e: any) {
+    console.error('Delete client exception:', e)
+    return { error: e.message || 'שגיאה במחיקת כל נתוני הלקוח' }
   }
-
-  revalidatePath('/admin/crm')
-  return { success: true }
 }
 
 export async function inviteClientToPortal(clientId: string, email: string, name: string) {

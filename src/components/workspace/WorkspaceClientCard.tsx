@@ -13,6 +13,7 @@ import {
   Trash2,
   Loader2,
   LayoutGrid,
+  Brain,
 } from 'lucide-react'
 import { EditClientModal } from './EditClientModal'
 import { deleteClient } from '@/app/admin/crm/actions'
@@ -42,6 +43,7 @@ export function WorkspaceClientCard({ client }: Props) {
   const hasSheet = !!client.google_sheet_id
   const hasDrive = !!client.drive_folder_id
   const hasDashboard = client.dashboard_config_json?.widgets?.length > 0
+  const hasContext = !!(client.client_context_json && typeof client.client_context_json === 'object' && 'version' in client.client_context_json)
   const initials = (client.name as string)
     .split(' ')
     .map((n: string) => n[0])
@@ -183,6 +185,18 @@ export function WorkspaceClientCard({ client }: Props) {
                 >
                   <LayoutGrid className="w-2.5 h-2.5" />
                   Dashboard
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] gap-1 ${
+                    hasContext
+                      ? 'text-violet-600 border-violet-200 bg-violet-50'
+                      : 'text-amber-600 border-amber-300 bg-amber-50 animate-pulse'
+                  }`}
+                  title={hasContext ? 'הסוכן מכיר את הלקוח' : 'אפיון ראשוני טרם הושלם'}
+                >
+                  <Brain className="w-2.5 h-2.5" />
+                  {hasContext ? 'מאופיין' : 'ממתין לאפיון'}
                 </Badge>
               </div>
             </Link>

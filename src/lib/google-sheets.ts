@@ -247,7 +247,6 @@ export async function createSpreadsheet(
     requestBody: {
       properties: {
         title,
-        locale: 'he',
         timeZone: 'Asia/Jerusalem',
       },
       sheets: sheetsToCreate.map((s, index) => ({

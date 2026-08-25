@@ -40,13 +40,26 @@ import {
   User,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-import { analyzeAndGenerateDashboardAction } from '@/app/workspace/actions/dashboard-intelligence'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import {
+  analyzeAndGenerateDashboardAction,
+  resetClientAgentDataAction,
+} from '@/app/workspace/actions/dashboard-intelligence'
 
 interface ClientAIChatProps {
   clientId: string
   clientName: string
   hasSheet: boolean
+  isOnboarding?: boolean
   pendingBriefQuestions?: string[]
 }
 
@@ -88,6 +101,12 @@ const TOOL_META: Record<string, { icon: React.ElementType; label: string; action
     label: 'סריקת קבצים ב-Drive',
     actionDesc: 'סורק תיקיות וקבצים ב-Google Drive...',
     color: 'amber',
+  },
+  save_client_context: {
+    icon: Sparkles,
+    label: 'שמירת פרופיל עסקי',
+    actionDesc: 'שומר את הפרופיל העסקי של הלקוח למסד הנתונים...',
+    color: 'indigo',
   },
 }
 
@@ -380,7 +399,7 @@ function MessageBubble({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export function ClientAIChat({ clientId, clientName, hasSheet, pendingBriefQuestions = [] }: ClientAIChatProps) {
+export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = false, pendingBriefQuestions = [] }: ClientAIChatProps) {
   const router = useRouter()
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -434,9 +453,10 @@ export function ClientAIChat({ clientId, clientName, hasSheet, pendingBriefQuest
     // If no saved conversation, trigger fresh greeting once
     if (!hasGreetedRef.current && messages.length === 0) {
       hasGreetedRef.current = true
-      sendMessage({
-        text: `היי, התחל שיחה וספר לי מה הסטטוס של הלקוח ${clientName}`,
-      }).catch(() => null)
+      const greetText = isOnboarding
+        ? `היי! אני רוצה להתחיל לעבוד עם הלקוח ${clientName}. בוא נתחיל בהיכרות.`
+        : `היי, התחל שיחה וספר לי מה הסטטוס של הלקוח ${clientName}`
+      sendMessage({ text: greetText }).catch(() => null)
     }
   }, [storageKey, setMessages, messages.length, sendMessage, clientName])
 
@@ -482,20 +502,53 @@ export function ClientAIChat({ clientId, clientName, hasSheet, pendingBriefQuest
     }
   }
 
-  // Reset conversation handler
-  const handleReset = useCallback(() => {
+  // Reset modal state
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false)
+  const [resetChat, setResetChat] = useState(true)
+  const [resetDashboard, setResetDashboard] = useState(true)
+  const [resetBriefs, setResetBriefs] = useState(true)
+  const [resetContext, setResetContext] = useState(true)
+  const [triggerGreeting, setTriggerGreeting] = useState(true)
+  const [isResetting, setIsResetting] = useState(false)
+
+  // Full reset conversation and agent data handler
+  const handlePerformReset = useCallback(async () => {
+    setIsResetting(true)
+    const toastId = toast.loading('מאפס את נתוני הסוכן והבריף...')
     try {
-      localStorage.removeItem(storageKey)
-    } catch {
-      // ignore
+      const res = await resetClientAgentDataAction(clientId, {
+        resetDashboard,
+        resetBriefs,
+        resetContext,
+      })
+      if ('error' in res) throw new Error(res.error)
+
+      if (resetChat) {
+        try {
+          localStorage.removeItem(storageKey)
+        } catch {
+          // ignore
+        }
+        setMessages([])
+        briefPromptRef.current = ''
+      }
+
+      if (triggerGreeting) {
+        hasGreetedRef.current = true
+        sendMessage({
+          text: `היי, התחל שיחה וספר לי מה הסטטוס של הלקוח ${clientName}`,
+        }).catch(() => null)
+      }
+
+      toast.success('נתוני הסוכן, הבריף, הפרופיל העסקי והשיחה אופסו בהצלחה!', { id: toastId })
+      setIsResetDialogOpen(false)
+      router.refresh()
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'איפוס נכשל', { id: toastId })
+    } finally {
+      setIsResetting(false)
     }
-    setMessages([])
-    hasGreetedRef.current = true
-    sendMessage({
-      text: `היי, התחל שיחה חדשה וספר לי מה הסטטוס של הלקוח ${clientName}`,
-    }).catch(() => null)
-    toast.success('השיחה אופסה בהצלחה')
-  }, [storageKey, setMessages, sendMessage, clientName])
+  }, [clientId, clientName, resetBriefs, resetChat, resetContext, resetDashboard, router, sendMessage, setMessages, storageKey, triggerGreeting])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -528,7 +581,109 @@ export function ClientAIChat({ clientId, clientName, hasSheet, pendingBriefQuest
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background relative">
+      {/* Reset Confirmation Dialog */}
+      <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-red-600 font-bold mb-1">
+              <RotateCcw className="w-5 h-5" />
+              <DialogTitle className="text-base font-bold text-foreground">איפוס מידע סוכן והתחלה מחדש</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              פעולה זו מאפשרת לך לאפס את נתוני הסוכן של {clientName} כדי להתחיל תהליך ניתוח ואפיון חדש לחלוטין.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 my-2">
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border/70 bg-card/60">
+              <div>
+                <Label htmlFor="reset-chat" className="text-xs font-bold text-foreground cursor-pointer">
+                  מחיקת היסטוריית השיחה בצ&apos;אט
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  מנקה את הודעות הצ&apos;אט והזיכרון המקומי של הסוכן ללקוח זה
+                </p>
+              </div>
+              <Switch
+                id="reset-chat"
+                checked={resetChat}
+                onCheckedChange={setResetChat}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border/70 bg-card/60">
+              <div>
+                <Label htmlFor="reset-dash" className="text-xs font-bold text-foreground cursor-pointer">
+                  איפוס הדשבורד החכם
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  מוחק את הווידג&apos;טים שנבנו בדשבורד ומחזיר למצב טיוטה ראשוני
+                </p>
+              </div>
+              <Switch
+                id="reset-dash"
+                checked={resetDashboard}
+                onCheckedChange={setResetDashboard}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border/70 bg-card/60">
+              <div>
+                <Label htmlFor="reset-briefs" className="text-xs font-bold text-foreground cursor-pointer">
+                  איפוס הבריף החודשי והשאלות הפתוחות
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  מוחק את טיוטות הבריף ושאלות ההשלמה מהגיליון כך שהסוכן יתחיל נקי
+                </p>
+              </div>
+              <Switch
+                id="reset-briefs"
+                checked={resetBriefs}
+                onCheckedChange={setResetBriefs}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-xl border border-border/70 bg-card/60">
+              <div>
+                <Label htmlFor="reset-greet" className="text-xs font-bold text-foreground cursor-pointer">
+                  הפעלת פתיחה יזומה חדשה
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  הסוכן יפתח בשיחה יזומה לזיהוי והבנת הלקוח מחדש
+                </p>
+              </div>
+              <Switch
+                id="reset-greet"
+                checked={triggerGreeting}
+                onCheckedChange={setTriggerGreeting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsResetDialogOpen(false)}
+              disabled={isResetting}
+            >
+              ביטול
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handlePerformReset}
+              disabled={isResetting || (!resetChat && !resetDashboard && !resetBriefs && !resetContext && !triggerGreeting)}
+              className="gap-1.5 font-bold"
+            >
+              {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+              אפס נתונים והתחל מחדש
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/60 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2.5">
@@ -563,20 +718,33 @@ export function ClientAIChat({ clientId, clientName, hasSheet, pendingBriefQuest
               החל דשבורד
             </Button>
           )}
-          {messages.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-red-600 hover:border-red-200"
-              onClick={handleReset}
-              title="נקה היסטוריית שיחה והתחל מחדש"
-            >
-              <RotateCcw className="w-3 h-3" />
-              שיחה חדשה
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-red-600 hover:border-red-200 hover:bg-red-50/50 transition-colors font-medium"
+            onClick={() => setIsResetDialogOpen(true)}
+            title="איפוס מידע ושיחת סוכן כדי להתחיל מההתחלה"
+          >
+            <RotateCcw className="w-3 h-3" />
+            איפוס סוכן
+          </Button>
         </div>
       </div>
+
+      {/* Onboarding mode banner */}
+      {isOnboarding && (
+        <div dir="rtl" className="flex items-center gap-2.5 px-4 py-2.5 bg-indigo-50 border-b border-indigo-200 shrink-0">
+          <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center shrink-0">
+            <Sparkles className="w-3 h-3 text-white" />
+          </div>
+          <p className="text-[11px] text-indigo-700 font-semibold flex-1">
+            שלב אפיון ראשוני — הסוכן אוסף מידע על הלקוח לפני גישה לגיליון
+          </p>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-bold border border-indigo-200">
+            אפיון בתהליך
+          </span>
+        </div>
+      )}
 
       {/* Messages list */}
       <div
