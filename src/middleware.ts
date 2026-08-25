@@ -57,13 +57,10 @@ export async function middleware(request: NextRequest) {
       if (isMosheEmail(user.email)) {
         return NextResponse.redirect(new URL('/moshe', request.url))
       }
-      // Admin team members (profiles) take priority over moshe_workers
+      // Employee portal
       const { data: profile } = await supabase
         .from('profiles').select('role').eq('id', user.id).single()
       const role = (profile as any)?.role
-      if (role === 'admin') {
-        return NextResponse.redirect(new URL('/admin/dashboard', request.url))
-      }
       if (role === 'employee') {
         return NextResponse.redirect(new URL('/employee/dashboard', request.url))
       }
@@ -109,45 +106,32 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  // /moshe/* — only admin or Moshe
+  // /moshe/* — strictly admin or Moshe (configured via ENV)
   if (pathname.startsWith('/moshe')) {
     if (!isAdminEmail(user.email) && !isMosheEmail(user.email)) {
-      // Check DB role for admin
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single()
-      if ((profile as any)?.role !== 'admin') {
-        return NextResponse.redirect(new URL('/employee/dashboard', request.url))
-      }
+      return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
     return supabaseResponse
   }
 
-  // /admin/* — only admin
+  // /admin/* — strictly admin (configured via ENV)
   if (pathname.startsWith('/admin')) {
     if (!isAdminEmail(user.email)) {
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single()
-      const role = (profile as any)?.role
-      if (role !== 'admin') {
-        // Moshe trying to access admin → redirect to his portal
-        if (isMosheEmail(user.email)) {
-          return NextResponse.redirect(new URL('/moshe', request.url))
-        }
-        return NextResponse.redirect(new URL('/employee/dashboard', request.url))
+      if (isMosheEmail(user.email)) {
+        return NextResponse.redirect(new URL('/moshe', request.url))
       }
+      return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
     return supabaseResponse
   }
 
-  // /workspace/* — Nehemiah OS v2, admin only (same guard as /admin)
+  // /workspace/* — Nehemiah OS v2, strictly admin (configured via ENV)
   if (pathname.startsWith('/workspace')) {
     if (!isAdminEmail(user.email)) {
-      const { data: profile } = await supabase
-        .from('profiles').select('role').eq('id', user.id).single()
-      const role = (profile as any)?.role
-      if (role !== 'admin') {
-        return NextResponse.redirect(new URL('/employee/dashboard', request.url))
+      if (isMosheEmail(user.email)) {
+        return NextResponse.redirect(new URL('/moshe', request.url))
       }
+      return NextResponse.redirect(new URL('/employee/dashboard', request.url))
     }
     return supabaseResponse
   }

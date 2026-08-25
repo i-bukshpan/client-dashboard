@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
+import { requestPasswordResetAction } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +15,15 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('error') === 'link_expired') {
+        setError('קישור איפוס הסיסמה פג תוקף או שכבר נוצל. נא להזין אימייל לקבלת קישור חדש.')
+      }
+    }
+  }, [])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim()) return
@@ -23,11 +32,12 @@ export default function ForgotPasswordPage() {
     const origin = typeof window !== 'undefined' && window.location.origin
       ? window.location.origin
       : (process.env.NEXT_PUBLIC_APP_URL || 'https://ndfm.ibsites.co.il')
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${origin}/auth/callback?next=/reset-password`,
-    })
+    const res = await requestPasswordResetAction(email.trim(), origin)
     setLoading(false)
-    if (error) { setError(error.message); return }
+    if (res.error) {
+      setError(res.error)
+      return
+    }
     setSent(true)
   }
 

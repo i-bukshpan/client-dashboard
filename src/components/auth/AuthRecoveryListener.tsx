@@ -21,6 +21,13 @@ export function AuthRecoveryListener() {
     const hash = window.location.hash
     const search = window.location.search
 
+    // Check if URL hash indicates an expired/denied recovery token
+    const isErrorHash = hash.includes('error=') || hash.includes('otp_expired')
+    if (isErrorHash) {
+      window.location.replace('/forgot-password?error=link_expired')
+      return
+    }
+
     // Check if URL hash or search params indicate a recovery event
     const hasRecoveryHash = hash.includes('type=recovery') || (hash.includes('access_token=') && hash.includes('type=recovery'))
     const hasRecoveryQuery = search.includes('type=recovery')

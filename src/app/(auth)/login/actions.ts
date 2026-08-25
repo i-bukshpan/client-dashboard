@@ -30,16 +30,15 @@ export async function loginWithEmail(formData: FormData) {
 
   // Environment-configured admin: dynamically upsert the matching auth user
   // into public.profiles so RLS and created_by/updated_by foreign keys work.
-  if (isAdminEmail(email) || isAdminEmail(user.email) || (await ensureConfiguredWorkspaceAdminProfile(user))) {
+  if (isAdminEmail(email) || isAdminEmail(user.email)) {
     await ensureConfiguredWorkspaceAdminProfile(user)
     redirect('/admin/dashboard')
   }
 
-  // Admin team members (profiles) take priority over moshe_workers
+  // Employee team members
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).single()
   const role = (profile as any)?.role
-  if (role === 'admin') redirect('/admin/dashboard')
   if (role === 'employee') redirect('/employee/dashboard')
 
   // Worker portal
