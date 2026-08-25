@@ -1,57 +1,86 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { type NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 import { resolveUserDestination, isAdminEmail, isMosheEmail } from '@/lib/auth-helpers'
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next')
+  const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
+  const next = searchParams.get('next')
 
   const forwardedHost = request.headers.get('x-forwarded-host')
   const isLocalEnv = process.env.NODE_ENV === 'development'
   const baseUrl = isLocalEnv ? origin : (forwardedHost ? `https://${forwardedHost}` : origin)
 
-  if (code) {
-    const supabase = await createClient()
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    
+  // Target destination
+  let targetPath = next && next.startsWith('/') ? next : '/reset-password'
+  if (type === 'recovery') {
+    targetPath = '/reset-password'
+  }
+
+  const response = NextResponse.redirect(`${baseUrl}${targetPath}`)
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
+
+  // 1. Verify token_hash if provided
+  if (token_hash && type) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      type: type as any,
+      token_hash,
+    })
     if (!error && data?.user) {
-      // If a specific next path was requested (e.g. /reset-password)
-      if (next && next.startsWith('/')) {
-        return NextResponse.redirect(`${baseUrl}${next}`)
+      if (type === 'recovery' || targetPath === '/reset-password') {
+        return response
       }
-
-      // If recovery type flow, direct user to reset-password
-      if (type === 'recovery') {
-        return NextResponse.redirect(`${baseUrl}/reset-password`)
-      }
-
-      // Otherwise determine destination based on user's authorized email / role
       const user = data.user
-      if (isAdminEmail(user.email)) {
-        return NextResponse.redirect(`${baseUrl}/admin/dashboard`)
-      }
-      if (isMosheEmail(user.email)) {
-        return NextResponse.redirect(`${baseUrl}/moshe`)
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      const role = (profile as any)?.role
-      const destination = resolveUserDestination(user.email, role)
-      return NextResponse.redirect(`${baseUrl}${destination}`)
+      const destination = resolveUserDestination(user.email)
+      return NextResponse.redirect(`${baseUrl}${destination}`, {
+        headers: response.headers,
+      })
     }
   }
 
-  // If there's an error or no code, redirect to reset-password if type is recovery, else login
-  if (type === 'recovery' || next === '/reset-password') {
-    return NextResponse.redirect(`${baseUrl}/reset-password?error=invalid_link`)
+  // 2. Exchange code for session if code is provided
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error && data?.user) {
+      if (type === 'recovery' || targetPath === '/reset-password') {
+        return response
+      }
+      const user = data.user
+      if (isAdminEmail(user.email)) {
+        const adminRes = NextResponse.redirect(`${baseUrl}/admin/dashboard`)
+        response.cookies.getAll().forEach(c => adminRes.cookies.set(c.name, c.value))
+        return adminRes
+      }
+      if (isMosheEmail(user.email)) {
+        const mosheRes = NextResponse.redirect(`${baseUrl}/moshe`)
+        response.cookies.getAll().forEach(c => mosheRes.cookies.set(c.name, c.value))
+        return mosheRes
+      }
+      const destination = resolveUserDestination(user.email)
+      const destRes = NextResponse.redirect(`${baseUrl}${destination}`)
+      response.cookies.getAll().forEach(c => destRes.cookies.set(c.name, c.value))
+      return destRes
+    }
   }
 
-  return NextResponse.redirect(`${baseUrl}/login?error=auth-code-error`)
+  // If there's an error or no code/token, redirect to forgot-password
+  return NextResponse.redirect(`${baseUrl}/forgot-password?error=link_expired`)
 }

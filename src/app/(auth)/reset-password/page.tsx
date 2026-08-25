@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { resetPasswordServerAction } from './actions'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,15 +25,22 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    async function checkAuth() {
+    async function initAuth() {
       try {
-        // 1. Check if code parameter is present in URL search params (PKCE fallback)
-        if (typeof window !== 'undefined') {
-          const searchParams = new URLSearchParams(window.location.search)
-          const code = searchParams.get('code')
-          if (code) {
-            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-            if (!exchangeError && data?.session) {
+        if (typeof window === 'undefined') return
+
+        // 1. Check URL hash parameters (#access_token=...&refresh_token=...)
+        const rawHash = window.location.hash
+        if (rawHash && rawHash.includes('access_token=')) {
+          const hashParams = new URLSearchParams(rawHash.replace(/^#/, ''))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          if (accessToken) {
+            const { data, error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || '',
+            })
+            if (!setSessionError && data.session) {
               setHasSession(true)
               setIsCheckingSession(false)
               return
@@ -40,10 +48,41 @@ export default function ResetPasswordPage() {
           }
         }
 
-        // 2. Check existing session
+        // 2. Check URL search query (?code=... or ?token_hash=...)
+        const searchParams = new URLSearchParams(window.location.search)
+        const code = searchParams.get('code')
+        if (code) {
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (!exchangeError && data?.session) {
+            setHasSession(true)
+            setIsCheckingSession(false)
+            return
+          }
+        }
+
+        const token_hash = searchParams.get('token_hash')
+        const type = searchParams.get('type')
+        if (token_hash && type) {
+          const { data, error: otpError } = await supabase.auth.verifyOtp({
+            type: type as any,
+            token_hash,
+          })
+          if (!otpError && data?.session) {
+            setHasSession(true)
+            setIsCheckingSession(false)
+            return
+          }
+        }
+
+        // 3. Check existing browser session
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
           setHasSession(true)
+        } else {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            setHasSession(true)
+          }
         }
       } catch (err: any) {
         console.error('Auth verification error:', err)
@@ -52,11 +91,11 @@ export default function ResetPasswordPage() {
       }
     }
 
-    checkAuth()
+    initAuth()
 
-    // 3. Listen to auth state changes (e.g. PASSWORD_RECOVERY event from Supabase client)
+    // Listen to Supabase auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || (session && (event === 'SIGNED_IN' || event === 'USER_UPDATED'))) {
+      if (session || event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
         setHasSession(true)
         setIsCheckingSession(false)
       }
@@ -81,19 +120,33 @@ export default function ResetPasswordPage() {
     setLoading(true)
     setError(null)
 
+    // Method 1: Client-side updateUser
     const supabase = createClient()
-    const { error: updateError } = await supabase.auth.updateUser({ password })
+    const { error: clientError } = await supabase.auth.updateUser({ password })
 
-    setLoading(false)
-    if (updateError) {
-      setError(updateError.message || 'שגיאה בעדכון הסיסמה, אנא נסה שוב')
+    if (!clientError) {
+      setLoading(false)
+      setDone(true)
+      setTimeout(() => {
+        router.push('/login')
+      }, 2500)
       return
     }
 
-    setDone(true)
-    setTimeout(() => {
-      router.push('/login')
-    }, 2500)
+    // Method 2: Server-side action fallback using server session / admin
+    const serverRes = await resetPasswordServerAction(password)
+    setLoading(false)
+
+    if (serverRes?.success) {
+      setDone(true)
+      setTimeout(() => {
+        router.push('/login')
+      }, 2500)
+      return
+    }
+
+    // If both failed, display friendly error
+    setError(serverRes?.error || clientError?.message || 'פג תוקף החיבור לאיפוס סיסמה. אנא בקש קישור חדש.')
   }
 
   return (
@@ -132,7 +185,7 @@ export default function ResetPasswordPage() {
                   <div className="bg-amber-50 text-amber-800 border border-amber-200/60 rounded-lg p-3 text-xs leading-relaxed flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <span>
-                      שים לב: אם הקישור פג תוקף, תוכל לבקש קישור איפוס חדש ב-
+                      שים לב: אם פג תוקף הקישור, תוכל לבקש קישור איפוס חדש ב-
                       <Link href="/forgot-password" className="underline font-semibold ms-1 hover:text-amber-950">
                         שכחת סיסמה
                       </Link>
