@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceAdminDb } from '@/lib/v2/workspace-dal'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
   let userId = rawState || ''
-  let returnUrl = '/workspace/clients'
+  let returnUrl = '/workspace/emails'
 
   if (rawState) {
     try {
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     } catch {
       // Plain userId string fallback
       userId = rawState
-      returnUrl = '/admin/calendar'
+      returnUrl = '/workspace/emails'
     }
   }
 
@@ -50,17 +50,26 @@ export async function GET(request: Request) {
     const { tokens } = await oauth2Client.getToken(code)
 
     if (!tokens.access_token) {
-      throw new Error('No access token received')
+      throw new Error('No access token received from Google')
     }
 
-    // Save tokens to Supabase google_tokens table
-    const supabase = await createClient()
-    const { error: dbError } = await supabase
+    const adminDb = getWorkspaceAdminDb()
+
+    // Fetch existing token to preserve refresh_token if Google omitted it in this grant
+    const { data: existingRow } = await adminDb
+      .from('google_tokens')
+      .select('refresh_token')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    const finalRefreshToken = tokens.refresh_token || existingRow?.refresh_token || null
+
+    const { error: dbError } = await adminDb
       .from('google_tokens')
       .upsert({
         user_id: userId,
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
+        refresh_token: finalRefreshToken,
         expires_at: tokens.expiry_date || null,
       }, { onConflict: 'user_id' })
 

@@ -67,67 +67,91 @@ export function classifyGmailError(error: any): GmailAuthError {
 
 /**
  * Returns an authenticated OAuth2 client with Gmail access.
- * Checks server-configured OAuth refresh token first, then falls back to google_tokens table.
+ * Prioritizes the user-authorized tokens in `google_tokens` (which include Gmail scopes),
+ * with automatic token refreshing and fallback to server environment credentials.
  */
 export async function getGmailAuthClient(): Promise<any> {
-  // Strategy 1: Server-side configured OAuth client in environment
+  const adminDb = getWorkspaceAdminDb()
+
+  // Strategy 1: Check Supabase google_tokens table first (holds user-authorized Gmail scopes)
+  try {
+    let tokenRow: any = null
+
+    try {
+      const supabase = await createServerSupabase()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.id) {
+        const { data } = await adminDb
+          .from('google_tokens')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        tokenRow = data
+      }
+    } catch {
+      // Ignore user session retrieval error and fallback to latest token
+    }
+
+    if (!tokenRow) {
+      // Check if any authorized token is stored
+      const { data } = await adminDb
+        .from('google_tokens')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      tokenRow = data
+    }
+
+    if (tokenRow && (tokenRow.access_token || tokenRow.refresh_token)) {
+      const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
+      const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
+      const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/google/callback`
+
+      const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
+      oauth2Client.setCredentials({
+        access_token: tokenRow.access_token,
+        refresh_token: tokenRow.refresh_token,
+        expiry_date: tokenRow.expires_at,
+      })
+
+      // Auto-refresh if expired or close to expiry
+      const isExpired = !tokenRow.expires_at || Date.now() >= (Number(tokenRow.expires_at) - 60000)
+      if (isExpired && tokenRow.refresh_token) {
+        try {
+          const { credentials } = await oauth2Client.refreshAccessToken()
+          oauth2Client.setCredentials(credentials)
+
+          await adminDb
+            .from('google_tokens')
+            .update({
+              access_token: credentials.access_token!,
+              expires_at: credentials.expiry_date || null,
+              refresh_token: credentials.refresh_token || tokenRow.refresh_token,
+            })
+            .eq('user_id', tokenRow.user_id)
+        } catch (refreshErr: any) {
+          console.error('[getGmailAuthClient] Refresh failed:', refreshErr)
+          throw classifyGmailError(refreshErr)
+        }
+      }
+
+      return oauth2Client
+    }
+  } catch (err: any) {
+    if (err instanceof GmailAuthError && (err.code === 'INVALID_GRANT' || err.code === 'TOKEN_EXPIRED')) {
+      throw err
+    }
+    console.warn('[getGmailAuthClient] google_tokens lookup error:', err)
+  }
+
+  // Strategy 2: Fallback to server-side configured OAuth client in environment
   const serverOAuth = getOAuth2Client()
   if (serverOAuth) {
     return serverOAuth
   }
 
-  // Strategy 2: Check Supabase google_tokens table
-  try {
-    const supabase = await createServerSupabase()
-    const { data: { user } } = await supabase.auth.getUser()
-    const adminDb = getWorkspaceAdminDb()
-
-    let tokenRow: any = null
-    if (user?.id) {
-      const { data } = await adminDb.from('google_tokens').select('*').eq('user_id', user.id).maybeSingle()
-      tokenRow = data
-    }
-
-    if (!tokenRow) {
-      // Check if any admin token is stored
-      const { data } = await adminDb.from('google_tokens').select('*').limit(1).maybeSingle()
-      tokenRow = data
-    }
-
-    if (!tokenRow || !tokenRow.access_token) {
-      throw new GmailAuthError('AUTH_REQUIRED', 'חשבון Gmail עדיין לא חובר. לחץ על הכפתור כדי לחבר את החשבון.')
-    }
-
-    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
-    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/google/callback`
-
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
-    oauth2Client.setCredentials({
-      access_token: tokenRow.access_token,
-      refresh_token: tokenRow.refresh_token,
-      expiry_date: tokenRow.expires_at,
-    })
-
-    // Auto-refresh if expired
-    if (tokenRow.expires_at && Date.now() >= tokenRow.expires_at && tokenRow.refresh_token) {
-      try {
-        const { credentials } = await oauth2Client.refreshAccessToken()
-        await adminDb.from('google_tokens').update({
-          access_token: credentials.access_token!,
-          expires_at: credentials.expiry_date!,
-          refresh_token: credentials.refresh_token || tokenRow.refresh_token,
-        }).eq('user_id', tokenRow.user_id)
-      } catch (refreshErr: any) {
-        throw classifyGmailError(refreshErr)
-      }
-    }
-
-    return oauth2Client
-  } catch (err: any) {
-    if (err instanceof GmailAuthError) throw err
-    throw classifyGmailError(err)
-  }
+  throw new GmailAuthError('AUTH_REQUIRED', 'חשבון Gmail עדיין לא חובר. לחץ על הכפתור כדי לחבר את החשבון.')
 }
 
 /**
