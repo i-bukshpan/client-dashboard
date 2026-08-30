@@ -65,6 +65,8 @@ import {
   Maximize2,
   Trash2,
   Plus,
+  Layers,
+  ListOrdered,
 } from 'lucide-react'
 import {
   getSheetRowsAction,
@@ -81,6 +83,7 @@ import {
   type SheetTabHeaderInfo,
 } from '@/app/workspace/actions/dashboard-builder'
 import { WidgetBuilderModal } from '@/components/workspace/WidgetBuilderModal'
+import { WidgetManagerModal } from '@/components/workspace/WidgetManagerModal'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
@@ -802,6 +805,7 @@ export function DashboardEngine({
   // Visual Dashboard Builder & Manual Editor State
   const [isEditMode, setIsEditMode] = useState(false)
   const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false)
+  const [isManagerModalOpen, setIsManagerModalOpen] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
   const [sheetTabsInfo, setSheetTabsInfo] = useState<SheetTabHeaderInfo[]>([])
 
@@ -824,6 +828,22 @@ export function DashboardEngine({
   const handleOpenEditWidget = (widget: DashboardWidget) => {
     setEditingWidget(widget)
     setIsBuilderModalOpen(true)
+  }
+
+  const handleReorderWidgets = async (reorderedWidgets: DashboardWidget[]) => {
+    const newConfig: DashboardConfig = {
+      version: 1,
+      tabs: config?.tabs,
+      widgets: reorderedWidgets,
+    }
+    setConfig(newConfig)
+    const toastId = toast.loading('שומר סדר ווידג\'טים חדש...')
+    const res = await saveDashboardConfigAction(clientId, newConfig)
+    if (res.success) {
+      toast.success('✅ סדר הווידג\'טים עודכן בהצלחה!', { id: toastId })
+    } else {
+      toast.error(res.error || 'שגיאה בשמירת הסדר', { id: toastId })
+    }
   }
 
   const handleSaveWidgetFromModal = async (savedWidget: DashboardWidget) => {
@@ -1158,12 +1178,22 @@ export function DashboardEngine({
               onClick={() => setIsEditMode((prev) => !prev)}
               className={`h-8 gap-1.5 text-xs font-bold transition-all ${
                 isEditMode
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm ring-2 ring-amber-400/50'
-                  : 'hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300'
+                  ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-sm ring-2 ring-violet-400/50'
+                  : 'hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300'
               }`}
             >
               <Pencil className="w-3.5 h-3.5" />
               {isEditMode ? 'סיום עריכה' : 'ערוך דשבורד'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsManagerModalOpen(true)}
+              className="h-8 gap-1.5 text-xs font-bold hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 text-foreground"
+              title="סידור וניהול ווידג'טים בגרירה ברשימה"
+            >
+              <Layers className="w-3.5 h-3.5 text-violet-600" />
+              סידור ורשימה בגרירה
             </Button>
             <Button
               variant="outline"
@@ -1309,15 +1339,15 @@ export function DashboardEngine({
 
       {/* Visual Edit Mode Top Banner */}
       {isEditMode && (
-        <div className="p-3.5 px-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
-              <Pencil className="w-4 h-4 text-amber-600" />
+        <div className="p-3 px-4 rounded-2xl bg-violet-500/10 dark:bg-violet-950/30 border border-violet-500/30 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 text-foreground">
+            <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Pencil className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-xs font-black">מצב עריכה ויזואלי פעיל</h3>
-              <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
-                הוסף ווידג&apos;טים חדשים, ערוך הגדרות, שנה רוחב (1-4), הזז או מחק כל ווידג&apos;ט. כל שינוי נשמר ישירות בענן.
+              <h3 className="text-xs font-bold text-foreground">מצב עריכה ויזואלי פעיל</h3>
+              <p className="text-[11px] text-muted-foreground font-medium">
+                לחץ &quot;ערוך&quot; או &quot;רוחב&quot; ישירות על כל כרטיס, או השתמש בכפתור &quot;סידור בגרירה&quot; להזזה מהירה של כל הווידג&apos;טים.
               </p>
             </div>
           </div>
@@ -1326,7 +1356,7 @@ export function DashboardEngine({
             <Button
               size="sm"
               onClick={handleOpenAddWidget}
-              className="h-8 gap-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+              className="h-8 gap-1.5 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-xs"
             >
               <Plus className="w-4 h-4" />
               הוסף ווידג&apos;ט חדש
@@ -1334,8 +1364,17 @@ export function DashboardEngine({
             <Button
               size="sm"
               variant="outline"
+              onClick={() => setIsManagerModalOpen(true)}
+              className="h-8 gap-1.5 text-xs font-bold border-violet-300 hover:bg-violet-50 text-violet-900 dark:text-violet-100"
+            >
+              <Layers className="w-3.5 h-3.5 text-violet-600" />
+              סידור ורשימה בגרירה
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => setIsEditMode(false)}
-              className="h-8 text-xs font-bold bg-background hover:bg-muted border-amber-400/60"
+              className="h-8 text-xs font-bold bg-background hover:bg-muted"
             >
               סיום עריכה
             </Button>
@@ -1421,61 +1460,45 @@ export function DashboardEngine({
           )
 
           return (
-            <div key={widget.id} className={`${spanClass} transition-all duration-300 relative group`}>
-              {/* Visual Edit Mode Action Overlay Bar */}
+            <div
+              key={widget.id}
+              className={`
+                ${spanClass} transition-all duration-300 relative group
+                ${isEditMode ? 'ring-2 ring-violet-500/30 dark:ring-violet-400/30 rounded-2xl' : ''}
+              `}
+            >
+              {/* Sleek Floating Glassmorphic In-Card Action Pill */}
               {isEditMode && (
-                <div className="mb-2 p-1.5 px-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-between gap-1.5 text-xs shadow-xs">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => handleOpenEditWidget(widget)}
-                      className="h-6 px-2 text-[11px] font-bold gap-1 bg-white dark:bg-card hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300 shadow-xs"
-                    >
-                      <Pencil className="w-3 h-3 text-amber-600" />
-                      ערוך
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleCycleWidth(widget.id)}
-                      className="h-6 px-2 text-[11px] font-bold gap-1 bg-white dark:bg-card hover:bg-muted text-foreground border shadow-xs"
-                      title="שינוי רוחב עמודות (1-4)"
-                    >
-                      <Maximize2 className="w-3 h-3 text-indigo-600" />
-                      רוחב {widget.position?.w || 1}
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleMoveWidget(widget.id, 'prev')}
-                      className="h-6 w-6 p-0 bg-white dark:bg-card hover:bg-muted"
-                      title="הזז קדימה"
-                    >
-                      <MoveRight className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleMoveWidget(widget.id, 'next')}
-                      className="h-6 w-6 p-0 bg-white dark:bg-card hover:bg-muted"
-                      title="הזז אחורה"
-                    >
-                      <MoveLeft className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDeleteWidget(widget.id)}
-                      className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                      title="מחק ווידג'ט"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
+                <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 p-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-xl border border-violet-500/40 shadow-lg animate-in fade-in zoom-in-95">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleOpenEditWidget(widget)}
+                    className="h-6 px-2 text-[11px] font-bold gap-1 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50"
+                  >
+                    <Pencil className="w-3 h-3 text-amber-500" />
+                    ערוך
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleCycleWidth(widget.id)}
+                    className="h-6 px-2 text-[11px] font-bold gap-1 text-foreground hover:bg-muted"
+                    title="שנה רוחב עמודות (1 עד 4)"
+                  >
+                    <Maximize2 className="w-3 h-3 text-indigo-500" />
+                    רוחב {widget.position?.w || 1}
+                  </Button>
+                  <div className="w-[1px] h-3.5 bg-border/60 mx-0.5" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleDeleteWidget(widget.id)}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    title="מחק ווידג'ט"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
                 </div>
               )}
 
@@ -1491,6 +1514,18 @@ export function DashboardEngine({
           )
         })}
       </div>
+
+      {/* Widget Drag & Drop Sortable Manager Modal */}
+      <WidgetManagerModal
+        open={isManagerModalOpen}
+        onOpenChange={setIsManagerModalOpen}
+        widgets={config?.widgets || []}
+        onReorder={handleReorderWidgets}
+        onEditWidget={handleOpenEditWidget}
+        onDeleteWidget={handleDeleteWidget}
+        onAddWidget={handleOpenAddWidget}
+        onCycleWidth={handleCycleWidth}
+      />
 
       {/* Widget Builder & Editor Modal */}
       <WidgetBuilderModal
