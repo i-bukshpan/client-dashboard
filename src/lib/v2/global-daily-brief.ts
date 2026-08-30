@@ -7,6 +7,7 @@ import { getSheetRows } from '@/lib/google-sheets'
 import { listWorkspaceCalendarEvents } from '@/lib/v2/google-calendar'
 import { listMonthlyBriefs } from '@/lib/v2/monthly-brief'
 import { clientContextSchema } from '@/lib/v2/client-context-schema'
+import { listClientEmails } from '@/lib/google-gmail'
 
 export interface GlobalDailyBrief {
   generatedAt: string
@@ -19,8 +20,16 @@ export interface GlobalDailyBrief {
     dueTodayTasksCount: number
     overdueTasksCount: number
     upcomingEventsCount: number
+    unreadEmailsCount: number
     actionRequiredCount: number
   }
+  unreadEmails: Array<{
+    threadId: string
+    subject: string
+    from: string
+    date: string
+    clientName: string | null
+  }>
   tasks: {
     overdue: Array<{ id: string; title: string; clientName: string | null; dueAt: string | null; priority: string }>
     dueToday: Array<{ id: string; title: string; clientName: string | null; dueAt: string | null; priority: string }>
@@ -69,11 +78,11 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
   const db = getWorkspaceAdminDb()
   const { data: rawClients, error: clientsError } = await db
     .from('clients')
-    .select('id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at')
+    .select('id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, gmail_label, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at')
     .order('name')
 
   if (clientsError) throw new Error(`[global-daily-brief] Failed to load clients: ${clientsError.message}`)
-  const clients = rawClients ?? []
+  const clients = (rawClients ?? []) as any[]
 
   // 2. Fetch Tasks across all workspace clients
   let allTasks: Array<{ id: string; title: string; clientName: string | null; dueAt: string | null; priority: string; reminderState: string }> = []
@@ -94,7 +103,7 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
           clientName: row['שם לקוח']?.trim() || null,
           dueAt: row['מועד יעד']?.trim() || null,
           priority: row['עדיפות']?.trim() || 'medium',
-          status: row['סטטוס']?.trim() || 'todo',
+          status: (row['סטטוס']?.trim() || 'todo') as any,
           snoozedUntil: row['נדחה עד']?.trim() || null,
         }
         return {
@@ -144,7 +153,36 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
     console.warn('[global-daily-brief] Failed to load calendar events:', error)
   }
 
-  // 4. Client Summaries & Context / Monthly Brief flags
+  // 4. Fetch Unread Gmail Threads
+  let unreadEmailsList: GlobalDailyBrief['unreadEmails'] = []
+  let totalUnreadEmailsCount = 0
+  try {
+    const gmailRes = await listClientEmails({ query: 'is:unread', maxResults: 20 })
+    totalUnreadEmailsCount = gmailRes.unreadCount || gmailRes.threads.filter((t) => t.isUnread).length
+    const clientEmailMap = new Map<string, string>()
+    const clientLabelMap = new Map<string, string>()
+    for (const c of clients) {
+      if (c.email) clientEmailMap.set(c.email.toLowerCase(), c.name)
+      if (c.gmail_label) clientLabelMap.set(c.gmail_label.toLowerCase(), c.name)
+    }
+
+    unreadEmailsList = gmailRes.threads.slice(0, 10).map((t) => {
+      let matchedClient: string | null = null
+      const fromEmail = t.from.email.toLowerCase()
+      if (clientEmailMap.has(fromEmail)) matchedClient = clientEmailMap.get(fromEmail)!
+      return {
+        threadId: t.threadId,
+        subject: t.subject,
+        from: t.from.name ? `${t.from.name} (${t.from.email})` : t.from.email,
+        date: t.date,
+        clientName: matchedClient,
+      }
+    })
+  } catch (error) {
+    console.warn('[global-daily-brief] Failed to load unread emails:', error)
+  }
+
+  // 5. Client Summaries & Context / Monthly Brief flags
   const clientsSummary: GlobalDailyBrief['clientsSummary'] = []
   const financialAlerts: GlobalDailyBrief['financialAlerts'] = []
 
@@ -198,10 +236,14 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
   const onboardedCount = clientsSummary.filter((c) => c.hasContext).length
   const pendingOnboardingCount = clientsSummary.length - onboardedCount
 
-  // 5. Generate AI Executive Summary & Action Highlights
+  // 6. Generate AI Executive Summary & Action Highlights (J.A.R.V.I.S Style)
   const briefContextPrompt = `
 תאריך היום: ${formattedDate}
 סה"כ לקוחות: ${clients.length} (מאופיינים: ${onboardedCount}, ממתינים לאפיון: ${pendingOnboardingCount})
+
+מיילים שלא נקראו בתיבה (${totalUnreadEmailsCount}):
+${unreadEmailsList.map((m) => `- מ:${m.from} | נושא: "${m.subject}" ${m.clientName ? `[לקוח: ${m.clientName}]` : ''}`).join('\n') || 'אין מיילים לא נקראו'}
+
 משימות באיחור (${overdueTasks.length}):
 ${overdueTasks.map((t) => `- [דחוף] ${t.title} (${t.clientName || 'כללי'}) מועד: ${t.dueAt || 'ללא'}`).join('\n') || 'אין'}
 
@@ -221,34 +263,44 @@ ${financialAlerts.map((a) => `- ${a.clientName}: ${a.title}`).join('\n') || 'ה�
   try {
     const aiResponse = await generateText({
       model: google('gemini-2.5-flash'),
-      system: `אתה "נחמיה AI" - העוזר העסקי והפיננסי האישי של נחמיה (מנהל המשרד).
-תפקידך לנסח בריף בוקר מנהלים (Executive Morning Brief) ממוקד, חד, מקצועי ופרקטי בעברית.
+      system: `אתה "Nehemiah AI" - העוזר הניהולי הבכיר והאינטליגנטי (Executive Assistant / J.A.R.V.I.S) של נחמיה.
+תפקידך לנסח בריף בוקר מנהלים (Executive Morning Brief) אקטיבי, חד, מקצועי ופרקטי בעברית.
 הבריף צריך לכלול:
-1. פסקת פתיחה קצרה וחדה על תמונת המצב להיום.
-2. 3-4 נקודות מיקוד לפעולה (Action Items) ממוינות לפי עדיפות (קודם משימות דחופות, לקוחות שממתינים למענה, או פגישות).
-3. טון נמרץ, עסקי וישיר. השתמש באימוג'ים מתאימים בצורה אלגנטית.`,
+1. **תמונת מצב מנהלים קצרה וחדה (Executive Overview)**.
+2. **דגשים לפעולה מיידית (Action Items)** ממוינים לפי עדיפות: מיילים דחופים, משימות באיחור, פגישות קרובות.
+3. **התראות לקוחות ופיננסים**.
+טון נמרץ, ישיר, ממוקד החלטות, תוך שימוש באימוג'ים אלגנטיים והדגשות bold על שמות ומספרים.`,
       prompt: `צור בריף מנהלים יומי על בסיס הנתונים הבאים:\n${briefContextPrompt}`,
     })
     aiSummaryMarkdown = aiResponse.text.trim()
   } catch (error) {
     console.warn('[global-daily-brief] AI text generation failed, using fallback:', error)
     aiSummaryMarkdown = `### 📋 תמונת מצב יומית
-היום יש **${dueTodayTasks.length}** משימות לביצוע, **${overdueTasks.length}** משימות באיחור, ו-**${calendarEvents.length}** אירועים ביומן.
+היום יש **${dueTodayTasks.length}** משימות לביצוע, **${overdueTasks.length}** משימות באיחור, **${totalUnreadEmailsCount}** מיילים לא נקראו, ו-**${calendarEvents.length}** אירועים ביומן.
 ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור בדחיפות.**` : '✅ אין משימות באיחור.'}`
   }
 
-  // 6. Build WhatsApp Formatted String
+  // 7. Build WhatsApp Formatted String
   const whatsappLines: string[] = [
     `☀️ *בריף יומי — Nehemiah OS*`,
     `📅 ${formattedDate}`,
     ``,
     `📊 *מבט על:*`,
     `• לקוחות פעילים: ${clients.length}`,
+    `• מיילים שלא נקראו: ${totalUnreadEmailsCount}`,
     `• משימות להיום: ${dueTodayTasks.length}`,
     `• משימות באיחור: ${overdueTasks.length}`,
-    `• אירועים/פגישות השבוע: ${calendarEvents.length}`,
+    `• פגישות השבוע: ${calendarEvents.length}`,
     ``,
   ]
+
+  if (totalUnreadEmailsCount > 0 && unreadEmailsList.length > 0) {
+    whatsappLines.push(`✉️ *מיילים הממתינים למענה:*`)
+    unreadEmailsList.slice(0, 4).forEach((m) => {
+      whatsappLines.push(`• ${m.from}: "${m.subject}" ${m.clientName ? `[${m.clientName}]` : ''}`)
+    })
+    whatsappLines.push(``)
+  }
 
   if (overdueTasks.length > 0) {
     whatsappLines.push(`🚨 *משימות דחופות באיחור:*`)
@@ -297,8 +349,10 @@ ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור 
       dueTodayTasksCount: dueTodayTasks.length,
       overdueTasksCount: overdueTasks.length,
       upcomingEventsCount: calendarEvents.length,
-      actionRequiredCount: overdueTasks.length + financialAlerts.length,
+      unreadEmailsCount: totalUnreadEmailsCount,
+      actionRequiredCount: overdueTasks.length + financialAlerts.length + totalUnreadEmailsCount,
     },
+    unreadEmails: unreadEmailsList,
     tasks: {
       overdue: overdueTasks.map((t) => ({ id: t.id, title: t.title, clientName: t.clientName, dueAt: t.dueAt, priority: t.priority })),
       dueToday: dueTodayTasks.map((t) => ({ id: t.id, title: t.title, clientName: t.clientName, dueAt: t.dueAt, priority: t.priority })),
@@ -311,3 +365,4 @@ ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור 
     whatsappFormattedText,
   }
 }
+

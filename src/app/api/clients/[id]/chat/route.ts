@@ -16,6 +16,7 @@ import { getWorkspaceClient, getWorkspaceErrorStatus } from '@/lib/v2/workspace-
 import { getLatestNeedsInputBrief, resolveMonthlyBriefFromChat } from '@/lib/v2/monthly-brief'
 import { clientContextSchema } from '@/lib/v2/client-context-schema'
 import { saveClientContext } from '@/lib/v2/client-context'
+import { getClientLivingMemory, formatLivingMemoryForPrompt } from '@/lib/v2/agent-memory'
 import {
   makeGetSpreadsheetInfoTool,
   makeReadSheetDataTool,
@@ -23,6 +24,18 @@ import {
   makeCreateNewSheetStructureTool,
   makeUpdateDashboardLayoutTool,
   makeGetDriveFilesTool,
+  makeRememberClientFactTool,
+  makeGetClientLivingMemoryTool,
+  makeUpdateClientProfileTool,
+  makeSearchClientEmailsTool,
+  makeGetEmailThreadDetailsTool,
+  makeSendOrReplyEmailTool,
+  makeGetClientTasksTool,
+  makeCreateOrUpdateTaskTool,
+  makeGetClientCalendarEventsTool,
+  makeScheduleCalendarMeetingTool,
+  makeSearchClientDocumentsTool,
+  makeCrossSystemStatusCheckTool,
 } from '@/ai/tools/worksheetTools'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +67,7 @@ function buildDiscoverySystemPrompt(client: { name: string; google_sheet_id: str
 ללקוח אין עדיין גיליון Google Sheets. התמקד באיסוף הרקע העסקי, וציין שנבנה גיליון מותאם בהמשך.
 `
 
-  return `אתה "נחמיה AI" - עוזר עסקי אינטליגנטי בתוך מערכת "Nehemiah OS".
+  return `אתה "Nehemiah AI" - עוזר ניהולי בכיר, אקטיבי ואינטליגנטי (Executive Secretary / J.A.R.V.I.S) במערכת "Nehemiah OS".
 אתה מדבר עם נחמיה, מנהל המשרד.
 היום: ${today}
 
@@ -65,7 +78,7 @@ function buildDiscoverySystemPrompt(client: { name: string; google_sheet_id: str
 
 ### עקרונות השיחה:
 - שאל שאלה אחת או שתיים בכל פנייה - לא יותר.
-- היה חברותי, מקצועי ומעניין.
+- היה חברותי, מקצועי, חד וענייני.
 - התייחס לתשובות של נחמיה בצורה חכמה עם שאלות המשך.
 
 ### מה לאסוף (לפי סדר עדיפות):
@@ -86,19 +99,24 @@ ${sheetSection}
 
 ### מגבלות בשלב זה:
 - הכלים המותרים כעת: \`save_client_context\`${client.google_sheet_id ? ' ו-\`get_spreadsheet_info\` (בלבד לצורך זיהוי הלשוניות)' : ''}.
-- לאחר שמירת ההקשר, כל שאר כלי הגיליון ועיצוב הדשבורד יהיו זמינים אוטומטית.`.trim()
+- לאחר שמירת ההקשר, כל שאר כלי הגיליון, המיילים, המשימות והדשבורד יהיו זמינים אוטומטית.`.trim()
 }
 
-function buildOperationalSystemPrompt(client: {
-  id: string
-  name: string
-  google_sheet_id: string | null
-  drive_folder_id: string | null
-  advisory_goal?: string | null
-  risk_level?: string | null
-  portfolio_value?: number | null
-  client_context_json: Record<string, unknown>
-}, briefContext = ''): string {
+function buildOperationalSystemPrompt(
+  client: {
+    id: string
+    name: string
+    google_sheet_id: string | null
+    drive_folder_id: string | null
+    gmail_label?: string | null
+    advisory_goal?: string | null
+    risk_level?: string | null
+    portfolio_value?: number | null
+    client_context_json: Record<string, unknown>
+  },
+  briefContext = '',
+  livingMemorySection = ''
+): string {
   const today = new Date().toLocaleDateString('he-IL', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
@@ -117,8 +135,9 @@ function buildOperationalSystemPrompt(client: {
     }
     notes?: string
   }
+
   const contextBlock = [
-    `## פרופיל עסקי - ${client.name}`,
+    `## פרופיל עסקי מאומת - ${client.name}`,
     `**סוג עסק:** ${ctx.businessType ?? 'לא צוין'}`,
     `**תיאור:** ${ctx.businessDescription ?? 'לא צוין'}`,
     `**שותפים ובעלים:** ${(ctx.stakeholders ?? []).map((s) => `${s.name} (${s.role})`).join(', ') || 'לא צוין'}`,
@@ -130,78 +149,81 @@ function buildOperationalSystemPrompt(client: {
 - תנועות גולמיות (Raw Movements): ${(ctx.sheetMapping.rawMovementsTabs ?? []).join(', ') || 'אין'}
 - מעקבים ייעודיים (Tracking): ${(ctx.sheetMapping.trackingTabs ?? []).join(', ') || 'אין'}
 - לשוניות להתעלמות (Ignored): ${(ctx.sheetMapping.ignoredTabs ?? []).join(', ') || 'אין'}` : null,
-    ctx.notes ? `**הערות:** ${ctx.notes}` : null,
+    ctx.notes ? `**הערות כלליות:** ${ctx.notes}` : null,
   ].filter(Boolean).join('\n')
 
   const clientBasicContext = [
     client.advisory_goal ? `מטרת ייעוץ: ${client.advisory_goal}` : null,
     client.risk_level ? `רמת סיכון: ${client.risk_level}` : null,
-    client.portfolio_value ? `שווי תיק: &#8362;${client.portfolio_value.toLocaleString()}` : null,
-    `גיליון Google Sheets: ${client.google_sheet_id ? `מחובר (ID: ${client.google_sheet_id})` : 'לא הוגדר עדיין'}`,
+    client.portfolio_value ? `שווי תיק: ₪${client.portfolio_value.toLocaleString()}` : null,
+    `גיליון Google Sheets: ${client.google_sheet_id ? `מחובר (${client.google_sheet_id})` : 'לא הוגדר עדיין'}`,
     `תיקיית Drive: ${client.drive_folder_id ? 'מחוברת' : 'לא הוגדרה'}`,
+    `תווית Gmail: ${client.gmail_label ? `תווית מסונכרנת: "${client.gmail_label}"` : 'לפי כתובת אימייל'}`,
   ].filter(Boolean).join('\n')
 
-  const sheetInstructions = !client.google_sheet_id
-    ? `## הגיליון לא הוגדר עדיין\nכעת שיש לך פרופיל עסקי מלא, שאל נחמיה אם ברצונו ליצור גיליון מותאם לפי מה שאתה יודע על העסק.`
-    : `## גיליון מחובר - הנחיות עבודה חכמות:
-**חוק קריטי לגבי היררכיית קריאת נתונים:**
-1. **עבור סיכומי על, מדדי מפתח ובניית דשבורד מרכזי:** **העדף תמיד לקרוא מלשוניות הסיכום והלוחות המוכנים (${(ctx.sheetMapping?.dashboardSummaryTabs ?? []).join(', ') || 'כגון לוח כללי'})** שבהן הנתונים כבר מסוכמים, מאומתים ומחושבים, במקום לבצע פילטור ידני מורכב על אלפי שורות גולמיות!
-2. **עבור ירידה לפרטים ופירוט תנועות:** השתמש בלשוניות התנועות הגולמיות (${(ctx.sheetMapping?.rawMovementsTabs ?? []).join(', ') || 'תנועות'}).
-3. **עבור נושאים ספציפיים (כגון הלוואות בעלים):** קרא מלשוניות המעקב הייעודיות (${(ctx.sheetMapping?.trackingTabs ?? []).join(', ') || 'מעקב'}).
-4. **לשוניות להתעלמות:** דלג לחלוטין על: ${(ctx.sheetMapping?.ignoredTabs ?? []).join(', ') || 'אין'}.`
-
-  return `אתה "נחמיה AI" - עוזר עסקי אינטליגנטי ויועץ פיננסי בכיר בתוך מערכת "Nehemiah OS".
+  return `אתה "Nehemiah AI" - עוזר ניהולי בכיר, אקטיבי וכל-יודע (Executive Secretary & J.A.R.V.I.S) עבור נחמיה במערכת "Nehemiah OS".
+אתה העוזר האישי והמזכיר הבכיר של נחמיה.
 היום: ${today}
 
 ${contextBlock}
 
-## פרטים נוספים
+## פרטים טכניים וחיבורים
 ${clientBasicContext}
+
+## 🧠 זיכרון חי מצטבר והחלטות קודמות (Living Memory)
+${livingMemorySection}
 ${briefContext}
-${sheetInstructions}
 
-## כללי עבודה
-- תענה תמיד בעברית.
-- היה יזום, מהיר ואוטונומי.
-- לעולם אל תכתוב שמות כלים בטקסט - הפעל ישירות כ-Tool Call.
-- **כללי עיצוב דשבורד מנהלים (update_dashboard_layout):**
-  - **חובה לחלק לטאבים ברורים באמצעות שדה \`tab\` בכל ווידג'ט:**
-    1. \`tab: 'ראשי'\` (Executive Overview): כרטיסי מדד עליונים בשורה 0 (הכנסות, הוצאות, רווח נקי, חוזים), תרשים מגמת תזרים לאורך זמן, וטבלת סיכום מובילים.
-    2. \`tab: 'פעילות'\` (או \`פרויקטים\`): תרשים עמודות מסודר וממוין של רווחיות/הכנסות פר פרויקט/לקוח/יחידה, וטבלת נתוני פעילות מלאה.
-    3. \`tab: 'הוצאות'\`: פירוט הוצאות קבועות, תקורה ותנועות חברה.
-    4. \`tab: 'מעקבים'\` (או \`שותפים והלוואות\`): הלוואות בעלים, משיכות, צ'קים או מעקבים ייעודיים.
-  - **קריאות ואיכות נתונים:** קרא מדדים עליונים מתוך לשוניות סיכום מוכנות כדי למנוע ערכי 0 או צורך בסינון ידני. וודא שבגרפים שדה X ושדה Y מוגדרים נכון וחד-משמעיים.
-  - כשנחמיה מאשר בניית דשבורד - הפעל מיד update_dashboard_layout באותו התור.
+## ⚡ עקרונות הליבה של העוזר הניהולי (J.A.R.V.I.S Mode):
 
-## פרוטוקול עבודה מודולרי
-1. שלב א' - get_spreadsheet_info + הצג תוכנית עבודה.
-2. שלב ב' - קרא 2-3 לשוניות (בעדיפות ללשוניות סיכום), ספק סיכום ממוקד.
-3. שלב ג' - הצלב נתונים + הפק בריף עסקי ופיננסי מלא.
-4. שלב ד' - 2-3 שאלות חדות על נקודות שדורשות חידוד.
-5. שלב ה' - הפעל update_dashboard_layout עם חלוקה לטאבים לפי הכללים לעיל.
+1. **אי-ניחוש והצלבת מקורות בזמן אמת (Omniscience & Cross-Source Retrieval):**
+   כשנחמיה שואל כל שאלה על הלקוח (למשל: "מה הסטטוס של הלקוח?", "האם הגיבו על החשבונית?", "מה המשימות הפתוחות?", "מה סוכם בפגישה האחרונה?"):
+   - **לעולם אל תנחש או תמציא מידע!**
+   - הפעל מיד את הכלים המתאימים כדי להצליב את כל המקורות:
+     * בדוק התכתבויות ומיילים אחרונים (\`search_client_emails\` / \`get_email_thread_details\`).
+     * בדוק משימות דחופות ובאיחור (\`get_client_tasks\`).
+     * בדוק פגישות ואירועי יומן (\`get_client_calendar_events\`).
+     * קרא נתונים עדכניים מהגיליון (\`read_sheet_data\` / \`get_spreadsheet_info\`).
+     * חפש במסמכי ה-Drive ודוחות OCR (\`search_client_documents\`).
+     * לתמונת מצב כוללת 360°, הפעל \`cross_system_status_check\`.
 
-## כלים זמינים
-- get_spreadsheet_info - מגלה לשוניות בגיליון
-- read_sheet_data - קורא נתונים מלשונית
-- update_dashboard_layout - בונה ומעדכן דשבורד
-- append_row - מוסיף שורה לגיליון
-- create_new_sheet_structure - יוצר גיליון חדש
-- get_drive_files - רשימת קבצים ב-Drive`.trim()
+2. **זיכרון חי מתמשך ולמידה אוטונומית:**
+   - בכל פעם שנחמיה נותן הנחיה חדשה, מקבל החלטה, או כשאתה מגלה עובדה קריטית על הלקוח (שיעור מע"מ, סכום קבוע, שותף חדש, העדפת תקשורת, סיכום חשוב) - קרא מיד לכלי \`remember_client_fact\` כדי לקבע את המידע במסד הנתונים של הזיכרון החי.
+   - אם הפרופיל העסקי הבסיסי השתנה - קרא ל-\`update_client_profile\`.
+
+3. **פורמט מענה מנהלים מובנה וחד (Actionable Executive Format):**
+   ענה תמיד בעברית מקצועית, מדויקת ומובנית. הימנע מפסקאות טקסט ארוכות ומייגעות (Wall of Text).
+   מבנה התשובה המומלץ:
+   - **🎯 תמונת מצב מנהלים (Executive Summary):** 1-2 משפטים חדים וממוקדים.
+   - **📊 ממצאים והצלבת נתונים (Key Facts):** נקודות תבליט ברורות עם **הדגשות** למספרים, תאריכים ושמות (מיילים, משימות, יומן, גיליון).
+   - **🚀 צעדים אופרטיביים מומלצים (Actionable Next Steps):** המלצות קונקרטיות לפעולה (יצירת משימה, שליחת מענה, קביעת פגישה, עדכון גיליון).
+
+4. **אוטונומיה ויוזמה:**
+   - בצע פעולות בעצמך דרך הכלים (כתיבה לגיליון, בניית דשבורד, יצירת משימות, קביעת אירועים).
+   - לעולם אל תזכיר שמות של כלים טכניים בטקסט הגלוי לנחמיה (הפעל ישירות כ-Tool Calls).
+
+## כלי עבודה זמינים
+- **זיכרון חי:** \`remember_client_fact\`, \`get_client_living_memory\`, \`update_client_profile\`
+- **אימייל ו-Gmail:** \`search_client_emails\`, \`get_email_thread_details\`, \`send_or_reply_email\`
+- **משימות ותפעול:** \`get_client_tasks\`, \`create_or_update_task\`
+- **יומן פגישות:** \`get_client_calendar_events\`, \`schedule_calendar_meeting\`
+- **גיליון ודשבורד:** \`get_spreadsheet_info\`, \`read_sheet_data\`, \`append_row\`, \`create_new_sheet_structure\`, \`update_dashboard_layout\`
+- **מסמכים ו-RAG:** \`search_client_documents\`, \`get_drive_files\`
+- **סטטוס כולל 360°:** \`cross_system_status_check\``.trim()
 }
 
 function makeSaveClientContextTool(clientId: string) {
   return tool({
     description:
       'Saves the structured client onboarding context to the database. ' +
-      'Call this ONLY after gathering sufficient information and Nehemiah has confirmed the summary is correct. ' +
-      'After a successful save, all Google Sheets tools become available for this client.',
+      'Call this ONLY after gathering sufficient information and Nehemiah has confirmed the summary is correct.',
     inputSchema: clientContextSchema,
     execute: async (input) => {
       try {
         await saveClientContext(clientId, input)
         return {
           success: true,
-          message: 'הפרופיל העסקי של הלקוח נשמר בהצלחה! מעכשיו ניתן לנתח את הגיליון, לבנות דשבורד ולייצר בריפים חכמים.',
+          message: 'הפרופיל העסקי של הלקוח נשמר בהצלחה! כל כלי ה-J.A.R.V.I.S, המיילים, הגיליונות והמשימות זמינים כעת.',
         }
       } catch (error: unknown) {
         return { success: false, error: error instanceof Error ? error.message : 'שמירת ההקשר נכשלה' }
@@ -247,23 +269,59 @@ export async function POST(
         : ''
   }
 
+  // Fetch living memory for the client
+  let livingMemorySection = ''
+  if (!discoveryMode) {
+    try {
+      const memories = await getClientLivingMemory(clientId, 25)
+      livingMemorySection = formatLivingMemoryForPrompt(memories)
+    } catch (err) {
+      console.warn('[chat/route] Living memory retrieval warning:', err)
+    }
+  }
+
   const tools: ToolSet = discoveryMode
     ? {
         save_client_context: makeSaveClientContextTool(clientId),
         ...(client.google_sheet_id ? { get_spreadsheet_info: makeGetSpreadsheetInfoTool(clientId) } : {}),
       }
     : {
+        // Living Memory & Profile
+        remember_client_fact: makeRememberClientFactTool(clientId),
+        get_client_living_memory: makeGetClientLivingMemoryTool(clientId),
+        update_client_profile: makeUpdateClientProfileTool(clientId),
+
+        // Gmail Intelligence
+        search_client_emails: makeSearchClientEmailsTool(clientId),
+        get_email_thread_details: makeGetEmailThreadDetailsTool(clientId),
+        send_or_reply_email: makeSendOrReplyEmailTool(clientId),
+
+        // Tasks & Operations
+        get_client_tasks: makeGetClientTasksTool(clientId),
+        create_or_update_task: makeCreateOrUpdateTaskTool(clientId),
+
+        // Calendar
+        get_client_calendar_events: makeGetClientCalendarEventsTool(clientId),
+        schedule_calendar_meeting: makeScheduleCalendarMeetingTool(clientId),
+
+        // Sheets & Dashboard
         get_spreadsheet_info: makeGetSpreadsheetInfoTool(clientId),
         read_sheet_data: makeReadSheetDataTool(clientId),
         append_row: makeAppendRowTool(clientId),
         create_new_sheet_structure: makeCreateNewSheetStructureTool(clientId),
         update_dashboard_layout: makeUpdateDashboardLayoutTool(clientId),
+
+        // Drive & Documents (RAG)
         get_drive_files: makeGetDriveFilesTool(clientId),
+        search_client_documents: makeSearchClientDocumentsTool(clientId),
+
+        // 360° Omniscience
+        cross_system_status_check: makeCrossSystemStatusCheckTool(clientId),
       }
 
   const systemPrompt = discoveryMode
     ? buildDiscoverySystemPrompt(client)
-    : buildOperationalSystemPrompt(client, briefContext)
+    : buildOperationalSystemPrompt(client, briefContext, livingMemorySection)
 
   const modelMessages = await convertToModelMessages(messages || [])
 
@@ -272,7 +330,7 @@ export async function POST(
     system: systemPrompt,
     messages: modelMessages,
     tools,
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(12),
     maxRetries: 2,
   })
 

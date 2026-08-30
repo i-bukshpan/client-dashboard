@@ -38,6 +38,12 @@ import {
   ChevronUp,
   Sparkles,
   User,
+  Mail,
+  Calendar,
+  CheckSquare,
+  Brain,
+  Compass,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -106,6 +112,78 @@ const TOOL_META: Record<string, { icon: React.ElementType; label: string; action
     icon: Sparkles,
     label: 'שמירת פרופיל עסקי',
     actionDesc: 'שומר את הפרופיל העסקי של הלקוח למסד הנתונים...',
+    color: 'indigo',
+  },
+  remember_client_fact: {
+    icon: Brain,
+    label: 'שמירה בזיכרון החי',
+    actionDesc: 'מקבע החלטה/תובנה בזיכרון החי...',
+    color: 'violet',
+  },
+  get_client_living_memory: {
+    icon: Brain,
+    label: 'שליפת זיכרון חי',
+    actionDesc: 'טוען היסטוריית החלטות ותובנות...',
+    color: 'violet',
+  },
+  update_client_profile: {
+    icon: Sparkles,
+    label: 'עדכון פרופיל לקוח',
+    actionDesc: 'מעדכן את הגדרות האפיון העסקי...',
+    color: 'indigo',
+  },
+  search_client_emails: {
+    icon: Mail,
+    label: 'חיפוש התכתבויות Gmail',
+    actionDesc: 'סורק מיילים והודעות של הלקוח...',
+    color: 'blue',
+  },
+  get_email_thread_details: {
+    icon: Mail,
+    label: 'קריאת שרשור מייל',
+    actionDesc: 'טוען תוכן מלא של הודעת דוא״ל...',
+    color: 'blue',
+  },
+  send_or_reply_email: {
+    icon: Mail,
+    label: 'שליחת מייל / מענה',
+    actionDesc: 'שולח הודעה מתיבת ה-Gmail...',
+    color: 'blue',
+  },
+  get_client_tasks: {
+    icon: CheckSquare,
+    label: 'בדיקת משימות לקוח',
+    actionDesc: 'טוען משימות מלוח התפעול...',
+    color: 'emerald',
+  },
+  create_or_update_task: {
+    icon: CheckSquare,
+    label: 'יצירה/עדכון משימה',
+    actionDesc: 'מעדכן את לוח המשימות...',
+    color: 'emerald',
+  },
+  get_client_calendar_events: {
+    icon: Calendar,
+    label: 'בדיקת יומן ופגישות',
+    actionDesc: 'סורק אירועים מ-Google Calendar...',
+    color: 'purple',
+  },
+  schedule_calendar_meeting: {
+    icon: Calendar,
+    label: 'קביעת אירוע ביומן',
+    actionDesc: 'מתאם פגישה ביומן...',
+    color: 'purple',
+  },
+  search_client_documents: {
+    icon: FileText,
+    label: 'חיפוש במסמכים ו-RAG',
+    actionDesc: 'סורק חוזים, קבלות ומסמכי OCR...',
+    color: 'amber',
+  },
+  cross_system_status_check: {
+    icon: Compass,
+    label: 'סריקה רוחבית 360°',
+    actionDesc: 'מצליב נתוני מיילים, יומן, משימות וגיליונות...',
     color: 'indigo',
   },
 }

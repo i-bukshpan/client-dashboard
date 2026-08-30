@@ -503,7 +503,7 @@ export async function getEmailThread(threadId: string): Promise<ClientEmailThrea
       return {
         id: m.id || '',
         threadId: m.threadId || threadId,
-        messageIdHeader,
+        messageIdHeader: messageIdHeader || undefined,
         subject: msgSubject,
         from: parseEmailAddress(fromRaw),
         to: toRaw.split(',').map((s) => s.trim()).filter(Boolean),

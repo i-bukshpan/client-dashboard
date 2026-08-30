@@ -291,10 +291,14 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
 
       {/* Main Tabs Container */}
       <Tabs defaultValue="tasks" className="space-y-4">
-        <TabsList className="bg-card border border-border p-1 rounded-xl h-10 w-full justify-start gap-1">
+        <TabsList className="bg-card border border-border p-1 rounded-xl h-10 w-full justify-start gap-1 flex-wrap">
           <TabsTrigger value="tasks" className="rounded-lg text-xs font-bold gap-1.5 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             <Clock className="w-3.5 h-3.5" />
             משימות ({tasks.dueToday.length + tasks.overdue.length})
+          </TabsTrigger>
+          <TabsTrigger value="emails" className="rounded-lg text-xs font-bold gap-1.5 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+            <MessageSquare className="w-3.5 h-3.5" />
+            מיילים לא נקראו ({stats.unreadEmailsCount || 0})
           </TabsTrigger>
           <TabsTrigger value="calendar" className="rounded-lg text-xs font-bold gap-1.5 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             <Calendar className="w-3.5 h-3.5" />
@@ -375,6 +379,60 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Tab 1.5: Unread Emails */}
+        <TabsContent value="emails" className="mt-0">
+          <Card className="border-border/70 shadow-xs">
+            <CardHeader className="p-4 pb-2 border-b border-border/50 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                מיילים שלא נקראו בתיבת Gmail ({brief.unreadEmails?.length || 0})
+              </CardTitle>
+              <Link
+                href="/workspace/emails"
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              >
+                פתח תיבת דואר מלאה
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </CardHeader>
+            <CardContent className="p-3 space-y-2">
+              {!brief.unreadEmails || brief.unreadEmails.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">
+                  🎉 כל המיילים נקראו! אין הודעות ממתינות למענה.
+                </div>
+              ) : (
+                brief.unreadEmails.map((m) => (
+                  <div
+                    key={m.threadId}
+                    className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/20 hover:bg-indigo-50/50 flex items-start justify-between gap-3 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-foreground truncate">{m.from}</span>
+                        {m.clientName && (
+                          <Badge className="bg-indigo-100 text-indigo-800 border-indigo-300 text-[9px] px-1.5 py-0 h-4">
+                            לקוח: {m.clientName}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs font-semibold text-foreground/90 mt-0.5 truncate">
+                        {m.subject || '(ללא נושא)'}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{m.date}</p>
+                    </div>
+                    <Link
+                      href="/workspace/emails"
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shrink-0 shadow-xs"
+                    >
+                      השב במייל
+                    </Link>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Tab 2: Calendar */}
