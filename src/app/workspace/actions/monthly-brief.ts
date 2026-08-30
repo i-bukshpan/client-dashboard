@@ -21,5 +21,41 @@ export async function approveMonthlyBriefAction(clientId: string, briefId: strin
 
 export async function shareMonthlyBriefAction(clientId: string, briefId: string, expiresInDays = 30) {
   try { await requireWorkspaceAdmin(); const id = z.string().min(8).max(100).parse(briefId); const days = z.number().int().min(1).max(365).parse(expiresInDays); const brief = (await listMonthlyBriefs(clientId)).find((item) => item.id === id); if (!brief) throw new Error('הבריף לא נמצא'); const grant = await createMonthlyBriefShare({ clientId, brief, expiresAt: new Date(Date.now() + days * 86_400_000).toISOString() }); const origin = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'; return { success: true as const, shareUrl: `${origin.replace(/\/$/, '')}/share/brief/${grant.token}`, expiresAt: grant.expiresAt } }
-  catch (error: unknown) { return errorResult(error, 'שיתוף הבריף נכשל') }
+  catch (error: unknown) { return errorResult(error, 'שיתוף הבריף נכשלה') }
+}
+
+export async function submitBriefAnswersAction(
+  clientId: string,
+  briefId: string,
+  answers: Array<{ issueId: string; decision: 'clarified' | 'omit' | 'will_provide'; note?: string }>
+) {
+  try {
+    await requireWorkspaceAdmin()
+    const briefs = await listMonthlyBriefs(clientId)
+    const pending = briefs.find((b) => b.id === briefId)
+    if (!pending) throw new Error('הבריף לא נמצא')
+
+    const answeredAt = new Date().toISOString()
+    const incomingResolutions = answers.map((a) => ({
+      issueId: a.issueId,
+      decision: a.decision,
+      answer: a.note || '',
+      answeredAt,
+    }))
+
+    const updatedPrevious = {
+      ...pending,
+      resolutions: [
+        ...pending.resolutions.filter((r) => !incomingResolutions.some((inc) => inc.issueId === r.issueId)),
+        ...incomingResolutions,
+      ],
+      updatedAt: answeredAt,
+    }
+
+    const updatedBrief = await generateMonthlyBrief(clientId, pending.reportMonth, updatedPrevious)
+    revalidatePath(`/workspace/clients/${clientId}`)
+    return { success: true as const, brief: updatedBrief }
+  } catch (error: unknown) {
+    return errorResult(error, 'שמירת התשובות ועדכון הבריף נכשלו')
+  }
 }

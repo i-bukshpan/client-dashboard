@@ -6,6 +6,7 @@
  * Server actions for cloud synchronization of AI chat conversation history.
  */
 
+import { randomUUID } from 'crypto'
 import { getWorkspaceAdminDb, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 export interface PersistedChatMessage {
@@ -35,7 +36,7 @@ export async function fetchClientChatHistoryAction(clientId: string): Promise<{
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.warn('[chat-history] fetchClientChatHistory fallback:', error.message)
+      console.warn('[chat-history] fetchClientChatHistory query error:', error.message)
       return { success: true, messages: [] }
     }
 
@@ -50,7 +51,7 @@ export async function fetchClientChatHistoryAction(clientId: string): Promise<{
       }
 
       return {
-        id: row.id,
+        id: String(row.id),
         role: row.role,
         content: row.content || '',
         parts,
@@ -78,7 +79,7 @@ export async function saveClientChatMessagesAction(
 
     const db = getWorkspaceAdminDb()
 
-    const rows = messages.map((m: any) => {
+    const rows = messages.map((m: any, index: number) => {
       let textContent = ''
       if (typeof m.content === 'string') textContent = m.content
       else if (Array.isArray(m.parts)) {
@@ -88,12 +89,12 @@ export async function saveClientChatMessagesAction(
           .join('\n')
       }
 
-      const validId = m.id && typeof m.id === 'string' && m.id.length >= 10
-        ? m.id
-        : undefined
+      const msgId = m.id && typeof m.id === 'string' && m.id.trim()
+        ? m.id.trim()
+        : `msg_${Date.now()}_${index}_${randomUUID().slice(0, 8)}`
 
       return {
-        ...(validId ? { id: validId } : {}),
+        id: msgId,
         client_id: clientId,
         role: m.role || 'user',
         content: textContent,
@@ -107,10 +108,13 @@ export async function saveClientChatMessagesAction(
       .upsert(rows, { onConflict: 'id' })
 
     if (error) {
-      console.warn('[chat-history] Upsert warning:', error.message)
-      // Fallback: delete and re-insert if conflict issues arise
+      console.warn('[chat-history] Upsert warning, trying fallback rewrite:', error.message)
       await db.from('v2_client_chat_messages').delete().eq('client_id', clientId)
-      await db.from('v2_client_chat_messages').insert(rows)
+      const { error: insertErr } = await db.from('v2_client_chat_messages').insert(rows)
+      if (insertErr) {
+        console.error('[chat-history] Insert error:', insertErr.message)
+        return { success: false, error: insertErr.message }
+      }
     }
 
     return { success: true }

@@ -514,13 +514,26 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
     else if (wasLoadingRef.current) { wasLoadingRef.current = false; router.refresh() }
   }, [isLoading, router])
 
-  // 1. Restore persistent messages from cloud Supabase (and fallback to localStorage) on initial mount
+  // 1. Restore persistent messages on initial mount (synchronous localStorage first, then cloud sync)
   useEffect(() => {
     if (isHydratedRef.current) return
     isHydratedRef.current = true
 
-    async function hydrateMessages() {
-      // 1. Try cloud database first
+    // Immediate local restoration so screen never flashes empty
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed)
+          hasGreetedRef.current = true
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    async function syncCloudMessages() {
       try {
         const cloudRes = await fetchClientChatHistoryAction(clientId)
         if (cloudRes.success && cloudRes.messages && cloudRes.messages.length > 0) {
@@ -532,29 +545,22 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
             // ignore
           }
           return
-        }
-      } catch (err) {
-        console.warn('[ClientAIChat] Cloud hydration fallback:', err)
-      }
-
-      // 2. Fallback to localStorage
-      try {
-        const saved = localStorage.getItem(storageKey)
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setMessages(parsed)
-            hasGreetedRef.current = true
-            // Backfill cloud
-            saveClientChatMessagesAction(clientId, parsed).catch(() => null)
-            return
+        } else {
+          // If cloud is empty but local has messages, sync up to cloud
+          const saved = localStorage.getItem(storageKey)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              saveClientChatMessagesAction(clientId, parsed).catch(() => null)
+              return
+            }
           }
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.warn('[ClientAIChat] Cloud sync error:', err)
       }
 
-      // 3. If no saved conversation, trigger fresh greeting once
+      // If truly brand new conversation, trigger initial greeting
       if (!hasGreetedRef.current && messages.length === 0) {
         hasGreetedRef.current = true
         const greetText = isOnboarding
@@ -564,20 +570,8 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
       }
     }
 
-    hydrateMessages()
+    syncCloudMessages()
   }, [clientId, storageKey, setMessages, messages.length, sendMessage, clientName, isOnboarding])
-
-  useEffect(() => {
-    if (!pendingBriefQuestions.length) return
-    const signature = pendingBriefQuestions.join('|')
-    if (briefPromptRef.current === signature) return
-    briefPromptRef.current = signature
-    const text = `נחמיה, כדי להשלים את הבריף החודשי אני צריך ממך תשובות קצרות:\n${pendingBriefQuestions.map((question, index) => `${index + 1}. ${question}`).join('\n')}\nענה כאן, ואני אחדש אוטומטית את יצירת הבריף.`
-    setMessages((current) => {
-      const alreadyShown = current.some((message) => message.parts?.some((part) => part.type === 'text' && part.text.includes(pendingBriefQuestions[0])))
-      return alreadyShown ? current : [...current, { id: crypto.randomUUID(), role: 'assistant', parts: [{ type: 'text', text }] } as UIMessage]
-    })
-  }, [pendingBriefQuestions, setMessages])
 
   // 2. Persist messages to localStorage AND Supabase cloud database
   useEffect(() => {
@@ -674,10 +668,20 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
 
   const [isBuildingDashboard, setIsBuildingDashboard] = useState(false)
 
-  // Direct Auto-Dashboard Trigger
+  // Apply dashboard directly through AI execution to build the exact negotiated widgets
+  const handleApplyDashboard = async () => {
+    if (isLoading) return
+    try {
+      await sendMessage({ text: 'בנה ועדכן כעת את הדשבורד עם הווידג\'טים שהוסכמו בדיוק' })
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'שגיאה בהפעלת בניית הדשבורד')
+    }
+  }
+
+  // Direct Auto-Dashboard Trigger (Heuristic fallback)
   const handleGenerateDashboard = async () => {
     setIsBuildingDashboard(true)
-    const toastId = toast.loading('בונה ומחיל את הדשבורד החכם על בסיס הגיליון...')
+    const toastId = toast.loading('בונה ומחיל את הדשבורד על בסיס הגיליון...')
     try {
       const res = await analyzeAndGenerateDashboardAction(clientId)
       if ('error' in res) {

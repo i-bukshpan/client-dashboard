@@ -747,6 +747,13 @@ export function DashboardEngine({
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
 
+  // Sync with new initialConfig from server revalidation
+  useEffect(() => {
+    if (initialConfig) {
+      setConfig(initialConfig)
+    }
+  }, [initialConfig])
+
   // Interactive UI Filters State
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')

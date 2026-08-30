@@ -3,10 +3,11 @@
 -- ============================================================
 -- Stores full chat conversation history per client in Supabase
 -- to enable seamless cross-device synchronization (PC, Laptop, Mobile).
+-- Accepts any valid string ID from @ai-sdk/react.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.v2_client_chat_messages (
-  id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  id               TEXT         PRIMARY KEY,
   client_id        UUID         NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   role             TEXT         NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content          TEXT,

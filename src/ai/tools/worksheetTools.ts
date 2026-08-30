@@ -369,10 +369,17 @@ export function makeUpdateDashboardLayoutTool(clientId: string) {
 
         if (error) return { success: false, error: error.message }
 
+        try {
+          const { revalidatePath } = await import('next/cache')
+          revalidatePath(`/workspace/clients/${clientId}`)
+        } catch {
+          // ignore outside request context
+        }
+
         return {
           success: true,
           widget_count: formattedWidgets.length,
-          message: `✅ הדשבורד עודכן עם ${formattedWidgets.length} ווידג'טים. לחץ על לשונית Dashboard לצפייה.`,
+          message: `✅ הדשבורד עודכן בהצלחה עם ${formattedWidgets.length} ווידג'טים! עבור ללשונית Dashboard לצפייה.`,
         }
       } catch (error: unknown) {
         return { success: false, error: errorMessage(error) }
