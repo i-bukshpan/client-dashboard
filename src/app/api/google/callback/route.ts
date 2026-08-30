@@ -7,21 +7,44 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
-  const userId = searchParams.get('state') // The user ID passed during auth init
+  const rawState = searchParams.get('state')
   const error = searchParams.get('error')
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+
+  let userId = rawState || ''
+  let returnUrl = '/workspace/clients'
+
+  if (rawState) {
+    try {
+      // Try decoding base64url JSON
+      const decoded = JSON.parse(Buffer.from(rawState, 'base64url').toString('utf8'))
+      if (decoded.userId) userId = decoded.userId
+      if (decoded.returnUrl) returnUrl = decoded.returnUrl
+    } catch {
+      // Plain userId string fallback
+      userId = rawState
+      returnUrl = '/admin/calendar'
+    }
+  }
+
+  const finalReturnUrl = new URL(returnUrl, baseUrl)
 
   if (error || !code || !userId) {
     console.error('Google OAuth error:', error)
-    return NextResponse.redirect(new URL('/admin/calendar?google_error=access_denied', baseUrl))
+    finalReturnUrl.searchParams.set('google_error', 'access_denied')
+    return NextResponse.redirect(finalReturnUrl)
   }
 
   try {
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${baseUrl}/api/google/callback`
+
     const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
+      clientId,
+      clientSecret,
+      redirectUri
     )
 
     const { tokens } = await oauth2Client.getToken(code)
@@ -30,7 +53,7 @@ export async function GET(request: Request) {
       throw new Error('No access token received')
     }
 
-    // Save tokens to Supabase
+    // Save tokens to Supabase google_tokens table
     const supabase = await createClient()
     const { error: dbError } = await supabase
       .from('google_tokens')
@@ -42,13 +65,16 @@ export async function GET(request: Request) {
       }, { onConflict: 'user_id' })
 
     if (dbError) {
-      console.error('Error saving Google tokens:', dbError)
-      return NextResponse.redirect(new URL('/admin/calendar?google_error=save_failed', baseUrl))
+      console.error('Error saving Google tokens to DB:', dbError)
+      finalReturnUrl.searchParams.set('google_error', 'save_failed')
+      return NextResponse.redirect(finalReturnUrl)
     }
 
-    return NextResponse.redirect(new URL('/admin/calendar?google_connected=true', baseUrl))
+    finalReturnUrl.searchParams.set('google_connected', 'true')
+    return NextResponse.redirect(finalReturnUrl)
   } catch (err: any) {
     console.error('Google OAuth callback error:', err)
-    return NextResponse.redirect(new URL('/admin/calendar?google_error=token_exchange_failed', baseUrl))
+    finalReturnUrl.searchParams.set('google_error', 'token_exchange_failed')
+    return NextResponse.redirect(finalReturnUrl)
   }
 }

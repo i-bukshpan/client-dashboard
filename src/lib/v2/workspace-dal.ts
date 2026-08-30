@@ -123,13 +123,15 @@ export interface WorkspaceClientRecord {
   dashboard_config_json: DashboardConfig | Record<string, never>
   /** Structured onboarding context. Empty object = discovery not yet completed. */
   client_context_json: Record<string, unknown>
+  gmail_label: string | null
   portfolio_value: number | null
   advisory_goal: string | null
   risk_level: string | null
   created_at: string
 }
 
-const WORKSPACE_CLIENT_COLUMNS = 'id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at'
+const WORKSPACE_CLIENT_COLUMNS = 'id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, gmail_label, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at'
+const WORKSPACE_CLIENT_BASE_COLUMNS = 'id, name, email, phone, address, id_number, status, drive_folder_id, google_sheet_id, dashboard_config_json, client_context_json, portfolio_value, advisory_goal, risk_level, created_at'
 
 export function parseWorkspaceClientId(value: string): string {
   const result = ClientIdSchema.safeParse(value)
@@ -143,11 +145,21 @@ export async function getWorkspaceClient(clientId: string): Promise<WorkspaceCli
   await requireWorkspaceAdmin()
   const id = parseWorkspaceClientId(clientId)
   const db = getWorkspaceAdminDb()
-  const { data, error } = await db
+  let { data, error } = await db
     .from('clients')
     .select(WORKSPACE_CLIENT_COLUMNS)
     .eq('id', id)
     .maybeSingle()
+
+  if (error && error.message?.includes('gmail_label')) {
+    const fallback = await db
+      .from('clients')
+      .select(WORKSPACE_CLIENT_BASE_COLUMNS)
+      .eq('id', id)
+      .maybeSingle()
+    data = fallback.data ? { ...fallback.data, gmail_label: null } : null
+    error = fallback.error
+  }
 
   if (error) throw new Error(`[workspace-dal] Client query failed: ${error.message}`)
   if (!data) throw new WorkspaceAccessError('NOT_FOUND', 'הלקוח לא נמצא')
@@ -157,10 +169,19 @@ export async function getWorkspaceClient(clientId: string): Promise<WorkspaceCli
 export async function listWorkspaceClients(): Promise<WorkspaceClientRecord[]> {
   await requireWorkspaceAdmin()
   const db = getWorkspaceAdminDb()
-  const { data, error } = await db
+  let { data, error } = await db
     .from('clients')
     .select(WORKSPACE_CLIENT_COLUMNS)
     .order('name')
+
+  if (error && error.message?.includes('gmail_label')) {
+    const fallback = await db
+      .from('clients')
+      .select(WORKSPACE_CLIENT_BASE_COLUMNS)
+      .order('name')
+    data = fallback.data ? fallback.data.map((c: any) => ({ ...c, gmail_label: null })) : []
+    error = fallback.error
+  }
 
   if (error) throw new Error(`[workspace-dal] Clients query failed: ${error.message}`)
   return (data ?? []) as unknown as WorkspaceClientRecord[]

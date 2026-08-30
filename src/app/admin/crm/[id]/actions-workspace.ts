@@ -253,6 +253,7 @@ export interface UpdateClientDetailsInput {
   status?: string | null
   drive_folder_id?: string | null
   google_sheet_id?: string | null
+  gmail_label?: string | null
   portfolio_value?: number | null
   advisory_goal?: string | null
   risk_level?: string | null
@@ -282,6 +283,7 @@ export async function updateClientDetailsAction(
       status: input.status || 'active',
       drive_folder_id: driveFolderId || null,
       google_sheet_id: googleSheetId || null,
+      gmail_label: input.gmail_label?.trim() || null,
       portfolio_value: typeof input.portfolio_value === 'number' ? input.portfolio_value : null,
       advisory_goal: input.advisory_goal?.trim() || null,
       risk_level: input.risk_level?.trim() || null,

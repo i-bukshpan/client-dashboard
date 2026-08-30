@@ -6,7 +6,7 @@
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck, Sun } from 'lucide-react'
+import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck, Sun, Mail } from 'lucide-react'
 import {
   requireWorkspaceAdmin,
   WorkspaceAccessError,
@@ -63,6 +63,13 @@ export default async function WorkspaceLayout({
           >
             <Users className="w-3.5 h-3.5" />
             לקוחות
+          </Link>
+          <Link
+            href="/workspace/emails"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Mail className="w-3.5 h-3.5 text-red-500" />
+            דוא״ל Gmail
           </Link>
           <Link
             href="/workspace/calendar"

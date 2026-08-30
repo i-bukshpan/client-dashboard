@@ -48,6 +48,7 @@ import { getClientWorkspaceSettings } from '@/lib/v2/client-settings'
 import { listMonthlyBriefs } from '@/lib/v2/monthly-brief'
 import { MonthlyBriefPanel } from '@/components/workspace/MonthlyBriefPanel'
 import { ClientContextCard } from '@/components/workspace/ClientContextCard'
+import { ClientEmailsView } from '@/components/workspace/ClientEmailsView'
 import { clientContextSchema } from '@/lib/v2/client-context-schema'
 import {
   getWorkspaceClient,
@@ -76,24 +77,43 @@ function StatusBadge({ status }: { status: string | null }) {
 function WorkspaceStatusRow({
   hasDrive,
   hasSheet,
+  gmailLabel,
+  hasEmail,
 }: {
   hasDrive: boolean
   hasSheet: boolean
+  gmailLabel?: string | null
+  hasEmail?: boolean
 }) {
+  const hasGmail = Boolean(gmailLabel || hasEmail)
   return (
-    <div className="grid grid-cols-2 gap-2 mt-4">
-      <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${hasDrive ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-dashed border-border'}`}>
-        <FolderOpen className={`w-4 h-4 ${hasDrive ? 'text-amber-500' : 'text-muted-foreground/30'}`} />
-        <div>
-          <p className={`text-[10px] font-bold ${hasDrive ? 'text-amber-700' : 'text-muted-foreground/50'}`}>Drive</p>
-          <p className="text-[9px] text-muted-foreground/60">{hasDrive ? 'מחובר' : 'לא הוגדר'}</p>
+    <div className="space-y-2 mt-4">
+      <div className="grid grid-cols-2 gap-2">
+        <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${hasDrive ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-dashed border-border'}`}>
+          <FolderOpen className={`w-4 h-4 ${hasDrive ? 'text-amber-500' : 'text-muted-foreground/30'}`} />
+          <div>
+            <p className={`text-[10px] font-bold ${hasDrive ? 'text-amber-700' : 'text-muted-foreground/50'}`}>Drive</p>
+            <p className="text-[9px] text-muted-foreground/60">{hasDrive ? 'מחובר' : 'לא הוגדר'}</p>
+          </div>
+        </div>
+        <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${hasSheet ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-border'}`}>
+          <TableIcon className={`w-4 h-4 ${hasSheet ? 'text-emerald-500' : 'text-muted-foreground/30'}`} />
+          <div>
+            <p className={`text-[10px] font-bold ${hasSheet ? 'text-emerald-700' : 'text-muted-foreground/50'}`}>Sheets</p>
+            <p className="text-[9px] text-muted-foreground/60">{hasSheet ? 'מחובר' : 'לא הוגדר'}</p>
+          </div>
         </div>
       </div>
-      <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${hasSheet ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50 border-dashed border-border'}`}>
-        <TableIcon className={`w-4 h-4 ${hasSheet ? 'text-emerald-500' : 'text-muted-foreground/30'}`} />
-        <div>
-          <p className={`text-[10px] font-bold ${hasSheet ? 'text-emerald-700' : 'text-muted-foreground/50'}`}>Sheets</p>
-          <p className="text-[9px] text-muted-foreground/60">{hasSheet ? 'מחובר' : 'לא הוגדר'}</p>
+      <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${hasGmail ? 'bg-red-50/60 border-red-200' : 'bg-slate-50 border-dashed border-border'}`}>
+        <Mail className={`w-4 h-4 ${hasGmail ? 'text-red-500' : 'text-muted-foreground/30'}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between">
+            <p className={`text-[10px] font-bold ${hasGmail ? 'text-red-700' : 'text-muted-foreground/50'}`}>Gmail</p>
+            {gmailLabel && <span className="text-[9px] font-bold text-red-600 bg-red-100 px-1.5 py-0.2 rounded truncate max-w-[100px]">{gmailLabel}</span>}
+          </div>
+          <p className="text-[9px] text-muted-foreground/60 truncate">
+            {gmailLabel ? `תווית: ${gmailLabel}` : hasEmail ? 'חיפוש לפי אימייל' : 'לא הוגדר'}
+          </p>
         </div>
       </div>
     </div>
@@ -255,6 +275,8 @@ export default async function WorkspaceClientPage({
           <WorkspaceStatusRow
             hasDrive={!!c.drive_folder_id}
             hasSheet={!!c.google_sheet_id}
+            gmailLabel={c.gmail_label}
+            hasEmail={!!c.email}
           />
         </div>
 
@@ -355,6 +377,18 @@ export default async function WorkspaceClientPage({
                 )}
               </TabsTrigger>
               <TabsTrigger
+                value="emails"
+                className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-red-500 data-[state=active]:text-red-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                אימייל
+                {c.gmail_label && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-bold max-w-[80px] truncate">
+                    {c.gmail_label}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
                 value="ai"
                 className="h-9 rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:text-indigo-700 data-[state=active]:bg-transparent px-4 text-sm font-semibold text-muted-foreground gap-1.5 rounded-t-sm transition-all whitespace-nowrap shrink-0"
               >
@@ -427,6 +461,16 @@ export default async function WorkspaceClientPage({
             />
           </TabsContent>
 
+          {/* Emails tab */}
+          <TabsContent value="emails" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden min-h-0">
+            <ClientEmailsView
+              clientId={c.id}
+              clientName={c.name}
+              clientEmail={c.email}
+              initialGmailLabel={c.gmail_label}
+            />
+          </TabsContent>
+
           {/* AI Agent tab */}
           <TabsContent value="ai" keepMounted className="flex-1 overflow-hidden mt-0 data-[state=inactive]:hidden min-h-0">
             <ClientAIChat
@@ -461,7 +505,7 @@ export default async function WorkspaceClientPage({
           </TabsContent>
 
           <TabsContent value="settings" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">
-            <ClientSettingsPanel initialSettings={clientSettings} />
+            <ClientSettingsPanel initialSettings={clientSettings} initialGmailLabel={c.gmail_label} />
           </TabsContent>
 
           <TabsContent value="monthly-brief" keepMounted className="flex-1 overflow-y-auto p-5 mt-0 data-[state=inactive]:hidden min-h-0">

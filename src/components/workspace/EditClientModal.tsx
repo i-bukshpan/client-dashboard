@@ -65,6 +65,7 @@ interface EditClientModalProps {
     status: string | null
     drive_folder_id: string | null
     google_sheet_id: string | null
+    gmail_label?: string | null
     portfolio_value: number | null
     advisory_goal: string | null
     risk_level: string | null
@@ -124,6 +125,7 @@ export function EditClientModal({
   const [status, setStatus] = useState(client.status || 'active')
   const [driveFolderId, setDriveFolderId] = useState(client.drive_folder_id || '')
   const [googleSheetId, setGoogleSheetId] = useState(client.google_sheet_id || '')
+  const [gmailLabel, setGmailLabel] = useState(client.gmail_label || '')
   const [portfolioValue, setPortfolioValue] = useState(
     client.portfolio_value ? String(client.portfolio_value) : ''
   )
@@ -141,6 +143,7 @@ export function EditClientModal({
       setStatus(client.status || 'active')
       setDriveFolderId(client.drive_folder_id || '')
       setGoogleSheetId(client.google_sheet_id || '')
+      setGmailLabel(client.gmail_label || '')
       setPortfolioValue(client.portfolio_value ? String(client.portfolio_value) : '')
       setAdvisoryGoal(client.advisory_goal || '')
       setRiskLevel(client.risk_level || '')
@@ -165,6 +168,7 @@ export function EditClientModal({
         status,
         drive_folder_id: driveFolderId,
         google_sheet_id: googleSheetId,
+        gmail_label: gmailLabel,
         portfolio_value: portfolioValue ? parseFloat(portfolioValue.replace(/,/g, '')) : null,
         advisory_goal: advisoryGoal,
         risk_level: riskLevel,
@@ -326,6 +330,21 @@ export function EditClientModal({
                   placeholder="לדוגמה: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms או קישור מלא"
                   dir="ltr"
                   className="h-8 text-xs font-mono bg-white"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-foreground">
+                    תווית אימייל ב-Gmail (Gmail Label)
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">לדוגמה: לקוחות/ישראל ישראלי</span>
+                </div>
+                <Input
+                  value={gmailLabel}
+                  onChange={(e) => setGmailLabel(e.target.value)}
+                  placeholder="הקלד שם תווית ב-Gmail (או השאר ריק לחיפוש לפי אימייל)"
+                  className="h-8 text-xs bg-white"
                 />
               </div>
             </div>

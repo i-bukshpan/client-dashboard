@@ -15,6 +15,9 @@ import {
   Calendar as CalendarIcon,
   Search,
   ArrowLeft,
+  Sparkles,
+  Building2,
+  Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +31,9 @@ interface SearchItem {
 
 const ADMIN_ITEMS: SearchItem[] = [
   { label: 'לוח בקרה', description: 'סקירה כללית של הנתונים', href: '/admin/dashboard', icon: LayoutDashboard, keywords: ['dashboard', 'home', 'ראשי'] },
+  { label: 'מערכת חדשה (Workspace v2)', description: 'מרחב עבודה חדש, לקוחות ומשימות v2', href: '/workspace/brief', icon: Sparkles, keywords: ['workspace', 'v2', 'חדשה', 'מרחב עבודה', 'בריף'] },
+  { label: 'דוא״ל Gmail (נחמיה)', description: 'תיבת דואר מרכזית, מעקב הודעות ושליחת מענה', href: '/workspace/emails', icon: Mail, keywords: ['gmail', 'email', 'mail', 'אימייל', 'מייל', 'דואר', 'הודעות'] },
+  { label: 'פורטל משה פרוש', description: 'ניהול פרויקטים, תשלומים ויומן משה פרוש', href: '/moshe', icon: Building2, keywords: ['moshe', 'משה', 'פרוש', 'פרויקטים'] },
   { label: 'יומן אירועים', description: 'ניהול פגישות ואירועים', href: '/admin/calendar', icon: CalendarIcon, keywords: ['calendar', 'meetings', 'פגישות'] },
   { label: 'לקוחות (CRM)', description: 'ניהול פרופילי לקוחות', href: '/admin/crm', icon: Users, keywords: ['clients', 'customers', 'לקוח'] },
   { label: 'פיננסים', description: 'הכנסות, הוצאות ותזרים', href: '/admin/finance', icon: DollarSign, keywords: ['finance', 'money', 'כסף', 'הכנסות', 'הוצאות'] },

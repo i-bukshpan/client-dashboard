@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   Building2,
   Bot,
+  Sparkles,
 } from 'lucide-react'
 import { SidebarUnreadBadge } from './SidebarUnreadBadge'
 
@@ -111,11 +112,32 @@ export function SidebarContent({
         })}
       </nav>
 
-      {/* Moshe Portal shortcut — admin only */}
+      {/* Shortcuts to Workspaces & Portals — admin only */}
       {role === 'admin' && (
-        <div className={cn('border-t border-[var(--sidebar-border)]', collapsed ? 'p-2' : 'px-3 py-2')}>
+        <div className={cn('border-t border-[var(--sidebar-border)] space-y-1', collapsed ? 'p-2' : 'px-3 py-2')}>
+          <Link
+            href="/workspace/brief"
+            onClick={onClose}
+            title="מערכת חדשה (Workspace v2)"
+            className={cn(
+              'flex items-center rounded-xl text-sm font-medium transition-all duration-150 group',
+              collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+              'text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-300'
+            )}
+          >
+            <Sparkles className="w-5 h-5 shrink-0 text-indigo-400 group-hover:text-indigo-300" />
+            {!collapsed && (
+              <div className="flex items-center justify-between flex-1 min-w-0">
+                <span className="truncate">מערכת חדשה (v2)</span>
+                <span className="text-[10px] bg-indigo-500/30 text-indigo-300 font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                  חדש
+                </span>
+              </div>
+            )}
+          </Link>
           <Link
             href="/moshe"
+            onClick={onClose}
             title="פורטל משה פרוש"
             className={cn(
               'flex items-center rounded-xl text-sm font-medium transition-all duration-150 group',

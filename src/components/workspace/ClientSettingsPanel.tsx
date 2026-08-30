@@ -1,29 +1,42 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Save, Settings2, RotateCcw, Sparkles } from 'lucide-react'
+import { Loader2, Save, Settings2, RotateCcw, Sparkles, Mail, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { saveClientWorkspaceSettingsAction } from '@/app/workspace/actions/tasks'
 import { resetClientAgentDataAction } from '@/app/workspace/actions/dashboard-intelligence'
+import { updateClientGmailLabelAction } from '@/app/workspace/actions/emails'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { ClientWorkspaceSettings } from '@/types/workspace-task'
 
-export function ClientSettingsPanel({ initialSettings }: { initialSettings: ClientWorkspaceSettings }) {
+export function ClientSettingsPanel({
+  initialSettings,
+  initialGmailLabel = null,
+}: {
+  initialSettings: ClientWorkspaceSettings
+  initialGmailLabel?: string | null
+}) {
   const router = useRouter()
   const [settings, setSettings] = useState(initialSettings)
+  const [gmailLabel, setGmailLabel] = useState(initialGmailLabel || '')
   const [pending, setPending] = useState(false)
   const [resetPending, setResetPending] = useState(false)
 
   async function save() {
     setPending(true)
-    const result = await saveClientWorkspaceSettingsAction(settings)
+    const [result, labelResult] = await Promise.all([
+      saveClientWorkspaceSettingsAction(settings),
+      updateClientGmailLabelAction(settings.clientId, gmailLabel || null),
+    ])
     setPending(false)
     if ('error' in result) return toast.error(result.error)
-    toast.success('הגדרות הלקוח נשמרו')
+    if (labelResult?.error) return toast.error(labelResult.error)
+    toast.success('הגדרות הלקוח ותווית ה-Gmail נשמרו')
+    router.refresh()
   }
 
   function alert(key: keyof ClientWorkspaceSettings['alerts'], value: boolean) {
@@ -152,6 +165,32 @@ export function ClientSettingsPanel({ initialSettings }: { initialSettings: Clie
           checked={settings.alerts.cashFlow}
           onChange={(value) => alert('cashFlow', value)}
         />
+      </section>
+
+      {/* Gmail Label Integration Section */}
+      <section className="space-y-4 rounded-2xl border border-red-500/20 bg-card p-5">
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-red-500" />
+          <h3 className="font-bold text-foreground">סנכרון אימייל (תווית Gmail)</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          הגדר את שם התווית ב-Gmail שבאמצעותה יסונכרנו כל ההתכתבויות של לקוח זה בטאב האימייל.
+        </p>
+        <div className="max-w-md space-y-1.5">
+          <Label htmlFor="gmail-label-input" className="text-xs font-semibold text-foreground">
+            שם התווית ב-Gmail
+          </Label>
+          <Input
+            id="gmail-label-input"
+            value={gmailLabel}
+            onChange={(e) => setGmailLabel(e.target.value)}
+            placeholder="לדוגמה: לקוחות/ישראל ישראלי (השאר ריק לחיפוש לפי כתובת לקוח)"
+            className="text-xs"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            אם לא מוגדרת תווית, המערכת תסנן אוטומטית לפי כתובת האימייל של הלקוח.
+          </p>
+        </div>
       </section>
 
       {/* Reset Agent & Dashboard Section */}
