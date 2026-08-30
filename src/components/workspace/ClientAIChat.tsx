@@ -60,6 +60,11 @@ import {
   analyzeAndGenerateDashboardAction,
   resetClientAgentDataAction,
 } from '@/app/workspace/actions/dashboard-intelligence'
+import {
+  fetchClientChatHistoryAction,
+  saveClientChatMessagesAction,
+  clearClientChatHistoryAction,
+} from '@/app/workspace/actions/chat-history'
 
 interface ClientAIChatProps {
   clientId: string
@@ -509,34 +514,58 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
     else if (wasLoadingRef.current) { wasLoadingRef.current = false; router.refresh() }
   }, [isLoading, router])
 
-  // 1. Restore persistent messages from localStorage on initial mount
+  // 1. Restore persistent messages from cloud Supabase (and fallback to localStorage) on initial mount
   useEffect(() => {
     if (isHydratedRef.current) return
     isHydratedRef.current = true
 
-    try {
-      const saved = localStorage.getItem(storageKey)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed)
+    async function hydrateMessages() {
+      // 1. Try cloud database first
+      try {
+        const cloudRes = await fetchClientChatHistoryAction(clientId)
+        if (cloudRes.success && cloudRes.messages && cloudRes.messages.length > 0) {
+          setMessages(cloudRes.messages as any)
           hasGreetedRef.current = true
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(cloudRes.messages))
+          } catch {
+            // ignore
+          }
           return
         }
+      } catch (err) {
+        console.warn('[ClientAIChat] Cloud hydration fallback:', err)
       }
-    } catch {
-      // ignore
+
+      // 2. Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(storageKey)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed)
+            hasGreetedRef.current = true
+            // Backfill cloud
+            saveClientChatMessagesAction(clientId, parsed).catch(() => null)
+            return
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // 3. If no saved conversation, trigger fresh greeting once
+      if (!hasGreetedRef.current && messages.length === 0) {
+        hasGreetedRef.current = true
+        const greetText = isOnboarding
+          ? `היי! אני רוצה להתחיל לעבוד עם הלקוח ${clientName}. בוא נתחיל בהיכרות.`
+          : `היי, התחל שיחה וספר לי מה הסטטוס של הלקוח ${clientName}`
+        sendMessage({ text: greetText }).catch(() => null)
+      }
     }
 
-    // If no saved conversation, trigger fresh greeting once
-    if (!hasGreetedRef.current && messages.length === 0) {
-      hasGreetedRef.current = true
-      const greetText = isOnboarding
-        ? `היי! אני רוצה להתחיל לעבוד עם הלקוח ${clientName}. בוא נתחיל בהיכרות.`
-        : `היי, התחל שיחה וספר לי מה הסטטוס של הלקוח ${clientName}`
-      sendMessage({ text: greetText }).catch(() => null)
-    }
-  }, [storageKey, setMessages, messages.length, sendMessage, clientName])
+    hydrateMessages()
+  }, [clientId, storageKey, setMessages, messages.length, sendMessage, clientName, isOnboarding])
 
   useEffect(() => {
     if (!pendingBriefQuestions.length) return
@@ -550,7 +579,7 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
     })
   }, [pendingBriefQuestions, setMessages])
 
-  // 2. Persist messages to localStorage when updated
+  // 2. Persist messages to localStorage AND Supabase cloud database
   useEffect(() => {
     if (messages.length > 0) {
       try {
@@ -558,8 +587,15 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
       } catch {
         // ignore
       }
+
+      // Sync to cloud in background when streaming is finished
+      if (!isLoading) {
+        saveClientChatMessagesAction(clientId, messages).catch((err) => {
+          console.warn('[ClientAIChat] Cloud sync error:', err)
+        })
+      }
     }
-  }, [messages, storageKey])
+  }, [messages, storageKey, isLoading, clientId])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -607,6 +643,7 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
         } catch {
           // ignore
         }
+        await clearClientChatHistoryAction(clientId).catch(() => null)
         setMessages([])
         briefPromptRef.current = ''
       }

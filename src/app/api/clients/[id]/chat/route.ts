@@ -202,6 +202,17 @@ ${briefContext}
    - בצע פעולות בעצמך דרך הכלים (כתיבה לגיליון, בניית דשבורד, יצירת משימות, קביעת אירועים).
    - לעולם אל תזכיר שמות של כלים טכניים בטקסט הגלוי לנחמיה (הפעל ישירות כ-Tool Calls).
 
+## 🎯 חוק ברזל קריטי לבניית ועדכון דשבורד מנהלים (update_dashboard_layout):
+1. **חובת ביצוע ישיר באותו התור:**
+   כשנחמיה מבקש לבנות דשבורד, להוסיף ווידג'ט או לעצב מחדש את הדשבורד, או כשאתה מסכם רשימת ווידג'טים חדשה:
+   - **אתה חייב לקרוא ישירות לכלי \`update_dashboard_layout\` באותו התור בדיוק!**
+   - ⛔ **איסור מוחלט:** לעולם אל תגיד בטקסט בלבד "אבנה כעת את הווידג'טים" או "אני מעדכן כעת" בלי להפעיל בפועל את הכלי באותה התגובה!
+2. **דיוק מוחלט של 100% לפי בקשת נחמיה:**
+   - אם נחמיה ביקש מספר ווידג'טים ספציפיים (לדוגמה: סה"כ חוזים כולל מע"מ מתוך 'פרויקטים', יתרת גבייה, הוצאות פרויקטים, והוצאות חברה בסינון חובה) – **בנה במדויק אך ורק את הווידג'טים האלו עם הכותרות, הלשוניות, העמודות והסינונים המדויקים שנמסרו!**
+   - **שמות מדויקים מהגיליון:** העתק במדויק את שמות הלשוניות (\`sheet\`), שמות העמודות (\`column\`/\`y_column\`/\`date_column\`) והסינונים (\`filters\`) כפי שהם קיימים בגיליון.
+   - **סיווג טאבים מסודר:** הצב את הווידג'טים תחת \`tab: 'ראשי'\` (או בטאב הרלוונטי שסוכם), עם כותרות בעברית תואמות (\`title\`).
+   - אל תוסיף ווידג'טים אקראיים מתבניות גנריות אלא אם נחמיה ביקש דשבורד ברירת מחדל מורחב.
+
 ## כלי עבודה זמינים
 - **זיכרון חי:** \`remember_client_fact\`, \`get_client_living_memory\`, \`update_client_profile\`
 - **אימייל ו-Gmail:** \`search_client_emails\`, \`get_email_thread_details\`, \`send_or_reply_email\`
@@ -256,17 +267,21 @@ export async function POST(
 
   let briefContext = ''
   if (!discoveryMode) {
-    const resolution = latestUserText
-      ? await resolveMonthlyBriefFromChat(clientId, latestUserText)
-      : { handled: false, brief: await getLatestNeedsInputBrief(clientId) }
-    const pendingBrief = resolution.brief?.state === 'needs_input' ? resolution.brief : null
-    briefContext = resolution.handled
-      ? resolution.brief?.state === 'needs_input'
-        ? `\n## בריף חודשי - תשובה נקלטה אך עדיין חסר מידע\n${resolution.brief.missingInformation.map((item) => `- ${item.question} אפשרויות: ${item.options.join(' / ')}`).join('\n')}`
-        : '\n## בריף חודשי - הושלם. הודע שהמידע נקלט ושהבריף ממתין לאישור.'
-      : pendingBrief
-        ? `\n## בריף חודשי במצב needs_input\nשאל את השאלות הבאות:\n${pendingBrief.missingInformation.map((item) => `- ${item.question} אפשרויות: ${item.options.join(' / ')}`).join('\n')}`
-        : ''
+    try {
+      const resolution = latestUserText
+        ? await resolveMonthlyBriefFromChat(clientId, latestUserText)
+        : { handled: false, brief: await getLatestNeedsInputBrief(clientId) }
+      const pendingBrief = resolution.brief?.state === 'needs_input' ? resolution.brief : null
+      briefContext = resolution.handled
+        ? resolution.brief?.state === 'needs_input'
+          ? `\n## בריף חודשי - תשובתך נקלטה ועודכנה! שאלות שנותרו:\n${resolution.brief.missingInformation.map((item) => `- ${item.question} (אפשרויות: ${item.options.join(' / ')})`).join('\n')}`
+          : '\n## בריף חודשי - כל השאלות הושלמו בהצלחה! הודע לנחמיה שהבריף מוכן לאישור.'
+        : pendingBrief
+          ? `\n## בריף חודשי במצב needs_input (ממתין למענה נחמיה):\nשאל את השאלות הבאות במידת הצורך:\n${pendingBrief.missingInformation.map((item) => `- ${item.question} (אפשרויות: ${item.options.join(' / ')})`).join('\n')}`
+          : ''
+    } catch (err) {
+      console.warn('[chat/route] Monthly brief handling exception caught safely:', err)
+    }
   }
 
   // Fetch living memory for the client

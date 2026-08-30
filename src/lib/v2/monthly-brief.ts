@@ -155,22 +155,34 @@ export async function getLatestNeedsInputBrief(clientId: string): Promise<Monthl
 }
 
 export async function resolveMonthlyBriefFromChat(clientId: string, answer: string): Promise<{ handled: boolean; brief: MonthlyBriefRecord | null }> {
-  const pending = await getLatestNeedsInputBrief(clientId)
-  if (!pending) return { handled: false, brief: null }
-  const classification = await generateObject({
-    model: google('gemini-2.5-flash'), schema: briefResolutionSchema,
-    system: 'סווג האם הודעת נחמיה עונה על אחת משאלות הבריף. אל תסמן answersBrief עבור שאלה כללית או נושא אחר. decision=omit כאשר ביקש להשמיט; clarified כאשר סיפק עובדה משלימה; will_provide כאשר אמר שיעלה/יעדכן בעתיד.',
-    prompt: `שאלות פתוחות:${JSON.stringify(pending.missingInformation)}\nהודעת נחמיה:${answer}`,
-  })
-  if (!classification.object.answersBrief || !classification.object.resolutions.length) return { handled: false, brief: pending }
-  const answeredAt = new Date().toISOString()
-  const incoming = classification.object.resolutions
-    .filter((resolution) => pending.missingInformation.some((item) => item.id === resolution.issueId))
-    .map((resolution) => ({ ...resolution, answeredAt }))
-  if (!incoming.length) return { handled: false, brief: pending }
-  const previous = { ...pending, resolutions: [...pending.resolutions.filter((old) => !incoming.some((item) => item.issueId === old.issueId)), ...incoming], updatedAt: answeredAt }
-  await saveBrief(previous)
-  return { handled: true, brief: await generateMonthlyBrief(clientId, pending.reportMonth, previous) }
+  try {
+    const pending = await getLatestNeedsInputBrief(clientId)
+    if (!pending) return { handled: false, brief: null }
+    const classification = await generateObject({
+      model: google('gemini-2.5-flash'), schema: briefResolutionSchema,
+      system: 'סווג האם הודעת נחמיה עונה על אחת משאלות הבריף. אל תסמן answersBrief עבור שאלה כללית או נושא אחר. decision=omit כאשר ביקש להשמיט; clarified כאשר סיפק עובדה משלימה; will_provide כאשר אמר שיעלה/יעדכן בעתיד.',
+      prompt: `שאלות פתוחות:${JSON.stringify(pending.missingInformation)}\nהודעת נחמיה:${answer}`,
+    })
+    if (!classification.object.answersBrief || !classification.object.resolutions.length) return { handled: false, brief: pending }
+    const answeredAt = new Date().toISOString()
+    const incoming = classification.object.resolutions
+      .filter((resolution) => pending.missingInformation.some((item) => item.id === resolution.issueId))
+      .map((resolution) => ({ ...resolution, answeredAt }))
+    if (!incoming.length) return { handled: false, brief: pending }
+    const previous = { ...pending, resolutions: [...pending.resolutions.filter((old) => !incoming.some((item) => item.issueId === old.issueId)), ...incoming], updatedAt: answeredAt }
+    await saveBrief(previous)
+
+    try {
+      const regenerated = await generateMonthlyBrief(clientId, pending.reportMonth, previous)
+      return { handled: true, brief: regenerated }
+    } catch (regenError) {
+      console.warn('[monthly-brief] Regeneration warning, using saved state:', regenError)
+      return { handled: true, brief: previous }
+    }
+  } catch (error) {
+    console.warn('[monthly-brief] resolveMonthlyBriefFromChat failed safely:', error)
+    return { handled: false, brief: null }
+  }
 }
 
 export async function approveMonthlyBrief(clientId: string, briefId: string): Promise<MonthlyBriefRecord> {
