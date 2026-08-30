@@ -1,4 +1,3 @@
-import { generateGlobalDailyBrief } from '@/lib/v2/global-daily-brief'
 import { GlobalDailyBriefView } from '@/components/workspace/GlobalDailyBriefView'
 import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
@@ -11,7 +10,6 @@ export const dynamic = 'force-dynamic'
 
 export default async function WorkspaceDailyBriefPage() {
   await requireWorkspaceAdmin()
-  const brief = await generateGlobalDailyBrief()
-
-  return <GlobalDailyBriefView brief={brief} />
+  return <GlobalDailyBriefView />
 }
+

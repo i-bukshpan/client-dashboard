@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -22,24 +22,52 @@ import {
   FileSpreadsheet,
   Brain,
   MessageSquare,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { fetchGlobalDailyBriefAction } from '@/app/workspace/actions/brief'
 import type { GlobalDailyBrief } from '@/lib/v2/global-daily-brief'
 
 interface Props {
-  brief: GlobalDailyBrief
+  initialBrief?: GlobalDailyBrief | null
 }
 
-export function GlobalDailyBriefView({ brief }: Props) {
+export function GlobalDailyBriefView({ initialBrief = null }: Props) {
   const router = useRouter()
+  const [brief, setBrief] = useState<GlobalDailyBrief | null>(initialBrief)
+  const [loading, setLoading] = useState<boolean>(!initialBrief)
+  const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  const loadBrief = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true)
+    else setRefreshing(true)
+    setError(null)
+
+    const res = await fetchGlobalDailyBriefAction()
+    setLoading(false)
+    setRefreshing(false)
+
+    if (res.success && res.data) {
+      setBrief(res.data)
+    } else {
+      setError(res.error || 'שגיאה בטעינת הבריף היומי')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!brief) {
+      loadBrief(false)
+    }
+  }, [brief, loadBrief])
+
   async function handleCopyWhatsApp() {
+    if (!brief) return
     try {
       await navigator.clipboard.writeText(brief.whatsappFormattedText)
       setCopied(true)
@@ -53,9 +81,81 @@ export function GlobalDailyBriefView({ brief }: Props) {
   }
 
   function handleRefresh() {
-    setRefreshing(true)
-    router.refresh()
-    setTimeout(() => setRefreshing(false), 1200)
+    loadBrief(true)
+  }
+
+  if (loading || !brief) {
+    return (
+      <div dir="rtl" className="max-w-6xl mx-auto px-6 py-8 space-y-6 animate-in fade-in duration-300">
+        {/* Immediate Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border/70 p-5 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md shadow-orange-500/20 text-white shrink-0">
+              <Sun className="w-6 h-6 animate-spin" style={{ animationDuration: '8s' }} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-black text-foreground">בריף יומי מנהלים</h1>
+                <Badge className="bg-amber-50 text-amber-700 border-amber-300 font-semibold text-[10px] gap-1 animate-pulse">
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  סוכן AI מפיק בריף...
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+                {new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · טוען ומסכם נתונים רוחביים...
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button disabled variant="outline" size="sm" className="h-9 px-3 gap-1.5 text-xs font-semibold">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              מפיק בריף...
+            </Button>
+          </div>
+        </div>
+
+        {/* AI Synthesis Loading Banner */}
+        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-indigo-500/10 p-5 flex items-center gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <Brain className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-foreground flex items-center gap-2">
+              סוכן ה-AI סורק את מרחב העבודה של נחמיה
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              מנתח סטטוסי לקוחות, משימות דחופות, אירועי יומן והתראות פיננסיות להיום...
+            </p>
+          </div>
+        </div>
+
+        {/* Metric Cards Skeletons */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="border-border/60 bg-card/60 animate-pulse">
+              <CardContent className="p-4 space-y-3">
+                <div className="h-3 w-20 bg-muted rounded-md" />
+                <div className="h-7 w-12 bg-muted rounded-md" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Main Content Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-4">
+            <div className="h-44 rounded-2xl bg-muted/40 border border-border/50 animate-pulse" />
+            <div className="h-64 rounded-2xl bg-muted/40 border border-border/50 animate-pulse" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-56 rounded-2xl bg-muted/40 border border-border/50 animate-pulse" />
+            <div className="h-56 rounded-2xl bg-muted/40 border border-border/50 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const { stats, tasks, calendar, clientsSummary, financialAlerts } = brief
