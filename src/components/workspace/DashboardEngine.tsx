@@ -59,6 +59,12 @@ import {
   FileDown,
   Share2,
   RotateCcw,
+  Pencil,
+  MoveLeft,
+  MoveRight,
+  Maximize2,
+  Trash2,
+  Plus,
 } from 'lucide-react'
 import {
   getSheetRowsAction,
@@ -69,6 +75,12 @@ import {
   resetClientAgentDataAction,
 } from '@/app/workspace/actions/dashboard-intelligence'
 import { createDashboardShareAction, exportDashboardPdfAction } from '@/app/workspace/actions/dashboard-snapshot'
+import {
+  getSheetTabsWithHeadersAction,
+  saveDashboardConfigAction,
+  type SheetTabHeaderInfo,
+} from '@/app/workspace/actions/dashboard-builder'
+import { WidgetBuilderModal } from '@/components/workspace/WidgetBuilderModal'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
@@ -356,25 +368,46 @@ function StatCardWidget({
       return posTotal - negTotal
     }
 
+    // Multi-column sum support:
+    // 1) From widget.columns array
+    // 2) From comma-separated y_column (e.g. "היקף חוזה, שדרוגים, תוספות" or "F, G, H")
+    // 3) From plus-separated y_column (e.g. "F+G+H")
+    const columnsToSum: string[] = []
+    if (Array.isArray(widget.columns) && widget.columns.length > 0) {
+      columnsToSum.push(...widget.columns)
+    } else if (valColumn.includes(',')) {
+      columnsToSum.push(...valColumn.split(',').map((c) => c.trim()).filter(Boolean))
+    } else if (valColumn.includes('+')) {
+      columnsToSum.push(...valColumn.split('+').map((c) => c.trim()).filter(Boolean))
+    } else if (valColumn) {
+      columnsToSum.push(valColumn)
+    }
+
     if (widget.aggregation === 'count') {
       return data.length
     }
 
     if (widget.aggregation === 'avg') {
-      const sum = data.reduce((acc, row) => acc + parseNumericValue(row[valColumn]), 0)
+      const sum = data.reduce((acc, row) => {
+        const rowVal = columnsToSum.reduce((sub, col) => sub + parseNumericValue(row[col]), 0)
+        return acc + rowVal
+      }, 0)
       return data.length > 0 ? sum / data.length : 0
     }
 
     if (widget.aggregation === 'min') {
-      return Math.min(...data.map((row) => parseNumericValue(row[valColumn])))
+      return Math.min(...data.map((row) => columnsToSum.reduce((sub, col) => sub + parseNumericValue(row[col]), 0)))
     }
 
     if (widget.aggregation === 'max') {
-      return Math.max(...data.map((row) => parseNumericValue(row[valColumn])))
+      return Math.max(...data.map((row) => columnsToSum.reduce((sub, col) => sub + parseNumericValue(row[col]), 0)))
     }
 
-    // Default: sum
-    return data.reduce((acc, row) => acc + parseNumericValue(row[valColumn]), 0)
+    // Default: sum across all target columns
+    return data.reduce((acc, row) => {
+      const rowSum = columnsToSum.reduce((sub, col) => sub + parseNumericValue(row[col]), 0)
+      return acc + rowSum
+    }, 0)
   }, [data, valColumn, widget])
 
   const prefix = widget.prefix ?? (widget.title.includes('סכום') || widget.title.includes('הכנסות') || widget.title.includes('הוצאות') || widget.title.includes('רווח') ? '₪' : '')
@@ -766,6 +799,116 @@ export function DashboardEngine({
   const [isExporting, setIsExporting] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
 
+  // Visual Dashboard Builder & Manual Editor State
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [isBuilderModalOpen, setIsBuilderModalOpen] = useState(false)
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null)
+  const [sheetTabsInfo, setSheetTabsInfo] = useState<SheetTabHeaderInfo[]>([])
+
+  // Load Sheet Tabs on mount or when edit mode turns on
+  useEffect(() => {
+    async function loadTabs() {
+      const res = await getSheetTabsWithHeadersAction(clientId)
+      if (res.success && res.tabs) {
+        setSheetTabsInfo(res.tabs)
+      }
+    }
+    loadTabs()
+  }, [clientId])
+
+  const handleOpenAddWidget = () => {
+    setEditingWidget(null)
+    setIsBuilderModalOpen(true)
+  }
+
+  const handleOpenEditWidget = (widget: DashboardWidget) => {
+    setEditingWidget(widget)
+    setIsBuilderModalOpen(true)
+  }
+
+  const handleSaveWidgetFromModal = async (savedWidget: DashboardWidget) => {
+    let updatedWidgets: DashboardWidget[] = []
+    const existingIndex = (config?.widgets || []).findIndex((w) => w.id === savedWidget.id)
+
+    if (existingIndex >= 0) {
+      updatedWidgets = (config?.widgets || []).map((w, i) => (i === existingIndex ? savedWidget : w))
+    } else {
+      updatedWidgets = [...(config?.widgets || []), savedWidget]
+    }
+
+    const newConfig: DashboardConfig = {
+      version: 1,
+      tabs: Array.from(new Set([...(config?.tabs || []), savedWidget.tab || 'ראשי'])),
+      widgets: updatedWidgets,
+    }
+
+    setConfig(newConfig)
+    const toastId = toast.loading('שומר שינויים בדשבורד...')
+    const res = await saveDashboardConfigAction(clientId, newConfig)
+    if (res.success) {
+      toast.success('✅ הווידג\'ט נשמר ועודכן בהצלחה!', { id: toastId })
+    } else {
+      toast.error(res.error || 'שגיאה בשמירת הווידג\'ט', { id: toastId })
+    }
+  }
+
+  const handleDeleteWidget = async (widgetId: string) => {
+    if (!window.confirm('האם אתה בטוח שברצונך למחוק ווידג\'ט זה?')) return
+    const updatedWidgets = (config?.widgets || []).filter((w) => w.id !== widgetId)
+    const newConfig: DashboardConfig = {
+      version: 1,
+      tabs: config?.tabs,
+      widgets: updatedWidgets,
+    }
+    setConfig(newConfig)
+    const toastId = toast.loading('מוחק ווידג\'ט...')
+    const res = await saveDashboardConfigAction(clientId, newConfig)
+    if (res.success) {
+      toast.success('הווידג\'ט נמחק בהצלחה', { id: toastId })
+    } else {
+      toast.error(res.error || 'שגיאה במחיקת הווידג\'ט', { id: toastId })
+    }
+  }
+
+  const handleCycleWidth = async (widgetId: string) => {
+    const updatedWidgets = (config?.widgets || []).map((w) => {
+      if (w.id === widgetId) {
+        const currentW = w.position?.w || 1
+        const nextW = currentW === 1 ? 2 : currentW === 2 ? 3 : currentW === 3 ? 4 : 1
+        return { ...w, position: { ...w.position, w: nextW } }
+      }
+      return w
+    })
+    const newConfig: DashboardConfig = {
+      version: 1,
+      tabs: config?.tabs,
+      widgets: updatedWidgets,
+    }
+    setConfig(newConfig)
+    saveDashboardConfigAction(clientId, newConfig).catch(() => null)
+    toast.success('רוחב הווידג\'ט עודכן')
+  }
+
+  const handleMoveWidget = async (widgetId: string, direction: 'prev' | 'next') => {
+    const list = [...(config?.widgets || [])]
+    const index = list.findIndex((w) => w.id === widgetId)
+    if (index < 0) return
+    const targetIndex = direction === 'prev' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= list.length) return
+
+    const temp = list[index]
+    list[index] = list[targetIndex]
+    list[targetIndex] = temp
+
+    const newConfig: DashboardConfig = {
+      version: 1,
+      tabs: config?.tabs,
+      widgets: list,
+    }
+    setConfig(newConfig)
+    saveDashboardConfigAction(clientId, newConfig).catch(() => null)
+  }
+
   const innerTabs = useMemo(() => {
     const set = new Set<string>()
     config?.widgets?.forEach((w) => {
@@ -1010,6 +1153,19 @@ export function DashboardEngine({
               ● Live Realtime
             </Badge>
             <Button
+              variant={isEditMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setIsEditMode((prev) => !prev)}
+              className={`h-8 gap-1.5 text-xs font-bold transition-all ${
+                isEditMode
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm ring-2 ring-amber-400/50'
+                  : 'hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300'
+              }`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {isEditMode ? 'סיום עריכה' : 'ערוך דשבורד'}
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={refreshAll}
@@ -1151,6 +1307,42 @@ export function DashboardEngine({
         </div>
       </div>
 
+      {/* Visual Edit Mode Top Banner */}
+      {isEditMode && (
+        <div className="p-3.5 px-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+              <Pencil className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-xs font-black">מצב עריכה ויזואלי פעיל</h3>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
+                הוסף ווידג&apos;טים חדשים, ערוך הגדרות, שנה רוחב (1-4), הזז או מחק כל ווידג&apos;ט. כל שינוי נשמר ישירות בענן.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleOpenAddWidget}
+              className="h-8 gap-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              הוסף ווידג&apos;ט חדש
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsEditMode(false)}
+              className="h-8 text-xs font-bold bg-background hover:bg-muted border-amber-400/60"
+            >
+              סיום עריכה
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Internal Sub-Tabs Pills */}
       {innerTabs.length > 0 && (
         <div className="flex items-center gap-1.5 p-1 bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl overflow-x-auto shrink-0">
@@ -1229,7 +1421,64 @@ export function DashboardEngine({
           )
 
           return (
-            <div key={widget.id} className={`${spanClass} transition-all duration-300`}>
+            <div key={widget.id} className={`${spanClass} transition-all duration-300 relative group`}>
+              {/* Visual Edit Mode Action Overlay Bar */}
+              {isEditMode && (
+                <div className="mb-2 p-1.5 px-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-between gap-1.5 text-xs shadow-xs">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleOpenEditWidget(widget)}
+                      className="h-6 px-2 text-[11px] font-bold gap-1 bg-white dark:bg-card hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300 shadow-xs"
+                    >
+                      <Pencil className="w-3 h-3 text-amber-600" />
+                      ערוך
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCycleWidth(widget.id)}
+                      className="h-6 px-2 text-[11px] font-bold gap-1 bg-white dark:bg-card hover:bg-muted text-foreground border shadow-xs"
+                      title="שינוי רוחב עמודות (1-4)"
+                    >
+                      <Maximize2 className="w-3 h-3 text-indigo-600" />
+                      רוחב {widget.position?.w || 1}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleMoveWidget(widget.id, 'prev')}
+                      className="h-6 w-6 p-0 bg-white dark:bg-card hover:bg-muted"
+                      title="הזז קדימה"
+                    >
+                      <MoveRight className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleMoveWidget(widget.id, 'next')}
+                      className="h-6 w-6 p-0 bg-white dark:bg-card hover:bg-muted"
+                      title="הזז אחורה"
+                    >
+                      <MoveLeft className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteWidget(widget.id)}
+                      className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      title="מחק ווידג'ט"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {loading && rawData.length === 0 ? (
                 <Card className="p-6 space-y-3">
                   <Skeleton className="h-4 w-32" />
@@ -1242,6 +1491,16 @@ export function DashboardEngine({
           )
         })}
       </div>
+
+      {/* Widget Builder & Editor Modal */}
+      <WidgetBuilderModal
+        open={isBuilderModalOpen}
+        onOpenChange={setIsBuilderModalOpen}
+        initialWidget={editingWidget}
+        tabs={sheetTabsInfo}
+        existingDashboardTabs={innerTabs}
+        onSave={handleSaveWidgetFromModal}
+      />
     </div>
   )
 }

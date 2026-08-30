@@ -1,6 +1,31 @@
 import { z } from 'zod'
 
-export const reportMonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+export function normalizeMonth(input: string): string {
+  if (!input || typeof input !== 'string') {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+  const trimmed = input.trim()
+  const match = trimmed.match(/^(\d{4})[-/.](\d{1,2})/)
+  if (match) {
+    const year = match[1]
+    const month = String(parseInt(match[2], 10)).padStart(2, '0')
+    return `${year}-${month}`
+  }
+  const revMatch = trimmed.match(/^(\d{1,2})[-/.](\d{4})/)
+  if (revMatch) {
+    const month = String(parseInt(revMatch[1], 10)).padStart(2, '0')
+    const year = revMatch[2]
+    return `${year}-${month}`
+  }
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+export const reportMonthSchema = z
+  .string()
+  .transform((val) => normalizeMonth(val))
+  .pipe(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/))
 
 export const missingInformationSchema = z.object({
   id: z.string().min(2).max(100),

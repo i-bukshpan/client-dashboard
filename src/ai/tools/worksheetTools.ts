@@ -48,6 +48,7 @@ import {
 } from '@/lib/v2/agent-memory'
 import { saveClientContext } from '@/lib/v2/client-context'
 import { clientContextSchema } from '@/lib/v2/client-context-schema'
+import { dashboardConfigSchema } from '@/lib/v2/dashboard-schema'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -98,9 +99,9 @@ const WidgetSchema = z.object({
   sort_order: z.enum(['asc', 'desc']).optional().describe('Sort direction: "asc" or "desc"'),
   date_column: z.string().optional().describe('Column containing dates for date-filtering and timeline grouping'),
 
-  // Chart configuration
+  // Chart & Stat configuration
   x_column: z.string().optional().describe('Column name for the X axis (bar/line charts, e.g. "תאריך" or "חודש")'),
-  y_column: z.string().optional().describe('Column name for the Y axis / numeric value, e.g. "סכום"'),
+  y_column: z.string().optional().describe('Column name for the Y axis / numeric value, or multiple comma/plus separated columns (e.g. "סכום", "F,G,H", or "היקף חוזה, תוספות")'),
   label_column: z.string().optional().describe('Column name for pie chart labels, e.g. "קטגוריה" or "ספק"'),
   value_column: z.string().optional().describe('Column name for pie chart values, e.g. "סכום"'),
 
@@ -113,8 +114,8 @@ const WidgetSchema = z.object({
   prefix: z.string().optional().describe('Prefix for numbers, e.g. "₪"'),
   suffix: z.string().optional().describe('Suffix for numbers, e.g. "%"'),
 
-  // Data table configuration
-  columns: z.array(z.string()).optional().describe('Ordered columns to display in data_table'),
+  // Multi-column or table configuration
+  columns: z.array(z.string()).optional().describe('List of columns to display in a data_table, OR list of multiple columns to sum together in a stat_card (e.g. ["עמודה F", "עמודה G", "עמודה H"])'),
   max_rows: z.number().optional().describe('Max rows to show in data_table (e.g. 10)'),
 })
 
@@ -380,6 +381,30 @@ export function makeUpdateDashboardLayoutTool(clientId: string) {
           success: true,
           widget_count: formattedWidgets.length,
           message: `✅ הדשבורד עודכן בהצלחה עם ${formattedWidgets.length} ווידג'טים! עבור ללשונית Dashboard לצפייה.`,
+        }
+      } catch (error: unknown) {
+        return { success: false, error: errorMessage(error) }
+      }
+    },
+  })
+}
+
+// ── Tool: get_current_dashboard_layout ────────────────────────────────────────
+
+export function makeGetCurrentDashboardLayoutTool(clientId: string) {
+  return tool({
+    description:
+      'Inspects the current active dashboard layout, tabs, and widgets for this client. ' +
+      'ALWAYS call this tool before making dashboard modifications or additions so you can inspect Nehemiah\'s custom widgets, manual modifications, and layout choices, ensuring you preserve them instead of blindly resetting them.',
+    inputSchema: z.object({}),
+    execute: async () => {
+      try {
+        const client = await getWorkspaceClient(clientId)
+        const parsed = dashboardConfigSchema.safeParse(client.dashboard_config_json)
+        return {
+          success: true,
+          config: parsed.success ? parsed.data : null,
+          widgetCount: parsed.success ? parsed.data.widgets.length : 0,
         }
       } catch (error: unknown) {
         return { success: false, error: errorMessage(error) }

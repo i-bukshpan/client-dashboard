@@ -20,8 +20,8 @@ const MAX_ROWS_PER_TAB = 50
 const MAX_TOTAL_ROWS = 400
 
 function monthPeriod(reportMonth: string) {
-  reportMonthSchema.parse(reportMonth)
-  const [year, month] = reportMonth.split('-').map(Number)
+  const normalized = reportMonthSchema.parse(reportMonth)
+  const [year, month] = normalized.split('-').map(Number)
   const start = new Date(year, month - 1, 1)
   const end = new Date(year, month, 1)
   return { start: start.toISOString(), end: end.toISOString() }

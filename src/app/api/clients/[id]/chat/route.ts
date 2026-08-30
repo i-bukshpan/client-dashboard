@@ -23,6 +23,7 @@ import {
   makeAppendRowTool,
   makeCreateNewSheetStructureTool,
   makeUpdateDashboardLayoutTool,
+  makeGetCurrentDashboardLayoutTool,
   makeGetDriveFilesTool,
   makeRememberClientFactTool,
   makeGetClientLivingMemoryTool,
@@ -202,23 +203,35 @@ ${briefContext}
    - בצע פעולות בעצמך דרך הכלים (כתיבה לגיליון, בניית דשבורד, יצירת משימות, קביעת אירועים).
    - לעולם אל תזכיר שמות של כלים טכניים בטקסט הגלוי לנחמיה (הפעל ישירות כ-Tool Calls).
 
-## 🎯 חוק ברזל קריטי לבניית ועדכון דשבורד מנהלים (update_dashboard_layout):
+## 🎯 חוקי ברזל קריטיים לבניית ועדכון דשבורד מנהלים (update_dashboard_layout):
 1. **חובת ביצוע ישיר באותו התור:**
    כשנחמיה מבקש לבנות דשבורד, להוסיף ווידג'ט או לעצב מחדש את הדשבורד, או כשאתה מסכם רשימת ווידג'טים חדשה:
    - **אתה חייב לקרוא ישירות לכלי \`update_dashboard_layout\` באותו התור בדיוק!**
    - ⛔ **איסור מוחלט:** לעולם אל תגיד בטקסט בלבד "אבנה כעת את הווידג'טים" או "אני מעדכן כעת" בלי להפעיל בפועל את הכלי באותה התגובה!
-2. **דיוק מוחלט של 100% לפי בקשת נחמיה:**
-   - אם נחמיה ביקש מספר ווידג'טים ספציפיים (לדוגמה: סה"כ חוזים כולל מע"מ מתוך 'פרויקטים', יתרת גבייה, הוצאות פרויקטים, והוצאות חברה בסינון חובה) – **בנה במדויק אך ורק את הווידג'טים האלו עם הכותרות, הלשוניות, העמודות והסינונים המדויקים שנמסרו!**
+
+2. **מעקב וכיבוד שינויים ידניים של נחמיה (Active Change Tracking):**
+   - לפני דריסה, איפוס או ביצוע שינויים מבניים בדשבורד, בתצוגות או בהקשר הלקוח, **עליך תמיד לבדוק את המצב הנוכחי באמצעות \`get_current_dashboard_layout\` ולהכיר בכל שינוי ידני, סידור מותאם או ווידג'ט שנחמיה יצר או ערך בממשק הוויזואלי.**
+   - שמור על ווידג'טים קיימים שנחמיה עיצב אלא אם נחמיה ביקש במפורש להחליף או למחוק אותם!
+
+3. **גמישות מלאה והימנעות מתבניות קשיחות (Flexibility over Presets):**
+   - **לעולם אל תהיה "תקוע" על תבנית ראשונית או ברירת מחדל קבועה.**
+   - אם נחמיה מבקש מבנה אחר, סינון ייעודי, טאב חדש או הגדרה שונה – אמץ ושמר את המצב הנוכחי המותאם שנחמיה ביקש, ואל תשחזר תבניות גנריות.
+
+4. **דיוק מוחלט של 100% לפי בקשת נחמיה:**
+   - אם נחמיה ביקש ווידג'טים ספציפיים (לדוגמה: סה"כ חוזים כולל מע"מ מתוך 'פרויקטים', יתרת גבייה, הוצאות פרויקטים, והוצאות חברה בסינון חובה) – **בנה במדויק אך ורק את הווידג'טים האלו עם הכותרות, הלשוניות, העמודות והסינונים המדויקים שנמסרו!**
    - **שמות מדויקים מהגיליון:** העתק במדויק את שמות הלשוניות (\`sheet\`), שמות העמודות (\`column\`/\`y_column\`/\`date_column\`) והסינונים (\`filters\`) כפי שהם קיימים בגיליון.
    - **סיווג טאבים מסודר:** הצב את הווידג'טים תחת \`tab: 'ראשי'\` (או בטאב הרלוונטי שסוכם), עם כותרות בעברית תואמות (\`title\`).
-   - אל תוסיף ווידג'טים אקראיים מתבניות גנריות אלא אם נחמיה ביקש דשבורד ברירת מחדל מורחב.
+
+5. **סכימת עמודות מרובות (Multi-Column Sum) ואי-הטרחת נחמיה:**
+   - **המערכת תומכת באופן מלא בסכימת מספר עמודות בכרטיס בודד (stat_card)!** ניתן לסכם מספר עמודות בבת אחת ע"י העברת מערך \`columns: ["עמודה F", "עמודה G", "עמודה H"]\` או ע"י הפרדת שמות העמודות בפסיקים ב-\`y_column: "F, G, H"\`.
+   - ⛔ **איסור מוחלט לשלוח את נחמיה לפעולות ידניות בגיליון:** לעולם אל תגיד לנחמיה "לך תוסיף עמודה בגיליון, תגרור נוסחה ותחזור אליי". אתה העוזר הניהולי – אם נדרש חישוב, השתמש ביכולת המערכת לסכם את העמודות ישירות, או בצע פעולות בעצמך!
 
 ## כלי עבודה זמינים
 - **זיכרון חי:** \`remember_client_fact\`, \`get_client_living_memory\`, \`update_client_profile\`
 - **אימייל ו-Gmail:** \`search_client_emails\`, \`get_email_thread_details\`, \`send_or_reply_email\`
 - **משימות ותפעול:** \`get_client_tasks\`, \`create_or_update_task\`
 - **יומן פגישות:** \`get_client_calendar_events\`, \`schedule_calendar_meeting\`
-- **גיליון ודשבורד:** \`get_spreadsheet_info\`, \`read_sheet_data\`, \`append_row\`, \`create_new_sheet_structure\`, \`update_dashboard_layout\`
+- **גיליון ודשבורד:** \`get_spreadsheet_info\`, \`read_sheet_data\`, \`append_row\`, \`create_new_sheet_structure\`, \`get_current_dashboard_layout\`, \`update_dashboard_layout\`
 - **מסמכים ו-RAG:** \`search_client_documents\`, \`get_drive_files\`
 - **סטטוס כולל 360°:** \`cross_system_status_check\``.trim()
 }
@@ -324,6 +337,7 @@ export async function POST(
         read_sheet_data: makeReadSheetDataTool(clientId),
         append_row: makeAppendRowTool(clientId),
         create_new_sheet_structure: makeCreateNewSheetStructureTool(clientId),
+        get_current_dashboard_layout: makeGetCurrentDashboardLayoutTool(clientId),
         update_dashboard_layout: makeUpdateDashboardLayoutTool(clientId),
 
         // Drive & Documents (RAG)
