@@ -67,6 +67,7 @@ export interface DashboardWidget {
   y_column?: string
   label_column?: string
   value_column?: string
+  value_columns?: string[]
   group_by?: string
 
   // Stat card configuration

@@ -102,7 +102,10 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
         const result = await getSheetDataAction(clientId, sheetName)
         if ('error' in result) throw new Error(result.error)
         setHeaders(result.headers || [])
-        setRows(result.rows || [])
+        const cleanRows = (result.rows || []).filter((r) =>
+          r.some((c) => c !== null && c !== undefined && String(c).trim() !== '')
+        )
+        setRows(cleanRows)
         setLastSynced(new Date())
       } catch (error: unknown) {
         if (!isBackground) {

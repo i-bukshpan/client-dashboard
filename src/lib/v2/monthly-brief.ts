@@ -140,7 +140,13 @@ export async function generateMonthlyBrief(clientId: string, reportMonth: string
   const evidenceForAi = { ...evidence, deterministicIssues: unresolvedDeterministic }
   const result = await generateObject({
     model: google('gemini-2.5-flash'), schema: monthlyBriefResultSchema,
-    system: 'אתה יוצר בריף חודשי אמין בעברית מתוך ראיות מוגבלות. אסור להמציא עובדות. הפלט חייב להיות תמציתי. כל עמימות לא פתורה חייבת להופיע ב-missingInformation כשאלה מפורשת עם 2–3 אפשרויות פעולה.',
+    system: `אתה יוצר בריף חודשי מקצועי, אמין ומדויק בעברית עבור נחמיה מתוך ראיות מוגבלות. אסור להמציא עובדות. הפלט חייב להיות תמציתי ומבוסס ראיות בלבד.
+
+כללי מפתח חמורים לשאלות ב-missingInformation:
+1. חובה לציין במפורש בכל שאלה על תנועה כספית או פער את כל פרטי הזיהוי המלאים: תאריך מדויק, סכום מדויק (₪), שם הספק/לקוח/הגורם, הלשונית בגיליון ושם התנועה.
+2. אסור בהחלט לשאול שאלה כללית כמו "האם יש לסווג תנועה זו..." בלי לציין את הפרטים המדויקים של אותה תנועה (למשל: "תנועה מתאריך 15/08 על סך ₪4,500 לספק 'כהן חשמל' בלשונית 'הוצאות'").
+3. בשדה description ספק רקע תמציתי ומקור מדויק מהגיליון או מהמסמכים.
+4. ספק 2-3 אפשרויות פעולה ברורות ב-options.`,
     prompt: `צור בריף לחודש ${reportMonth}. בדיקות דטרמיניסטיות לא פתורות חייבות להישאר ב-missingInformation עם אותו id. תשובות נחמיה שכבר התקבלו הן ראיות מחייבות.\nבדיקות:${JSON.stringify(unresolvedDeterministic)}\nתשובות:${JSON.stringify(previous?.resolutions ?? [])}\nראיות:${JSON.stringify(evidenceForAi)}`,
   })
   const byId = new Map(result.object.missingInformation.map((item) => [item.id, item]))

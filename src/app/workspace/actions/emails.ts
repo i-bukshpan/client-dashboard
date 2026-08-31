@@ -127,6 +127,19 @@ export async function getClientEmailsAction(
     await requireWorkspaceAdmin()
     const client = await getWorkspaceClient(clientId)
 
+    if (!client.gmail_label || client.gmail_label.trim() === '') {
+      return {
+        success: true,
+        data: {
+          threads: [],
+          totalEstimate: 0,
+          unreadCount: 0,
+          labelName: null,
+          clientEmail: client.email,
+        },
+      }
+    }
+
     const res = await listClientEmails({
       labelName: client.gmail_label,
       clientEmail: client.email,

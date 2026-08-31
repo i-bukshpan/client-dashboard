@@ -143,12 +143,11 @@ export function ClientEmailsView({
     if (res.data) {
       setThreads(res.data.threads)
       setUnreadCount(res.data.unreadCount)
-      setGmailLabel(res.data.labelName)
-
-      // Auto-select first thread if nothing selected
-      if (res.data.threads.length > 0 && !selectedThreadId) {
-        setSelectedThreadId(res.data.threads[0].threadId)
-      } else if (res.data.threads.length === 0) {
+      // Do NOT auto-select first thread so it does not mark as read automatically
+      if (res.data.threads.length === 0) {
+        setSelectedThreadId(null)
+        setActiveThread(null)
+      } else if (selectedThreadId && !res.data.threads.some((t) => t.threadId === selectedThreadId)) {
         setSelectedThreadId(null)
         setActiveThread(null)
       }
@@ -546,16 +545,29 @@ export function ClientEmailsView({
                 <Loader2 className="w-6 h-6 animate-spin text-red-500" />
                 <span className="text-xs">טוען הודעות מ-Gmail...</span>
               </div>
+            ) : !gmailLabel ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6 text-center text-muted-foreground gap-2">
+                <Tag className="w-10 h-10 opacity-30 text-amber-500" />
+                <p className="text-sm font-bold text-foreground">לא הוגדרה תווית ייעודית</p>
+                <p className="text-xs max-w-xs text-muted-foreground">
+                  כדי להציג מיילים של הלקוח, יש להגדיר תווית Gmail ייעודית (למשל: {clientName}).
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setLabelPopoverOpen(true)}
+                  className="mt-2 text-xs font-semibold gap-1.5 border-amber-300 hover:bg-amber-50 text-amber-900 dark:text-amber-200"
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  הגדר תווית Gmail עכשיו
+                </Button>
+              </div>
             ) : threads.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-60 p-6 text-center text-muted-foreground gap-2">
                 <Inbox className="w-10 h-10 opacity-30" />
                 <p className="text-sm font-bold text-foreground">אין מיילים להצגה</p>
                 <p className="text-xs max-w-xs">
-                  {gmailLabel
-                    ? `לא נמצאו התכתבויות תחת התווית "${gmailLabel}".`
-                    : clientEmail
-                    ? `לא נמצאו התכתבויות עם ${clientEmail}. באפשרותך לקשר תווית ייעודית מ-Gmail.`
-                    : 'הגדר תווית Gmail או עדכן כתובת אימייל ללקוח כדי להציג התכתבויות.'}
+                  לא נמצאו התכתבויות תחת התווית &quot;{gmailLabel}&quot;.
                 </p>
               </div>
             ) : (

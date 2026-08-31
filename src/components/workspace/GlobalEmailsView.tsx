@@ -145,12 +145,11 @@ export function GlobalEmailsView({ clients = [] }: Props) {
       setThreads(res.data.threads)
       setUnreadCount(res.data.unreadCount)
 
-      // Auto-select first thread if nothing selected or previous selection gone
-      if (res.data.threads.length > 0) {
-        if (!selectedThreadId || !res.data.threads.some((t) => t.threadId === selectedThreadId)) {
-          setSelectedThreadId(res.data.threads[0].threadId)
-        }
-      } else {
+      // Do NOT auto-select first thread so it is not marked as read automatically
+      if (res.data.threads.length === 0) {
+        setSelectedThreadId(null)
+        setActiveThread(null)
+      } else if (selectedThreadId && !res.data.threads.some((t) => t.threadId === selectedThreadId)) {
         setSelectedThreadId(null)
         setActiveThread(null)
       }

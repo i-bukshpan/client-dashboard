@@ -210,9 +210,17 @@ export function MonthlyBriefPanel({ clientId, briefs }: { clientId: string; brie
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-xs font-bold text-amber-600">
                           {index + 1}
                         </span>
-                        <p className="font-semibold text-sm text-foreground leading-snug">
-                          {item.question}
-                        </p>
+                        <div className="space-y-1.5 flex-1">
+                          <p className="font-semibold text-sm text-foreground leading-snug">
+                            {item.question}
+                          </p>
+                          {item.description && item.description !== item.question && (
+                            <div className="text-xs text-muted-foreground bg-muted/40 p-2 rounded-lg border border-border/40 font-medium">
+                              <span className="font-bold text-foreground">💡 רקע ומקור: </span>
+                              {item.description}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Clickable Choice Buttons */}
