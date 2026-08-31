@@ -36,47 +36,108 @@ function getSheetsClient() {
   return createV2SheetsClient()
 }
 
+const conversionCache = new Map<string, string>()
+const inFlightConversions = new Map<string, Promise<string>>()
+
 /**
  * Automatically converts an Excel (.xlsx) file in Google Drive to a native Google Sheet if needed.
+ * Features:
+ * - In-memory caching so repeated reads never re-convert.
+ * - In-flight promise locking so concurrent widget requests for the same file only trigger one conversion.
+ * - Searches parent folder to reuse existing converted Google Sheet if one already exists.
  */
 export async function ensureNativeGoogleSheet(fileId: string): Promise<string> {
   if (!fileId) return fileId
-  const drive = createV2DriveClient()
-  try {
-    const fileRes = await drive.files.get({
-      fileId,
-      fields: 'id, name, mimeType',
-      supportsAllDrives: true,
-    })
 
-    const mime = fileRes.data.mimeType
-    if (mime === 'application/vnd.google-apps.spreadsheet') {
-      return fileId
-    }
+  if (conversionCache.has(fileId)) {
+    return conversionCache.get(fileId)!
+  }
 
-    if (
-      mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      mime === 'application/vnd.ms-excel' ||
-      fileRes.data.name?.endsWith('.xlsx') ||
-      fileRes.data.name?.endsWith('.xls')
-    ) {
-      const cleanName = (fileRes.data.name || 'Converted Sheet').replace(/\.xlsx?$/i, '')
-      const convertedRes = await drive.files.copy({
+  if (inFlightConversions.has(fileId)) {
+    return inFlightConversions.get(fileId)!
+  }
+
+  const conversionPromise = (async () => {
+    const drive = createV2DriveClient()
+    try {
+      const fileRes = await drive.files.get({
         fileId,
-        requestBody: {
-          name: cleanName,
-          mimeType: 'application/vnd.google-apps.spreadsheet',
-        },
+        fields: 'id, name, mimeType, parents, trashed',
         supportsAllDrives: true,
       })
 
-      return convertedRes.data.id || fileId
+      if (fileRes.data.trashed) {
+        return fileId
+      }
+
+      const mime = fileRes.data.mimeType
+      // If already a native Google Sheet, cache and return immediately
+      if (mime === 'application/vnd.google-apps.spreadsheet') {
+        conversionCache.set(fileId, fileId)
+        return fileId
+      }
+
+      // Check if it's an Excel file
+      if (
+        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        mime === 'application/vnd.ms-excel' ||
+        fileRes.data.name?.endsWith('.xlsx') ||
+        fileRes.data.name?.endsWith('.xls')
+      ) {
+        const cleanName = (fileRes.data.name || 'Converted Sheet').replace(/\.xlsx?$/i, '')
+        const parentId = fileRes.data.parents?.[0]
+
+        // 1. Check if a converted Google Sheet with the exact clean name already exists in the same folder
+        if (parentId) {
+          try {
+            const escapedName = cleanName.replace(/'/g, "\\'")
+            const existingRes = await drive.files.list({
+              q: `'${parentId}' in parents and name = '${escapedName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+              fields: 'files(id, name)',
+              spaces: 'drive',
+              supportsAllDrives: true,
+              pageSize: 5,
+            })
+            if (existingRes.data.files && existingRes.data.files.length > 0) {
+              const existingId = existingRes.data.files[0].id!
+              conversionCache.set(fileId, existingId)
+              return existingId
+            }
+          } catch (listErr) {
+            console.warn('[google-sheets] Error checking existing converted sheet:', listErr)
+          }
+        }
+
+        // 2. If not found, copy and convert once
+        const convertedRes = await drive.files.copy({
+          fileId,
+          requestBody: {
+            name: cleanName,
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: parentId ? [parentId] : undefined,
+          },
+          supportsAllDrives: true,
+        })
+
+        const convertedId = convertedRes.data.id || fileId
+        conversionCache.set(fileId, convertedId)
+        return convertedId
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn('[google-sheets] ensureNativeGoogleSheet notice:', message)
     }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.warn('[google-sheets] ensureNativeGoogleSheet notice:', message)
+    return fileId
+  })()
+
+  inFlightConversions.set(fileId, conversionPromise)
+  try {
+    const result = await conversionPromise
+    conversionCache.set(fileId, result)
+    return result
+  } finally {
+    inFlightConversions.delete(fileId)
   }
-  return fileId
 }
 
 /**

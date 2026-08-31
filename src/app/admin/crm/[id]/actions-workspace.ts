@@ -15,6 +15,7 @@ import {
   getSpreadsheetMeta,
   appendRows,
   formatRange,
+  ensureNativeGoogleSheet,
 } from '@/lib/google-sheets'
 import { uploadFileToDrive } from '@/lib/google-drive'
 import { extractDriveFolderId, extractSpreadsheetId, type ClientDriveFile as DriveFile } from '@/lib/workspace-utils'
@@ -205,9 +206,10 @@ export async function linkSheetAction(
   try {
     await requireWorkspaceAdmin()
     const sanitizedId = extractSpreadsheetId(spreadsheetId)
+    const nativeId = sanitizedId ? await ensureNativeGoogleSheet(sanitizedId) : null
     const { error } = await supabaseAdmin
       .from('clients')
-      .update({ google_sheet_id: sanitizedId || null })
+      .update({ google_sheet_id: nativeId || null })
       .eq('id', clientId)
 
     if (error) return { error: error.message }
@@ -270,9 +272,13 @@ export async function updateClientDetailsAction(
       ? extractDriveFolderId(input.drive_folder_id)
       : null
 
-    const googleSheetId = input.google_sheet_id
+    let googleSheetId = input.google_sheet_id
       ? extractSpreadsheetId(input.google_sheet_id)
       : null
+
+    if (googleSheetId) {
+      googleSheetId = await ensureNativeGoogleSheet(googleSheetId)
+    }
 
     const payload: Record<string, string | number | null> = {
       name: input.name.trim(),
