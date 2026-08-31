@@ -67,6 +67,7 @@ import {
   Plus,
   Layers,
   ListOrdered,
+  Check,
 } from 'lucide-react'
 import {
   getSheetRowsAction,
@@ -1172,57 +1173,68 @@ export function DashboardEngine({
             <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 bg-emerald-50">
               ● Live Realtime
             </Badge>
-            <Button
-              variant={isEditMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setIsEditMode((prev) => !prev)}
-              className={`h-8 gap-1.5 text-xs font-bold transition-all ${
-                isEditMode
-                  ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-sm ring-2 ring-violet-400/50'
-                  : 'hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300'
-              }`}
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              {isEditMode ? 'סיום עריכה' : 'ערוך דשבורד'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsManagerModalOpen(true)}
-              className="h-8 gap-1.5 text-xs font-bold hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 text-foreground"
-              title="סידור וניהול ווידג'טים בגרירה ברשימה"
-            >
-              <Layers className="w-3.5 h-3.5 text-violet-600" />
-              סידור ורשימה בגרירה
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={refreshAll}
-              disabled={loading}
-              className="h-8 gap-1.5 text-xs font-semibold"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              רענן נתונים
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleResetDashboard()}
-              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-red-600 hover:border-red-200 hover:bg-red-50/50 transition-colors font-semibold"
-              title="איפוס הדשבורד ובנייה מחדש מאפס"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              איפוס
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void handleExportPdf()} disabled={isExporting} className="h-8 gap-1.5 text-xs font-semibold">
-              {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-              PDF
-            </Button>
-            <Button size="sm" onClick={() => void handleSecureShare()} disabled={isSharing} className="h-8 gap-1.5 bg-indigo-600 text-xs font-semibold hover:bg-indigo-700">
-              {isSharing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-              שיתוף מאובטח
-            </Button>
+
+            {!isEditMode ? (
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsEditMode(true)}
+                  className="h-8 gap-1.5 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-xs"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  ערוך דשבורד
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsManagerModalOpen(true)}
+                  className="h-8 gap-1.5 text-xs font-bold hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 text-foreground"
+                  title="סידור וניהול ווידג'טים בגרירה ברשימה"
+                >
+                  <Layers className="w-3.5 h-3.5 text-violet-600" />
+                  סידור בגרירה
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshAll}
+                  disabled={loading}
+                  className="h-8 gap-1.5 text-xs font-semibold"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  רענן
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleResetDashboard()}
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-red-600 hover:border-red-200 hover:bg-red-50/50 transition-colors font-semibold"
+                  title="איפוס הדשבורד ובנייה מחדש מאפס"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  איפוס
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void handleExportPdf()} disabled={isExporting} className="h-8 gap-1.5 text-xs font-semibold">
+                  {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                  PDF
+                </Button>
+                <Button size="sm" onClick={() => void handleSecureShare()} disabled={isSharing} className="h-8 gap-1.5 bg-indigo-600 text-xs font-semibold hover:bg-indigo-700">
+                  {isSharing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                  שיתוף
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditMode(false)}
+                className="h-8 gap-1.5 text-xs font-bold bg-violet-50 text-violet-700 border-violet-300 hover:bg-violet-100"
+              >
+                <Check className="w-3.5 h-3.5" />
+                סיום עריכה
+              </Button>
+            )}
           </div>
         </div>
 

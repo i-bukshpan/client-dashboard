@@ -244,7 +244,7 @@ export function WidgetManagerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent dir="rtl" className="sm:max-w-2xl max-w-2xl w-[92vw] max-h-[85vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-4 pb-2 border-b border-border/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

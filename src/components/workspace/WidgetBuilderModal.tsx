@@ -288,7 +288,7 @@ export function WidgetBuilderModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent dir="rtl" className="sm:max-w-4xl max-w-4xl w-[92vw] max-h-[92vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="p-4 pb-3 border-b border-border/60 bg-muted/20">
           <div className="flex items-center gap-2 text-violet-600 font-bold">
             <Sparkles className="w-5 h-5 text-violet-600" />
