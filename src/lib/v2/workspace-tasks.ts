@@ -23,10 +23,28 @@ const TEMPLATES: SheetTemplate[] = [
 ]
 
 function nullable(value: string | undefined): string | null { return value?.trim() ? value.trim() : null }
-function validStatus(value: string): WorkspaceTaskStatus { return ['todo', 'in_progress', 'completed', 'cancelled'].includes(value) ? value as WorkspaceTaskStatus : 'todo' }
-function validPriority(value: string): WorkspaceTaskPriority { return ['low', 'medium', 'high', 'urgent'].includes(value) ? value as WorkspaceTaskPriority : 'medium' }
+function validStatus(value: string): WorkspaceTaskStatus {
+  const v = (value || '').trim().toLowerCase()
+  if (v === 'todo' || v === 'לביצוע' || v === 'ממתין') return 'todo'
+  if (v === 'in_progress' || v === 'בטיפול' || v === 'בביצוע') return 'in_progress'
+  if (v === 'completed' || v === 'done' || v === 'הושלם' || v === 'בוצע') return 'completed'
+  if (v === 'cancelled' || v === 'בוטל') return 'cancelled'
+  return 'todo'
+}
+function validPriority(value: string): WorkspaceTaskPriority {
+  const v = (value || '').trim().toLowerCase()
+  if (v === 'urgent' || v === 'דחופה' || v === 'דחוף') return 'urgent'
+  if (v === 'high' || v === 'גבוהה' || v === 'גבוה') return 'high'
+  if (v === 'low' || v === 'נמוכה' || v === 'נמוך') return 'low'
+  return 'medium'
+}
 function validRecurrence(value: string | undefined): WorkspaceTaskRecurrence {
-  return ['none', 'daily', 'weekly', 'monthly', 'yearly'].includes(value ?? '') ? (value as WorkspaceTaskRecurrence) : 'none'
+  const v = (value || '').trim().toLowerCase()
+  if (v === 'daily' || v === 'יומי') return 'daily'
+  if (v === 'weekly' || v === 'שבועי') return 'weekly'
+  if (v === 'monthly' || v === 'חודשי') return 'monthly'
+  if (v === 'yearly' || v === 'שנתי') return 'yearly'
+  return 'none'
 }
 
 export function classifyTaskReminder(task: Pick<WorkspaceTask, 'status' | 'dueAt' | 'snoozedUntil'>, now = new Date()): WorkspaceTaskReminderState {
@@ -88,29 +106,44 @@ export function computeNextRecurringDueDate(
   return target.toISOString()
 }
 
+function getField(row: Record<string, string>, target: string): string {
+  if (row[target] !== undefined) return row[target]
+  const cleanTarget = target.trim().replace(/\s+/g, '')
+  for (const [k, v] of Object.entries(row)) {
+    if (k.trim().replace(/\s+/g, '') === cleanTarget) return v
+  }
+  return ''
+}
+
 function rowToTask(row: Record<string, string>): WorkspaceTask {
-  const recurrence = validRecurrence(row['מחזוריות'])
-  const recurrenceDay = row['יום מחזוריות'] ? Number(row['יום מחזוריות']) : null
-  const parentRecurringId = nullable(row['מזהה משימת אב'])
+  const recurrence = validRecurrence(getField(row, 'מחזוריות'))
+  const recDayRaw = getField(row, 'יום מחזוריות')
+  const recurrenceDay = recDayRaw ? Number(recDayRaw) : null
+  const parentRecurringId = nullable(getField(row, 'מזהה משימת אב'))
+
+  const rawTitle = getField(row, 'כותרת') || ''
+  const rawDesc = getField(row, 'תיאור') || ''
+  const rawClientName = getField(row, 'שם לקוח') || ''
+  const rawId = getField(row, 'מזהה') || ''
 
   const base = {
-    id: row['מזהה'] || '',
-    title: row['כותרת'] || '',
-    description: nullable(row['תיאור']),
-    clientId: nullable(row['מזהה לקוח']),
-    clientName: nullable(row['שם לקוח']),
-    status: validStatus(row['סטטוס'] || ''),
-    priority: validPriority(row['עדיפות'] || ''),
-    dueAt: nullable(row['מועד יעד']),
-    reminderMinutes: Number(row['תזכורת בדקות']) || 30,
-    snoozedUntil: nullable(row['נדחה עד']),
-    calendarEventId: nullable(row['מזהה אירוע ביומן']),
+    id: rawId || `task_${Math.random().toString(36).slice(2, 9)}`,
+    title: rawTitle || rawDesc || 'משימה ללא כותרת',
+    description: nullable(rawDesc),
+    clientId: nullable(getField(row, 'מזהה לקוח')),
+    clientName: nullable(rawClientName),
+    status: validStatus(getField(row, 'סטטוס')),
+    priority: validPriority(getField(row, 'עדיפות')),
+    dueAt: nullable(getField(row, 'מועד יעד')),
+    reminderMinutes: Number(getField(row, 'תזכורת בדקות')) || 30,
+    snoozedUntil: nullable(getField(row, 'נדחה עד')),
+    calendarEventId: nullable(getField(row, 'מזהה אירוע ביומן')),
     recurrence,
     recurrenceDay,
     parentRecurringId,
-    createdAt: row['נוצר בתאריך'] || new Date().toISOString(),
-    updatedAt: row['עודכן בתאריך'] || new Date().toISOString(),
-    completedAt: nullable(row['הושלם בתאריך']),
+    createdAt: getField(row, 'נוצר בתאריך') || new Date().toISOString(),
+    updatedAt: getField(row, 'עודכן בתאריך') || new Date().toISOString(),
+    completedAt: nullable(getField(row, 'הושלם בתאריך')),
   }
   return { ...base, reminderState: classifyTaskReminder(base) }
 }

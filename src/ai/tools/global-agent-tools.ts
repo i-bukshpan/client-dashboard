@@ -277,22 +277,28 @@ export function createGlobalAgentTools() {
      * Fetches tasks across the workspace with full recurring & regular breakdown
      */
     get_workspace_tasks: tool({
-      description: 'שליפת כל המשימות הפתוחות במערכת — מחולקות למשימות רגילות שוטפות ולמשימות מחזוריות (יומי, שבועי, חודשי).',
+      description: 'שליפת כל המשימות הפתוחות במערכת — מחולקות למשימות רגילות שוטפות ולמשימות מחזוריות (יומי, שבועי, חודשי). להצגת כל המשימות של נחמיה או הכלליות, השאר clientIdOrName ריק.',
       parameters: z.object({
-        clientIdOrName: z.string().optional().describe('סינון לפי לקוח ספציפי (אופציונלי)'),
+        clientIdOrName: z.string().optional().describe('סינון לפי לקוח ספציפי (אופציונלי). אם נחמיה שואל על המשימות שלו או בכללי - השאר ריק!'),
         statusFilter: z.enum(['all', 'todo', 'in_progress', 'completed', 'cancelled']).optional().default('all'),
       }),
       execute: async ({ clientIdOrName, statusFilter }) => {
         try {
           let targetClientId: string | undefined
           if (clientIdOrName) {
-            const clients = await listWorkspaceClients()
-            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
-            if (target) targetClientId = target.id
+            const raw = clientIdOrName.trim().toLowerCase()
+            const genericTerms = ['נחמיה', 'לי', 'שלי', 'הכל', 'כללי', 'עצמי', 'me', 'my', 'all', 'mine']
+            if (!genericTerms.includes(raw)) {
+              const clients = await listWorkspaceClients()
+              const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+              if (target) {
+                targetClientId = target.id
+              }
+            }
           }
 
           const tasks = await listWorkspaceTasks(targetClientId)
-          const filtered = statusFilter === 'all'
+          const filtered = (!statusFilter || statusFilter === 'all')
             ? tasks
             : tasks.filter((t) => t.status === statusFilter)
 
@@ -305,9 +311,9 @@ export function createGlobalAgentTools() {
             recurringCount: recurringTasks.length,
             regularTasks: regularTasks.map((t) => ({
               id: t.id,
-              clientId: t.clientId,
-              clientName: t.clientName,
+              clientName: t.clientName || 'כללי (נחמיה)',
               title: t.title,
+              description: t.description,
               status: t.status,
               priority: t.priority,
               dueAt: t.dueAt,
@@ -315,15 +321,16 @@ export function createGlobalAgentTools() {
             })),
             recurringTasks: recurringTasks.map((t) => ({
               id: t.id,
-              clientId: t.clientId,
-              clientName: t.clientName,
+              clientName: t.clientName || 'כללי (נחמיה)',
               title: t.title,
+              description: t.description,
               status: t.status,
               priority: t.priority,
               recurrence: t.recurrence,
               recurrenceDay: t.recurrenceDay,
               dueAt: t.dueAt,
             })),
+            summary: `נמצאו ${filtered.length} משימות בסך הכל (${regularTasks.length} שוטפות, ${recurringTasks.length} מחזוריות קבועות).`,
           }
         } catch (err: any) {
           return { error: `שגיאה בשליפת משימות: ${err.message}` }
