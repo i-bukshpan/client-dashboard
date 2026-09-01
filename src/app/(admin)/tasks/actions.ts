@@ -4,8 +4,10 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { Task } from '@/types/database'
 import { revalidatePath } from 'next/cache'
+import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 export async function updateTask(id: string, data: Partial<Task>) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'משתמש לא מחובר' }
@@ -26,6 +28,7 @@ export async function updateTask(id: string, data: Partial<Task>) {
 }
 
 export async function deleteTask(id: string) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'משתמש לא מחובר' }
@@ -46,6 +49,7 @@ export async function deleteTask(id: string) {
 }
 
 export async function addTaskComment(taskId: string, content: string) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -70,6 +74,7 @@ export async function addTaskComment(taskId: string, content: string) {
 }
 
 export async function archiveTask(taskId: string, archived: boolean = true) {
+  await requireWorkspaceAdmin()
   try {
     const supabase = await createServerClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -91,6 +96,7 @@ export async function archiveTask(taskId: string, archived: boolean = true) {
 }
 
 export async function getTaskComments(taskId: string) {
+  await requireWorkspaceAdmin()
   const { data, error } = await supabaseAdmin
     .from('task_updates')
     .select('*, profiles:user_id(full_name, avatar_url)')

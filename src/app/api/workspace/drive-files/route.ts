@@ -11,6 +11,7 @@ import {
   getWorkspaceClient,
   getWorkspaceErrorStatus,
   WorkspaceAccessError,
+  requireWorkspaceAdmin,
 } from '@/lib/v2/workspace-dal'
 import { assertDriveFolderDescendsFrom } from '@/lib/v2/google-drive-security'
 
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await requireWorkspaceAdmin()
     const client = await getWorkspaceClient(clientId)
     if (!client.drive_folder_id) {
       throw new WorkspaceAccessError('NOT_FOUND', 'לא הוגדרה תיקיית Drive ללקוח')

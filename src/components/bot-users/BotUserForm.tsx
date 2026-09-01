@@ -61,7 +61,7 @@ export function BotUserForm({ initialData, onSubmit, onCancel, isLoading }: BotU
 
       <div className="space-y-2">
         <Label htmlFor="userType">סוג הרשאה (תפקיד)</Label>
-        <Select value={userType} onValueChange={setUserType}>
+        <Select value={userType} onValueChange={(value) => value && setUserType(value)}>
           <SelectTrigger dir="rtl">
             <SelectValue placeholder="בחר תפקיד" />
           </SelectTrigger>

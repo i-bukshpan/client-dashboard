@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 // This client uses the SERVICE ROLE KEY to bypass RLS and manage auth users
 const supabaseAdmin = createClient(
@@ -15,6 +16,7 @@ export async function createEmployee(formData: {
   email: string
   salary: number
 }) {
+  await requireWorkspaceAdmin()
   // 1. Invite the user via Email
   const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
     formData.email,
@@ -56,6 +58,7 @@ export async function createEmployee(formData: {
 }
 
 export async function inviteExistingEmployee(email: string, name: string) {
+  await requireWorkspaceAdmin()
   const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
     email,
     { data: { full_name: name, role: 'employee' } }
@@ -74,6 +77,7 @@ export async function updateEmployee(id: string, data: {
   email: string
   salary: number
 }) {
+  await requireWorkspaceAdmin()
   const { error } = await supabaseAdmin
     .from('profiles')
     .update({ 
@@ -93,6 +97,7 @@ export async function updateEmployee(id: string, data: {
 }
 
 export async function updateEmployeePassword(id: string, password: string) {
+  await requireWorkspaceAdmin()
   const { error } = await supabaseAdmin.auth.admin.updateUserById(id, { password })
 
   if (error) {
@@ -109,6 +114,7 @@ export async function recordEmployeePayment(data: {
   amount: number
   date: string
 }) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -138,6 +144,7 @@ export async function addEmployeeBonus(data: {
   reason: string
   date: string
 }) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -161,6 +168,7 @@ export async function addEmployeeBonus(data: {
 }
 
 export async function deleteEmployee(id: string) {
+  await requireWorkspaceAdmin()
   // Clean up FK-constrained tables before deleting the auth user
   await supabaseAdmin.from('conversations').delete().or(`employee_id.eq.${id},admin_id.eq.${id}`)
 
@@ -185,6 +193,7 @@ export async function updateEmployeeBonus(id: string, data: {
   reason: string
   date: string
 }) {
+  await requireWorkspaceAdmin()
   const { error } = await supabaseAdmin
     .from('employee_bonuses')
     .update({
@@ -204,6 +213,7 @@ export async function updateEmployeeBonus(id: string, data: {
 }
 
 export async function deleteEmployeeBonus(id: string) {
+  await requireWorkspaceAdmin()
   const { error } = await supabaseAdmin
     .from('employee_bonuses')
     .delete()

@@ -16,7 +16,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import parser from 'cron-parser'
+import { CronExpressionParser } from 'cron-parser'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -118,7 +118,7 @@ async function fetchPendingReminders() {
         nextAtISO = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       } else {
         try {
-          const interval = parser.parseExpression(r.recur_cron, { currentDate: new Date(), tz: 'Asia/Jerusalem' })
+          const interval = CronExpressionParser.parse(r.recur_cron, { currentDate: new Date(), tz: 'Asia/Jerusalem' })
           nextAtISO = interval.next().toISOString()
         } catch (err) {
           console.error('[reminder-cron] Failed to parse cron:', r.recur_cron)

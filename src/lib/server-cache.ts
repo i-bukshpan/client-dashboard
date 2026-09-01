@@ -18,6 +18,22 @@ interface CacheEntry<T> {
   lastAccessed: number
 }
 
+interface CachedSheetMeta {
+  title: string
+  sheetId: number
+  index: number
+  rowCount: number
+  columnCount: number
+}
+
+interface CachedGmailLabel {
+  id: string
+  name: string
+  type: 'system' | 'user'
+  messagesTotal?: number
+  messagesUnread?: number
+}
+
 export class ServerCache<T = unknown> {
   private readonly store = new Map<string, CacheEntry<T>>()
   private readonly defaultTtlMs: number
@@ -135,10 +151,10 @@ export class ServerCache<T = unknown> {
 // ── Shared singleton instances ────────────────────────────────────────────────
 
 /** Cache for Google Sheets metadata (tab list, column counts). TTL: 60s. */
-export const sheetsMetaCache = new ServerCache<any>({ defaultTtlMs: 60_000 })
+export const sheetsMetaCache = new ServerCache<CachedSheetMeta[]>({ defaultTtlMs: 60_000 })
 
 /** Cache for Google Sheets row data. TTL: 30s. */
-export const sheetsDataCache = new ServerCache<any>({ defaultTtlMs: 30_000 })
+export const sheetsDataCache = new ServerCache<string[][]>({ defaultTtlMs: 30_000 })
 
 /** Cache for Gmail labels and metadata. TTL: 5 minutes. */
-export const gmailCache = new ServerCache<any>({ defaultTtlMs: 300_000 })
+export const gmailCache = new ServerCache<CachedGmailLabel[]>({ defaultTtlMs: 300_000 })

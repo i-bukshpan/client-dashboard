@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,6 +29,7 @@ const updateClientSchema = z.object({
 })
 
 export async function updateClient(id: string, raw: unknown) {
+  await requireWorkspaceAdmin()
   const parsed = updateClientSchema.safeParse(raw)
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
@@ -69,6 +71,7 @@ export async function updateClient(id: string, raw: unknown) {
 }
 
 export async function deleteClient(id: string) {
+  await requireWorkspaceAdmin()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'משתמש לא מחובר' }
@@ -107,6 +110,7 @@ export async function deleteClient(id: string) {
 }
 
 export async function inviteClientToPortal(clientId: string, email: string, name: string) {
+  await requireWorkspaceAdmin()
   if (!email) return { error: 'ללקוח אין כתובת אימייל רשומה' }
 
   const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(

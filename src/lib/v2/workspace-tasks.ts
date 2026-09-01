@@ -2,12 +2,13 @@ import 'server-only'
 
 import { randomUUID } from 'crypto'
 import { addMinutes } from 'date-fns'
-import { appendRows, createSpreadsheet, formatRange, getSheetRows, updateRange, type SheetTemplate } from '@/lib/google-sheets'
+import { appendRows, createSpreadsheet, formatRange, getSheetData, getSheetRows, updateRange, type SheetTemplate } from '@/lib/google-sheets'
 import { createWorkspaceFolder, moveWorkspaceFile } from '@/lib/google-drive'
 import { createWorkspaceCalendarEvent } from '@/lib/v2/google-calendar'
 import { getClientWorkspaceSettings } from '@/lib/v2/client-settings'
 import { getWorkspaceAdminDb, getWorkspaceClient, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 import type { OperationsWorkspaceSettings, WorkspaceTask, WorkspaceTaskInput, WorkspaceTaskPriority, WorkspaceTaskRecurrence, WorkspaceTaskReminderState, WorkspaceTaskStatus } from '@/types/workspace-task'
+import { enqueueWorkspaceJob } from '@/lib/v2/job-outbox'
 
 const TASKS_TAB = 'משימות'
 const TASK_HEADERS = [
@@ -90,15 +91,17 @@ export function computeNextRecurringDueDate(
       target = new Date(now.getTime() + diff * 24 * 60 * 60 * 1000)
     }
   } else if (recurrence === 'monthly') {
-    target.setMonth(target.getMonth() + 1)
-    if (recurrenceDay !== undefined && recurrenceDay !== null && recurrenceDay >= 1 && recurrenceDay <= 31) {
-      target.setDate(recurrenceDay)
+    const requestedDay = recurrenceDay ?? target.getDate()
+    const nextMonthlyDate = (from: Date): Date => {
+      const year = from.getFullYear()
+      const month = from.getMonth() + 1
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const result = new Date(from.getTime())
+      result.setFullYear(year, month, Math.min(Math.max(requestedDay, 1), lastDay))
+      return result
     }
-    if (target.getTime() < now.getTime()) {
-      target = new Date(now.getTime())
-      target.setMonth(now.getMonth() + 1)
-      if (recurrenceDay) target.setDate(recurrenceDay)
-    }
+    target = nextMonthlyDate(target)
+    if (target.getTime() < now.getTime()) target = nextMonthlyDate(now)
   } else if (recurrence === 'yearly') {
     target.setFullYear(target.getFullYear() + 1)
   }
@@ -173,20 +176,17 @@ function taskToValues(task: Omit<WorkspaceTask, 'reminderState'>): string[] {
 
 export async function ensureTaskSpreadsheetHeaders(workbookId: string): Promise<void> {
   try {
-    const raw = await getSheetRows(workbookId, TASKS_TAB)
-    // getSheetRows reads first row as headers. If columns are missing or not matching TASK_HEADERS:
-    await updateRange(workbookId, formatRange(TASKS_TAB, 'A1:Q1'), [TASK_HEADERS])
+    const [headers = []] = await getSheetData(workbookId, formatRange(TASKS_TAB, 'A1:Q1'))
+    if (TASK_HEADERS.some((header, index) => headers[index] !== header)) {
+      await updateRange(workbookId, formatRange(TASKS_TAB, 'A1:Q1'), [TASK_HEADERS])
+    }
   } catch (err) {
     console.warn('[workspace-tasks] ensureTaskSpreadsheetHeaders notice:', err)
   }
 }
 
 export async function getOperationsWorkspaceSettings(): Promise<OperationsWorkspaceSettings | null> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch (authErr) {
-    // In background AI streaming or server callbacks, continue with admin DB
-  }
+  await requireWorkspaceAdmin()
   const { data, error } = await getWorkspaceAdminDb().from('v2_operations_workspace').select('workbook_id, drive_folder_id, updated_at').eq('singleton_key', true).maybeSingle()
   if (error) throw new Error(`[workspace-tasks] Settings query failed: ${error.message}`)
   return data ? { workbookId: data.workbook_id as string, driveFolderId: data.drive_folder_id as string, updatedAt: data.updated_at as string } : null
@@ -212,11 +212,7 @@ export async function setupOperationsWorkspace(): Promise<OperationsWorkspaceSet
 }
 
 export async function listWorkspaceTasks(clientId?: string): Promise<WorkspaceTask[]> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch (authErr) {
-    // In background AI streaming, continue
-  }
+  await requireWorkspaceAdmin()
   if (clientId) await getWorkspaceClient(clientId)
   const settings = await getOperationsWorkspaceSettings()
   if (!settings) return []
@@ -238,11 +234,7 @@ async function findTask(taskId: string): Promise<{ settings: OperationsWorkspace
 }
 
 export async function createWorkspaceTask(input: WorkspaceTaskInput): Promise<WorkspaceTask> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch (authErr) {
-    // In background AI streaming, continue
-  }
+  await requireWorkspaceAdmin()
   const settings = await getOperationsWorkspaceSettings()
   if (!settings) throw new Error('סביבת Nehemiah Operations טרם הוקמה')
   const client = input.clientId ? await getWorkspaceClient(input.clientId) : null
@@ -305,7 +297,17 @@ export async function updateWorkspaceTask(taskId: string, input: Partial<Workspa
         parentRecurringId: updated.parentRecurringId || updated.id,
       })
     } catch (recurErr) {
-      console.warn('[workspace-tasks] Warning spawning next recurring task:', recurErr)
+      const outboxId = await enqueueWorkspaceJob('spawn_recurring_workspace_task', {
+        sourceTaskId: updated.id,
+        title: updated.title,
+        description: updated.description,
+        clientId: updated.clientId,
+        priority: updated.priority,
+        recurrence: updated.recurrence,
+        recurrenceDay: updated.recurrenceDay,
+        reminderMinutes: updated.reminderMinutes,
+      })
+      console.error('[workspace-tasks] Recurring task spawn deferred to durable outbox', { outboxId, recurErr })
     }
   }
 
@@ -324,9 +326,7 @@ export async function convertWorkspaceTaskToCalendar(taskId: string): Promise<Wo
 }
 
 export async function deleteWorkspaceTask(taskId: string): Promise<{ success: boolean; id: string }> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch {}
+  await requireWorkspaceAdmin()
   const found = await findTask(taskId)
   const { clearRange } = await import('@/lib/google-sheets')
   await clearRange(found.settings.workbookId, formatRange(TASKS_TAB, `A${found.rowNumber}:Q${found.rowNumber}`))

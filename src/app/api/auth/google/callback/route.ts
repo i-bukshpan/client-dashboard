@@ -1,6 +1,7 @@
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
-import { getWorkspaceErrorStatus, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
+import { getWorkspaceAdminDb, getWorkspaceErrorStatus, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
+import { encryptSecret } from '@/lib/v2/token-crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ function htmlPage(title: string, body: string, status = 200): NextResponse {
 export async function GET(request: NextRequest) {
   let response: NextResponse
   try {
-    await requireWorkspaceAdmin()
+    const session = await requireWorkspaceAdmin()
     const code = request.nextUrl.searchParams.get('code')
     const state = request.nextUrl.searchParams.get('state')
     const oauthError = request.nextUrl.searchParams.get('error')
@@ -39,11 +40,17 @@ export async function GET(request: NextRequest) {
     const oauth = new google.auth.OAuth2(clientId, clientSecret, redirectUri(request))
     const { tokens } = await oauth.getToken(code)
 
-    if (!tokens.refresh_token) {
+    if (!tokens.refresh_token || !tokens.access_token) {
       response = htmlPage('לא התקבל Refresh Token', '<p>Google לא החזיר refresh token. נסה להתחיל שוב מהקישור, ודא שבחרת בחשבון הנכון ואישרת מחדש את כל ההרשאות. במידת הצורך בטל קודם את גישת האפליקציה בחשבון Google.</p>', 422)
     } else {
-      const token = escapeHtml(tokens.refresh_token)
-      response = htmlPage('Google OAuth הושלם', `<p>העתק את הערך הבא אל <code>GOOGLE_OAUTH_REFRESH_TOKEN</code> בקובץ <code>.env.local</code>, הפעל מחדש את שרת Next.js, ואז מחק את נתיבי השירות הזמניים.</p><div class="token">${token}</div><p class="warning">זהו סוד ארוך-טווח. אל תשלח אותו בצ׳אט, אל תשמור אותו ב-Git ואל תשאיר את המסך פתוח.</p>`)
+      const { error } = await getWorkspaceAdminDb().from('google_tokens').upsert({
+        user_id: session.user.id,
+        access_token: encryptSecret(tokens.access_token),
+        refresh_token: encryptSecret(tokens.refresh_token),
+        expires_at: tokens.expiry_date ?? null,
+      }, { onConflict: 'user_id' })
+      if (error) throw new Error(`[google-oauth] Failed to store credentials: ${error.message}`)
+      response = htmlPage('Google OAuth הושלם', '<p>החיבור ל-Google נשמר בצורה מוצפנת. ניתן לסגור חלון זה ולחזור לסביבת העבודה.</p>')
     }
   } catch (error: unknown) {
     response = htmlPage('Google OAuth נכשל', `<p>${escapeHtml(error instanceof Error ? error.message : 'Authorization failed')}</p>`, getWorkspaceErrorStatus(error))

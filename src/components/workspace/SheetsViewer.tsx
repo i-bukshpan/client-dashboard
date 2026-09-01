@@ -12,7 +12,7 @@
  * - Handles Hebrew tab names, empty sheets, and dynamically linked sheets
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -60,6 +60,7 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
   const [loadingTabs, setLoadingTabs] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
+  const [gridScrollTop, setGridScrollTop] = useState(0)
 
   // In-table new row inputs
   const [newRowValues, setNewRowValues] = useState<Record<number, string>>({})
@@ -194,6 +195,14 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
   const sheetsUrl = spreadsheetId
     ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
     : null
+  const rowHeight = 33
+  const overscan = 12
+  const firstVisibleRow = Math.max(0, Math.floor(gridScrollTop / rowHeight) - overscan)
+  const visibleRowCount = 50 + overscan * 2
+  const virtualRows = useMemo(
+    () => rows.slice(firstVisibleRow, firstVisibleRow + visibleRowCount),
+    [rows, firstVisibleRow, visibleRowCount]
+  )
 
   // ── No sheet linked state ────────────────────────────────────────────────────
   if (!spreadsheetId) {
@@ -288,7 +297,10 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
       </CardHeader>
 
       {/* Spreadsheet Table Grid */}
-      <CardContent className="p-0 flex-1 overflow-auto bg-slate-50/30 dark:bg-slate-950/20">
+      <CardContent
+        className="p-0 flex-1 overflow-auto bg-slate-50/30 dark:bg-slate-950/20"
+        onScroll={(event) => setGridScrollTop(event.currentTarget.scrollTop)}
+      >
         {/* Error */}
         {error && (
           <div className="flex items-start gap-3 m-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
@@ -360,7 +372,12 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
 
               <tbody>
                 {/* Existing Data Rows with Row Numbers */}
-                {rows.map((row, rowIdx) => (
+                {firstVisibleRow > 0 && (
+                  <tr aria-hidden="true"><td colSpan={headers.length + 1} style={{ height: firstVisibleRow * rowHeight }} /></tr>
+                )}
+                {virtualRows.map((row, visibleIndex) => {
+                  const rowIdx = firstVisibleRow + visibleIndex
+                  return (
                   <tr
                     key={`row-${rowIdx}`}
                     className={`
@@ -383,7 +400,11 @@ export function SheetsViewer({ clientId, spreadsheetId, tabs: initialTabs }: She
                       </td>
                     ))}
                   </tr>
-                ))}
+                  )
+                })}
+                {firstVisibleRow + virtualRows.length < rows.length && (
+                  <tr aria-hidden="true"><td colSpan={headers.length + 1} style={{ height: (rows.length - firstVisibleRow - virtualRows.length) * rowHeight }} /></tr>
+                )}
 
                 {/* DIRECT IN-TABLE NEW ROW INPUT (מילוי שורה ישירות בתוך הטבלה כמו ב-Google Sheets!) */}
                 <tr className="bg-emerald-50/60 dark:bg-emerald-950/30 border-t-2 border-emerald-500/80">

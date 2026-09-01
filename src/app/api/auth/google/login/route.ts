@@ -28,7 +28,12 @@ export async function GET(request: NextRequest) {
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: true,
-      scope: [V2_GOOGLE_SCOPES.DRIVE, V2_GOOGLE_SCOPES.SHEETS, V2_GOOGLE_SCOPES.CALENDAR],
+      scope: [
+        V2_GOOGLE_SCOPES.DRIVE,
+        V2_GOOGLE_SCOPES.SHEETS,
+        V2_GOOGLE_SCOPES.CALENDAR,
+        'https://www.googleapis.com/auth/gmail.modify',
+      ],
       state,
     })
 

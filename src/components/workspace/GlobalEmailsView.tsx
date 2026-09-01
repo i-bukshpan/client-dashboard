@@ -70,6 +70,8 @@ export function GlobalEmailsView({ clients = [] }: Props) {
   const [selectedFolder, setSelectedFolder] = useState<MailFolder>('INBOX')
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null)
   const [threads, setThreads] = useState<ClientEmailThreadHeader[]>([])
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>()
+  const [loadingMore, setLoadingMore] = useState(false)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [activeThread, setActiveThread] = useState<ClientEmailThreadFull | null>(null)
   const [loadingList, setLoadingList] = useState(true)
@@ -115,8 +117,9 @@ export function GlobalEmailsView({ clients = [] }: Props) {
 
   // ── Fetch Email List ──────────────────────────────────────────────────────────
 
-  const loadEmails = useCallback(async () => {
-    setLoadingList(true)
+  const loadEmails = useCallback(async (pageToken?: string) => {
+    if (pageToken) setLoadingMore(true)
+    else setLoadingList(true)
     setAuthError(null)
 
     const folderParam = selectedLabel ? undefined : selectedFolder === 'UNREAD' ? 'INBOX' : selectedFolder
@@ -127,9 +130,11 @@ export function GlobalEmailsView({ clients = [] }: Props) {
       labelName: selectedLabel || undefined,
       unreadOnly: isUnreadFilter,
       query: searchQuery.trim() || undefined,
+      pageToken,
     })
 
     setLoadingList(false)
+    setLoadingMore(false)
 
     if (res.isAuthError) {
       setAuthError(res.error || 'נדרש חיבור מחדש לחשבון Gmail')
@@ -142,7 +147,8 @@ export function GlobalEmailsView({ clients = [] }: Props) {
     }
 
     if (res.data) {
-      setThreads(res.data.threads)
+      setThreads((current) => pageToken ? [...current, ...res.data!.threads] : res.data!.threads)
+      setNextPageToken(res.data.nextPageToken)
       setUnreadCount(res.data.unreadCount)
 
       // Do NOT auto-select first thread so it is not marked as read automatically
@@ -339,7 +345,7 @@ export function GlobalEmailsView({ clients = [] }: Props) {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadEmails}
+            onClick={() => void loadEmails()}
             disabled={loadingList}
             className="h-8 gap-1.5 text-xs font-semibold"
           >
@@ -631,6 +637,19 @@ export function GlobalEmailsView({ clients = [] }: Props) {
                   </div>
                 )
               })
+            )}
+            {!loadingList && nextPageToken && (
+              <div className="p-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={loadingMore}
+                  onClick={() => void loadEmails(nextPageToken)}
+                >
+                  {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : 'טען שיחות נוספות'}
+                </Button>
+              </div>
             )}
           </div>
         </div>

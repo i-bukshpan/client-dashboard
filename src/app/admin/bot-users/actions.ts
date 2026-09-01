@@ -2,8 +2,10 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 export async function addBotContact(data: { name: string, phone: string, user_type: string, is_active: boolean }) {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
 
   // Format phone to start with 972 and remove leading 0 if needed
@@ -29,6 +31,7 @@ export async function addBotContact(data: { name: string, phone: string, user_ty
 }
 
 export async function updateBotContact(id: string, data: { name: string, phone: string, user_type: string, is_active: boolean }) {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
 
   let formattedPhone = data.phone.replace(/[\s\-()]/g, '')
@@ -53,6 +56,7 @@ export async function updateBotContact(id: string, data: { name: string, phone: 
 }
 
 export async function deleteBotContact(id: string) {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
   const { error } = await supabase.from('bot_contacts').delete().eq('id', id)
 

@@ -142,11 +142,7 @@ export function parseWorkspaceClientId(value: string): string {
 }
 
 export async function getWorkspaceClient(clientId: string): Promise<WorkspaceClientRecord> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch (authErr) {
-    // In background AI streaming or server callbacks, continue with admin DB
-  }
+  await requireWorkspaceAdmin()
   const id = parseWorkspaceClientId(clientId)
   const db = getWorkspaceAdminDb()
   let { data, error } = await db
@@ -171,11 +167,7 @@ export async function getWorkspaceClient(clientId: string): Promise<WorkspaceCli
 }
 
 export async function listWorkspaceClients(): Promise<WorkspaceClientRecord[]> {
-  try {
-    await requireWorkspaceAdmin()
-  } catch (authErr) {
-    // In background AI streaming or server callbacks, continue with admin DB
-  }
+  await requireWorkspaceAdmin()
   const db = getWorkspaceAdminDb()
   let { data, error } = await db
     .from('clients')

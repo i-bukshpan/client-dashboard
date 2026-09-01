@@ -1,5 +1,16 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Required security configuration
+
+Nehemiah OS v2 encrypts persisted Google OAuth tokens with AES-256-GCM. Before connecting Google in any environment, configure:
+
+```env
+GOOGLE_TOKEN_ENCRYPTION_KEY=<base64-encoded 32-byte key>
+GOOGLE_V2_OAUTH_REDIRECT_URI=https://your-host/api/auth/google/callback
+```
+
+Generate the encryption key with `openssl rand -base64 32`, keep it in the deployment secret manager, and do not rotate it until stored OAuth credentials have been re-encrypted. Apply all Supabase migrations, including `045_v2_agent_confirmations_and_outbox.sql`, before enabling agent write tools.
+
 ## Getting Started
 
 First, run the development server:

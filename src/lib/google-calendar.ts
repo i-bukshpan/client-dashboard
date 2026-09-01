@@ -2,11 +2,12 @@ import { google } from 'googleapis'
 import { createClient } from '@/lib/supabase/server'
 import { getOAuth2Client } from '@/lib/google-auth'
 import { getWorkspaceAdminDb } from '@/lib/v2/workspace-dal'
+import { decryptSecret, encryptSecret } from '@/lib/v2/token-crypto'
 
 export async function getGoogleAuthClient(userId?: string) {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/google/callback`
+  const redirectUri = process.env.GOOGLE_V2_OAUTH_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google/callback`
 
   if (!clientId || !clientSecret) return null
 
@@ -17,19 +18,21 @@ export async function getGoogleAuthClient(userId?: string) {
     const adminDb = getWorkspaceAdminDb()
     let tokenData: any = null
 
-    if (userId) {
-      const res = await adminDb.from('google_tokens').select('*').eq('user_id', userId).maybeSingle()
-      tokenData = res.data
+    let resolvedUserId = userId
+    if (!resolvedUserId) {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      resolvedUserId = user?.id
     }
-    if (!tokenData) {
-      const res = await adminDb.from('google_tokens').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (resolvedUserId) {
+      const res = await adminDb.from('google_tokens').select('*').eq('user_id', resolvedUserId).maybeSingle()
       tokenData = res.data
     }
 
     if (tokenData && (tokenData.access_token || tokenData.refresh_token)) {
       oauth2Client.setCredentials({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
+        access_token: decryptSecret(tokenData.access_token),
+        refresh_token: decryptSecret(tokenData.refresh_token),
         expiry_date: tokenData.expires_at,
       })
 
@@ -38,9 +41,9 @@ export async function getGoogleAuthClient(userId?: string) {
         try {
           const { credentials } = await oauth2Client.refreshAccessToken()
           await adminDb.from('google_tokens').update({
-            access_token: credentials.access_token!,
+            access_token: encryptSecret(credentials.access_token!),
             expires_at: credentials.expiry_date!,
-            refresh_token: credentials.refresh_token || tokenData.refresh_token,
+            refresh_token: encryptSecret(credentials.refresh_token || decryptSecret(tokenData.refresh_token)!),
           }).eq('user_id', tokenData.user_id)
         } catch (error) {
           console.error('Error refreshing Google token:', error)

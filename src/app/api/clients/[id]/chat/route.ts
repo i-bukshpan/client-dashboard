@@ -12,7 +12,7 @@
 import { NextRequest } from 'next/server'
 import { streamText, stepCountIs, convertToModelMessages, tool, type ToolSet } from 'ai'
 import { google } from '@ai-sdk/google'
-import { getWorkspaceClient, getWorkspaceErrorStatus } from '@/lib/v2/workspace-dal'
+import { getWorkspaceClient, getWorkspaceErrorStatus, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 import { getLatestNeedsInputBrief, resolveMonthlyBriefFromChat } from '@/lib/v2/monthly-brief'
 import { clientContextSchema } from '@/lib/v2/client-context-schema'
 import { saveClientContext } from '@/lib/v2/client-context'
@@ -261,6 +261,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    await requireWorkspaceAdmin()
+  } catch (error: unknown) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Unauthorized' },
+      { status: getWorkspaceErrorStatus(error) }
+    )
+  }
+
   const { id: clientId } = await params
   let client
   try {

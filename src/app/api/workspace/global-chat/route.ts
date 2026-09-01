@@ -6,7 +6,8 @@
  */
 
 import { google } from '@ai-sdk/google'
-import { streamText, convertToModelMessages, stepCountIs } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from 'ai'
+import { z } from 'zod'
 import { NextRequest } from 'next/server'
 import { requireWorkspaceAdmin, getWorkspaceErrorStatus } from '@/lib/v2/workspace-dal'
 import { createGlobalAgentTools } from '@/ai/tools/global-agent-tools'
@@ -24,13 +25,26 @@ const GLOBAL_AGENT_SYSTEM_PROMPT = `אתה Nehemiah OS Global AI — עוזר מ
 4. **פעולות מזכיר (שליחת מיילים, הוספת לקוח, יצירת גיליון, קביעת פגישה):** בצע אוטונומית את הפעולה המתבקשת עם הכלי הייעודי (\`send_email\`, \`create_new_client\`, \`create_or_update_workspace_task\`, \`create_client_spreadsheet\`, \`create_calendar_event\`) וסכם את תוצאת הפעולה בבירור.
 5. **השלם תמיד את התשובה (Always Provide Final Answer):** לאחר שאתה מפעיל כלי כלשהו — המשך תמיד וספק לנחמיה תשובה מילולית ברורה, מפורטת ומסכמת בעברית רהוטה. לעולם אל תעצור ללא מענה טקסטואלי!
 6. **עיצוב והבלטת מידע:** השתמש ב-Markdown עשיר, טבלאות, כדורים (bullets), והדגשת מספרים, תאריכים וסכומים בש״ח (₪).
+7. **אישור פעולות בעלות השפעה:** כלי כתיבה רגישים מחזירים pending=true ו-confirmationId לפני ביצוע. במצב זה הצג למשתמש את confirmationMessage ובקש אישור מפורש. רק לאחר שהמשתמש אישר, קרא שוב לאותו כלי עם אותם פרטים בדיוק ועם confirmationId שהתקבל. אין לשנות אף פרט בין שלב הטיוטה לשלב הביצוע.
 `
+
+const globalChatRequestSchema = z.object({
+  messages: z.array(z.custom<UIMessage>((value) => {
+    if (!value || typeof value !== 'object') return false
+    const role = (value as { role?: unknown }).role
+    return role === 'user' || role === 'assistant' || role === 'system'
+  })).min(1).max(100),
+})
 
 export async function POST(req: NextRequest) {
   try {
     await requireWorkspaceAdmin()
 
-    const { messages } = await req.json()
+    const parsed = globalChatRequestSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return Response.json({ error: 'Invalid chat payload' }, { status: 400 })
+    }
+    const { messages } = parsed.data
     const modelMessages = await convertToModelMessages(messages)
     const tools = createGlobalAgentTools()
 

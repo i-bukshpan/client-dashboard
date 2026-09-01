@@ -3,8 +3,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { syncGoogleEvents, pushAppointmentToGoogle } from '@/lib/google-calendar'
+import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
 export async function createAppointment(formData: FormData) {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
 
   const title = formData.get('title') as string
@@ -48,6 +50,7 @@ export async function createAppointment(formData: FormData) {
 }
 
 export async function syncCalendar() {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
@@ -64,6 +67,7 @@ export async function syncCalendar() {
 }
 
 export async function deleteAppointment(id: string) {
+  await requireWorkspaceAdmin()
   const supabase = await createClient()
   const { error } = await supabase.from('appointments').delete().eq('id', id)
   

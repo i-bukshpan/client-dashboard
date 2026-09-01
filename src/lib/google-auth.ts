@@ -10,6 +10,7 @@
  */
 
 import { google } from 'googleapis'
+import { decryptSecret } from '@/lib/v2/token-crypto'
 
 export const SCOPES = {
   DRIVE: 'https://www.googleapis.com/auth/drive',
@@ -40,7 +41,7 @@ export function getOAuth2Client() {
   )
 
   oauth2Client.setCredentials({
-    refresh_token: refreshToken,
+    refresh_token: decryptSecret(refreshToken),
   })
 
   return oauth2Client

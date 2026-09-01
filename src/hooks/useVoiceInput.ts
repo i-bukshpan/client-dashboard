@@ -17,6 +17,30 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+interface BrowserSpeechRecognitionResultEvent extends Event {
+  results: SpeechRecognitionResultList
+}
+
+interface BrowserSpeechRecognitionErrorEvent extends Event {
+  error: string
+}
+
+interface BrowserSpeechRecognition {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  maxAlternatives: number
+  onstart: (() => void) | null
+  onresult: ((event: BrowserSpeechRecognitionResultEvent) => void) | null
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition
+
 interface UseVoiceInputOptions {
   /** BCP-47 language tag. Default: 'he-IL' */
   lang?: string
@@ -42,16 +66,20 @@ interface UseVoiceInputReturn {
 }
 
 // Detect the SpeechRecognition API (vendor-prefixed in Chrome/Edge)
-function getSpeechRecognitionConstructor(): (new () => SpeechRecognition) | null {
+function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
   if (typeof window === 'undefined') return null
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  const speechWindow = window as typeof window & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor
+  }
+  const SR = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
   return SR ?? null
 }
 
 export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputReturn {
   const { lang = 'he-IL', continuous = false, onResult, onError } = options
   const [isListening, setIsListening] = useState(false)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
   const isSupported = typeof window !== 'undefined' && !!getSpeechRecognitionConstructor()
 
   // Stable callback refs to avoid re-creating the recognition instance
@@ -82,7 +110,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputRetur
       setIsListening(true)
     }
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: BrowserSpeechRecognitionResultEvent) => {
       const lastResult = event.results[event.results.length - 1]
       if (lastResult?.isFinal) {
         const transcript = lastResult[0]?.transcript?.trim()
@@ -92,7 +120,7 @@ export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputRetur
       }
     }
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
       setIsListening(false)
       const errorMessages: Record<string, string> = {
         'not-allowed': 'גישה למיקרופון נדחתה. יש לאפשר גישה בהגדרות הדפדפן.',

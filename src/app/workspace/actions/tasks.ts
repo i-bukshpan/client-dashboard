@@ -41,7 +41,7 @@ export async function deleteWorkspaceTaskAction(taskId: string) {
     const { deleteWorkspaceTask } = await import('@/lib/v2/workspace-tasks')
     const res = await deleteWorkspaceTask(id)
     refresh()
-    return { success: true as const, ...res }
+    return { ...res, success: true as const }
   } catch (error: unknown) {
     return failure(error, 'מחיקת המשימה נכשלה')
   }

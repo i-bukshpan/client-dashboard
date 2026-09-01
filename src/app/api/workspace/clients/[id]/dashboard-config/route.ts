@@ -13,6 +13,7 @@ import {
   getWorkspaceClient,
   getWorkspaceErrorStatus,
   parseWorkspaceClientId,
+  requireWorkspaceAdmin,
 } from '@/lib/v2/workspace-dal'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireWorkspaceAdmin()
     const { id } = await params
     const client = await getWorkspaceClient(id)
     return NextResponse.json({
@@ -41,6 +43,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await requireWorkspaceAdmin()
     const { id: rawId } = await params
     await getWorkspaceClient(rawId)
     const id = parseWorkspaceClientId(rawId)
