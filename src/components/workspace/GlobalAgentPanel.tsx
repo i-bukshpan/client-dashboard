@@ -7,13 +7,14 @@
  * - Slide-out sleek glassmorphism sidebar
  * - Hebrew voice input support (Speech-to-Text)
  * - Quick action prompt chips
- * - Realtime streaming tool execution rendering
+ * - Full AI SDK v6 compatibility with DefaultChatTransport
  */
 
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import {
   Bot,
   X,
@@ -23,18 +24,20 @@ import {
   Sparkles,
   RefreshCw,
   Layers,
-  ChevronRight,
-  TrendingUp,
   Mail,
   CheckCircle2,
   Calendar,
   DollarSign,
   Maximize2,
   Minimize2,
+  Loader2,
+  Table,
+  Cpu,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import { useVoiceInput } from '@/hooks/useVoiceInput'
 
 const QUICK_PROMPTS = [
@@ -48,32 +51,50 @@ const QUICK_PROMPTS = [
 export function GlobalAgentPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const {
-    messages,
-    input,
-    setInput,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setMessages,
-  } = useChat({
-    api: '/api/workspace/global-chat',
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: 'שלום נחמיה! אני העוזר המנהל הגלובלי שלך (J.A.R.V.I.S). אני מחובר לכל הלקוחות, הגליונות, המיילים, המשימות והיומן. איך אפשר לסייע עכשיו?',
-      },
-    ],
+  const transport = useMemo(() => {
+    return new DefaultChatTransport({
+      api: '/api/workspace/global-chat',
+    })
+  }, [])
+
+  const { messages, setMessages, sendMessage, status, error } = useChat({
+    transport,
+    onError: (err) => {
+      toast.error(`שגיאת AI גלובלי: ${err.message}`)
+    },
   })
 
+  const isLoading = status === 'streaming' || status === 'submitted'
+
+  // Initial welcome greeting if empty
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'שלום נחמיה! אני העוזר המנהל הגלובלי שלך (J.A.R.V.I.S). אני מחובר לכל הלקוחות, הגליונות, המיילים, המשימות והיומן. איך אפשר לסייע עכשיו?',
+            },
+          ],
+        } as any,
+      ])
+    }
+  }, [messages.length, setMessages])
+
   // Hebrew Voice Input integration
-  const { isListening, isSupported, toggleListening } = useVoiceInput({
+  const { isListening, isSupported: isVoiceSupported, toggleListening } = useVoiceInput({
     lang: 'he-IL',
     onResult: (transcript) => {
       setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
+    },
+    onError: (errMsg) => {
+      toast.error(errMsg)
     },
   })
 
@@ -97,14 +118,32 @@ export function GlobalAgentPanel() {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages, isOpen])
+  }, [messages, isLoading, isOpen])
+
+  const handleSend = async (textToSend?: string) => {
+    const text = (textToSend ?? input).trim()
+    if (!text || isLoading) return
+    setInput('')
+    try {
+      await sendMessage({ text })
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'שגיאה בשליחת בקשה')
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   return (
     <>
       {/* Floating Trigger Button in Bottom Left */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all duration-200 group border border-white/20 backdrop-blur-md"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 text-white shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all duration-200 group border border-white/20 backdrop-blur-md cursor-pointer"
         title="פתח עוזר גלובלי (Ctrl+K)"
       >
         <div className="relative">
@@ -154,7 +193,15 @@ export function GlobalAgentPanel() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => setMessages([{ id: 'reset', role: 'assistant', content: 'שיחה אופסה. כיצד אוכל לעזור כעת?' }])}
+              onClick={() => {
+                setMessages([
+                  {
+                    id: 'reset',
+                    role: 'assistant',
+                    parts: [{ type: 'text', text: 'שיחה אופסה. כיצד אוכל לעזור כעת?' }],
+                  } as any,
+                ])
+              }}
               title="איפוס שיחה"
             >
               <RefreshCw className="w-4 h-4" />
@@ -181,52 +228,84 @@ export function GlobalAgentPanel() {
 
         {/* Messages List Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 text-sm">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex flex-col ${
-                m.role === 'user' ? 'items-start' : 'items-end'
-              }`}
-            >
-              <div
-                className={`max-w-[90%] rounded-2xl px-4 py-3 shadow-xs ${
-                  m.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-xs'
-                    : 'bg-muted/80 border border-border/60 text-foreground rounded-bl-xs'
-                }`}
-              >
-                {/* Message text with whitespace support */}
-                <div className="whitespace-pre-wrap leading-relaxed">
-                  {m.content}
-                </div>
+          {messages.map((m) => {
+            const isUser = m.role === 'user'
 
-                {/* Tool calls status if any */}
-                {m.toolInvocations && m.toolInvocations.length > 0 && (
-                  <div className="mt-2.5 pt-2.5 border-t border-border/40 space-y-1.5">
-                    {m.toolInvocations.map((tool, idx) => (
-                      <div
-                        key={idx}
-                        className="text-[11px] flex items-center gap-1.5 text-muted-foreground bg-background/50 px-2.5 py-1.5 rounded-lg border border-border/40"
-                      >
-                        <Sparkles className="w-3 h-3 text-indigo-500 animate-spin" />
-                        <span>הפעלת כלי: <strong className="text-foreground">{tool.toolName}</strong></span>
-                        {tool.state === 'result' ? (
-                          <span className="text-emerald-500 mr-auto font-bold">✓ הושלם</span>
-                        ) : (
-                          <span className="text-amber-500 mr-auto font-bold">מעבד...</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+            // Extract text parts safely
+            const textParts: string[] = []
+            const toolParts: any[] = []
+
+            if (Array.isArray(m.parts)) {
+              for (const p of m.parts) {
+                if (p && p.type === 'text' && typeof p.text === 'string') {
+                  textParts.push(p.text)
+                } else if (p && (p.type === 'tool-invocation' || p.type?.startsWith('tool-'))) {
+                  toolParts.push(p)
+                }
+              }
+            } else if (typeof (m as any).content === 'string') {
+              textParts.push((m as any).content)
+            }
+
+            const rawText = textParts.join('\n')
+
+            return (
+              <div
+                key={m.id}
+                className={`flex flex-col ${isUser ? 'items-start' : 'items-end'}`}
+              >
+                <div
+                  className={`max-w-[90%] rounded-2xl px-4 py-3 shadow-xs ${
+                    isUser
+                      ? 'bg-indigo-600 text-white rounded-br-xs'
+                      : 'bg-muted/80 border border-border/60 text-foreground rounded-bl-xs'
+                  }`}
+                >
+                  {/* Message text */}
+                  {rawText && (
+                    <div className="whitespace-pre-wrap leading-relaxed">
+                      {rawText}
+                    </div>
+                  )}
+
+                  {/* Tool executions */}
+                  {toolParts.length > 0 && (
+                    <div className="mt-2.5 pt-2.5 border-t border-border/40 space-y-1.5">
+                      {toolParts.map((tool: any, idx: number) => {
+                        const toolName = tool.toolName || tool.name || 'פעולה'
+                        const isDone = tool.state === 'result' || tool.result !== undefined
+                        return (
+                          <div
+                            key={idx}
+                            className="text-[11px] flex items-center gap-1.5 text-muted-foreground bg-background/50 px-2.5 py-1.5 rounded-lg border border-border/40"
+                          >
+                            <Cpu className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>הפעלת כלי: <strong className="text-foreground">{toolName}</strong></span>
+                            {isDone ? (
+                              <span className="text-emerald-500 mr-auto font-bold">✓ הושלם</span>
+                            ) : (
+                              <span className="text-amber-500 mr-auto font-bold animate-pulse">מעבד...</span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {isLoading && (
             <div className="flex items-center gap-2 text-muted-foreground text-xs p-2">
-              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
               <span>הסוכן מעבד נתונים חוצי-מערכת...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 text-xs">
+              שגיאה: {error.message}
             </div>
           )}
 
@@ -242,8 +321,10 @@ export function GlobalAgentPanel() {
                 key={idx}
                 onClick={() => {
                   setInput(item.prompt)
+                  handleSend(item.prompt)
                 }}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 text-[11px] font-medium text-muted-foreground border border-border/40 whitespace-nowrap transition-colors"
+                disabled={isLoading}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 text-[11px] font-medium text-muted-foreground border border-border/40 whitespace-nowrap transition-colors cursor-pointer disabled:opacity-50"
               >
                 <Icon className="w-3 h-3" />
                 {item.label}
@@ -255,11 +336,14 @@ export function GlobalAgentPanel() {
         {/* Input area */}
         <div className="p-3 border-t border-border bg-card shrink-0">
           <form
-            onSubmit={handleSubmit}
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSend()
+            }}
             className="flex items-center gap-2 bg-muted/60 rounded-xl p-1.5 border border-border/80 focus-within:border-indigo-500 transition-colors"
           >
             {/* Hebrew Voice Input Button */}
-            {isSupported && (
+            {isVoiceSupported && (
               <Button
                 type="button"
                 variant="ghost"
@@ -278,7 +362,8 @@ export function GlobalAgentPanel() {
 
             <Input
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder={isListening ? 'מאזין לך בעברית...' : 'שאל שאלה או בקש פעולה חוצת-מערכת...'}
               className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent px-2"
               disabled={isLoading}
@@ -287,10 +372,14 @@ export function GlobalAgentPanel() {
             <Button
               type="submit"
               size="icon"
-              disabled={isLoading || !input.trim()}
-              className="h-9 w-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shrink-0"
+              disabled={isLoading || !input?.trim()}
+              className="h-9 w-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shrink-0 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </form>
         </div>
