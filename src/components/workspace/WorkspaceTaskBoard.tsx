@@ -113,6 +113,7 @@ export function WorkspaceTaskBoard({
       overdue: tasks.filter((task) => task.reminderState === 'overdue').length,
       today: tasks.filter((task) => task.reminderState === 'due_today').length,
       upcoming: tasks.filter((task) => task.reminderState === 'upcoming').length,
+      recurring: tasks.filter((task) => task.recurrence && task.recurrence !== 'none').length,
     }),
     [tasks]
   )
@@ -153,7 +154,7 @@ export function WorkspaceTaskBoard({
           )}
 
           {recurrenceText && (
-            <span className="flex items-center gap-1 rounded-full bg-indigo-500/15 text-indigo-400 px-2 py-0.5 font-bold text-[10px]">
+            <span className="flex items-center gap-1 rounded-full bg-indigo-500/15 text-indigo-400 px-2 py-0.5 font-bold text-[11px] border border-indigo-500/30">
               <Repeat className="size-3" />
               {recurrenceText}
             </span>
@@ -211,10 +212,16 @@ export function WorkspaceTaskBoard({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Badge className="bg-rose-500/15 text-rose-400">{counts.overdue} באיחור</Badge>
           <Badge className="bg-amber-500/15 text-amber-400">{counts.today} להיום</Badge>
           <Badge className="bg-blue-500/15 text-blue-400">{counts.upcoming} בקרוב</Badge>
+          {counts.recurring > 0 && (
+            <Badge className="bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1 font-bold">
+              <Repeat className="size-3" />
+              {counts.recurring} מחזוריות
+            </Badge>
+          )}
         </div>
         <div className="flex gap-2">
           {!compact && (
