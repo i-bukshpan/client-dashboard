@@ -6,7 +6,7 @@
  */
 
 import { google } from '@ai-sdk/google'
-import { streamText, convertToModelMessages } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs } from 'ai'
 import { NextRequest } from 'next/server'
 import { requireWorkspaceAdmin, getWorkspaceErrorStatus } from '@/lib/v2/workspace-dal'
 import { createGlobalAgentTools } from '@/ai/tools/global-agent-tools'
@@ -17,12 +17,11 @@ export const maxDuration = 60
 const GLOBAL_AGENT_SYSTEM_PROMPT = `אתה Nehemiah OS Global AI — עוזר מנהלים בכיר ואינטליגנטי (Executive AI / J.A.R.V.I.S) עבור נחמיה ומשרדו.
 יש לך ראייה כוללת וגישה חוצת-מערכות (Cross-System Omniscience) לכל הלקוחות, הגליונות, המשימות, היומן, המיילים וכספי הסוכנות.
 
-עקרונות פעולה:
-1. **מהיר, תמציתי ומדויק:** ענה בעברית רהוטה וברורה. הימנע ממריחות ומלל מיותר.
-2. **אוטונומיה מלאה לשליפות וקריאות:** השתמש בכלים באופן מיידי ואוטונומי כדי להביא תשובות מבוססות נתונים בזמן אמת.
-3. **עיצוב והבלטת מידע:** השתמש ב-Markdown עשיר, טבלאות, כדורים (bullets), והדגשת מספרים וסכומים בש״ח (₪).
-4. **יוזמה והמלצות לפעולה:** אם ראית משימה דחופה, מייל קריטי שלא נענה או חריגה תקציבית — ציין זאת לנחמיה עם המלצה אופרטיבית להמשך.
-5. **פרספקטיבה עסקית רחבה:** כשנשאלת שאלה על לקוח, ענה מתוך הקשרו המלא (דרייב, גליונות, משימות, מיילים).
+עקרונות פעולה קריטיים:
+1. **השלם תמיד את התשובה (Always Provide Final Answer):** לאחר שאתה מפעיל כלי כלשהו (שליפת לקוחות, חיפוש מיילים, יצירת משימה וכו') — המשך תמיד וספק לנחמיה תשובה מילולית ברורה, מפורטת ומסכמת בעברית רהוטה. לעולם אל תעצור לאחר קריאת כלי ללא מענה טקסטואלי!
+2. **אוטונומיה מלאה לשליפות ופעולות:** השתמש בכלים המתאימים מיד, שלוף את הנתונים, סכם אותם והצג את המסקנות.
+3. **עיצוב והבלטת מידע:** השתמש ב-Markdown עשיר, טבלאות, כדורים (bullets), והדגשת מספרים, תאריכים וסכומים בש״ח (₪).
+4. **יוזמה והמלצות:** אם ראית משימה דחופה, מייל קריטי שלא נענה או חריגה תקציבית — ציין זאת לנחמיה עם המלצה אופרטיבית להמשך.
 `
 
 export async function POST(req: NextRequest) {
@@ -38,7 +37,8 @@ export async function POST(req: NextRequest) {
       system: GLOBAL_AGENT_SYSTEM_PROMPT,
       messages: modelMessages,
       tools,
-      maxSteps: 8,
+      stopWhen: stepCountIs(10),
+      maxRetries: 2,
     })
 
     return result.toUIMessageStreamResponse()

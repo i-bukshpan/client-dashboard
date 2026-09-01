@@ -153,6 +153,40 @@ export function createGlobalAgentTools() {
     }),
 
     /**
+     * Search emails across Gmail with arbitrary query or client search
+     */
+    search_emails: tool({
+      description: 'חיפוש אימיילים ב-Gmail לפי מילות מפתח, שאילתה חופשית (query), שם לקוח או כתובת דוא"ל.',
+      parameters: z.object({
+        query: z.string().describe('מחרוזת חיפוש ב-Gmail, למשל: "נסמארט" או "חשבונית" או "from:..."'),
+        maxResults: z.number().optional().default(15),
+      }),
+      execute: async ({ query, maxResults }) => {
+        try {
+          const res = await listClientEmails({
+            query,
+            maxResults,
+          })
+
+          return {
+            totalFound: res.threads.length,
+            totalEstimate: res.totalEstimate,
+            threads: res.threads.map((t) => ({
+              id: t.id,
+              subject: t.subject,
+              from: t.from,
+              date: t.date,
+              snippet: t.snippet,
+              unread: t.unread,
+            })),
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בחיפוש אימיילים: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
      * Aggregated task board across all clients or specific client
      */
     get_workspace_tasks: tool({

@@ -48,6 +48,17 @@ const QUICK_PROMPTS = [
   { icon: Calendar, label: 'פגישות השבוע', prompt: 'מה הפגישות והאירועים המתוכננים ביומן לשבוע הקרוב?' },
 ]
 
+const TOOL_LABELS: Record<string, string> = {
+  list_all_clients: 'שליפת רשימת לקוחות',
+  lookup_client_sheet: 'קריאת גיליון Google Sheets',
+  check_unread_emails: 'סריקת אימיילים שלא נקראו',
+  search_emails: 'חיפוש אימיילים ב-Gmail',
+  get_workspace_tasks: 'שליפת משימות',
+  create_or_update_workspace_task: 'יצירה / עדכון משימה',
+  get_agency_finance_summary: 'סיכום כספי הסוכנות',
+  get_calendar_overview: 'סריקת יומן פגישות',
+}
+
 export function GlobalAgentPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -272,19 +283,20 @@ export function GlobalAgentPanel() {
                   {toolParts.length > 0 && (
                     <div className="mt-2.5 pt-2.5 border-t border-border/40 space-y-1.5">
                       {toolParts.map((tool: any, idx: number) => {
-                        const toolName = tool.toolName || tool.name || 'פעולה'
-                        const isDone = tool.state === 'result' || tool.result !== undefined
+                        const rawToolName = tool.toolName || tool.name || tool.toolInvocation?.toolName || 'פעולה'
+                        const toolName = TOOL_LABELS[rawToolName] || rawToolName
+                        const isDone = tool.state === 'result' || tool.result !== undefined || tool.output !== undefined || !isLoading
                         return (
                           <div
                             key={idx}
                             className="text-[11px] flex items-center gap-1.5 text-muted-foreground bg-background/50 px-2.5 py-1.5 rounded-lg border border-border/40"
                           >
-                            <Cpu className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>הפעלת כלי: <strong className="text-foreground">{toolName}</strong></span>
+                            <Cpu className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            <span>פעולה: <strong className="text-foreground">{toolName}</strong></span>
                             {isDone ? (
                               <span className="text-emerald-500 mr-auto font-bold">✓ הושלם</span>
                             ) : (
-                              <span className="text-amber-500 mr-auto font-bold animate-pulse">מעבד...</span>
+                              <span className="text-amber-500 mr-auto font-bold animate-pulse">מעבד נתונים...</span>
                             )}
                           </div>
                         )
