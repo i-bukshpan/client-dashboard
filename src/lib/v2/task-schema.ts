@@ -10,6 +10,9 @@ export const workspaceTaskInputSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   dueAt: optionalDateTime,
   reminderMinutes: z.number().int().min(0).max(40_320).optional(),
+  recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional().default('none'),
+  recurrenceDay: z.number().int().min(0).max(31).nullable().optional(),
+  parentRecurringId: z.string().nullable().optional(),
 })
 
 export const workspaceTaskUpdateSchema = workspaceTaskInputSchema.partial().extend({

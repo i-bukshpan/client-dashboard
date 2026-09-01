@@ -7,10 +7,16 @@ import { createWorkspaceFolder, moveWorkspaceFile } from '@/lib/google-drive'
 import { createWorkspaceCalendarEvent } from '@/lib/v2/google-calendar'
 import { getClientWorkspaceSettings } from '@/lib/v2/client-settings'
 import { getWorkspaceAdminDb, getWorkspaceClient, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
-import type { OperationsWorkspaceSettings, WorkspaceTask, WorkspaceTaskInput, WorkspaceTaskPriority, WorkspaceTaskReminderState, WorkspaceTaskStatus } from '@/types/workspace-task'
+import type { OperationsWorkspaceSettings, WorkspaceTask, WorkspaceTaskInput, WorkspaceTaskPriority, WorkspaceTaskRecurrence, WorkspaceTaskReminderState, WorkspaceTaskStatus } from '@/types/workspace-task'
 
 const TASKS_TAB = 'משימות'
-const TASK_HEADERS = ['מזהה', 'כותרת', 'תיאור', 'מזהה לקוח', 'שם לקוח', 'סטטוס', 'עדיפות', 'מועד יעד', 'תזכורת בדקות', 'נדחה עד', 'מזהה אירוע ביומן', 'נוצר בתאריך', 'עודכן בתאריך', 'הושלם בתאריך']
+const TASK_HEADERS = [
+  'מזהה', 'כותרת', 'תיאור', 'מזהה לקוח', 'שם לקוח', 'סטטוס', 'עדיפות',
+  'מועד יעד', 'תזכורת בדקות', 'נדחה עד', 'מזהה אירוע ביומן',
+  'מחזוריות', 'יום מחזוריות', 'מזהה משימת אב',
+  'נוצר בתאריך', 'עודכן בתאריך', 'הושלם בתאריך'
+]
+
 const TEMPLATES: SheetTemplate[] = [
   { title: TASKS_TAB, headers: TASK_HEADERS },
   { title: 'ערכים', headers: ['סוג', 'ערך', 'תווית'] },
@@ -19,6 +25,9 @@ const TEMPLATES: SheetTemplate[] = [
 function nullable(value: string | undefined): string | null { return value?.trim() ? value.trim() : null }
 function validStatus(value: string): WorkspaceTaskStatus { return ['todo', 'in_progress', 'completed', 'cancelled'].includes(value) ? value as WorkspaceTaskStatus : 'todo' }
 function validPriority(value: string): WorkspaceTaskPriority { return ['low', 'medium', 'high', 'urgent'].includes(value) ? value as WorkspaceTaskPriority : 'medium' }
+function validRecurrence(value: string | undefined): WorkspaceTaskRecurrence {
+  return ['none', 'daily', 'weekly', 'monthly', 'yearly'].includes(value ?? '') ? (value as WorkspaceTaskRecurrence) : 'none'
+}
 
 export function classifyTaskReminder(task: Pick<WorkspaceTask, 'status' | 'dueAt' | 'snoozedUntil'>, now = new Date()): WorkspaceTaskReminderState {
   if (task.status === 'completed' || task.status === 'cancelled') return 'completed'
@@ -33,17 +42,99 @@ export function classifyTaskReminder(task: Pick<WorkspaceTask, 'status' | 'dueAt
   return 'none'
 }
 
+export function computeNextRecurringDueDate(
+  currentDueAt: string | null,
+  recurrence: WorkspaceTaskRecurrence,
+  recurrenceDay?: number | null
+): string {
+  const base = currentDueAt ? new Date(currentDueAt) : new Date()
+  const now = new Date()
+  let target = new Date(base.getTime())
+
+  if (recurrence === 'daily') {
+    target.setDate(target.getDate() + 1)
+    if (target.getTime() < now.getTime()) {
+      target = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    }
+  } else if (recurrence === 'weekly') {
+    if (recurrenceDay !== undefined && recurrenceDay !== null) {
+      const currentDay = target.getDay()
+      let diff = recurrenceDay - currentDay
+      if (diff <= 0) diff += 7
+      target.setDate(target.getDate() + diff)
+    } else {
+      target.setDate(target.getDate() + 7)
+    }
+    if (target.getTime() < now.getTime()) {
+      const currentDay = now.getDay()
+      let diff = (recurrenceDay ?? 0) - currentDay
+      if (diff <= 0) diff += 7
+      target = new Date(now.getTime() + diff * 24 * 60 * 60 * 1000)
+    }
+  } else if (recurrence === 'monthly') {
+    target.setMonth(target.getMonth() + 1)
+    if (recurrenceDay !== undefined && recurrenceDay !== null && recurrenceDay >= 1 && recurrenceDay <= 31) {
+      target.setDate(recurrenceDay)
+    }
+    if (target.getTime() < now.getTime()) {
+      target = new Date(now.getTime())
+      target.setMonth(now.getMonth() + 1)
+      if (recurrenceDay) target.setDate(recurrenceDay)
+    }
+  } else if (recurrence === 'yearly') {
+    target.setFullYear(target.getFullYear() + 1)
+  }
+
+  return target.toISOString()
+}
+
 function rowToTask(row: Record<string, string>): WorkspaceTask {
+  const recurrence = validRecurrence(row['מחזוריות'])
+  const recurrenceDay = row['יום מחזוריות'] ? Number(row['יום מחזוריות']) : null
+  const parentRecurringId = nullable(row['מזהה משימת אב'])
+
   const base = {
-    id: row['מזהה'], title: row['כותרת'], description: nullable(row['תיאור']), clientId: nullable(row['מזהה לקוח']), clientName: nullable(row['שם לקוח']),
-    status: validStatus(row['סטטוס']), priority: validPriority(row['עדיפות']), dueAt: nullable(row['מועד יעד']), reminderMinutes: Number(row['תזכורת בדקות']) || 30,
-    snoozedUntil: nullable(row['נדחה עד']), calendarEventId: nullable(row['מזהה אירוע ביומן']), createdAt: row['נוצר בתאריך'], updatedAt: row['עודכן בתאריך'], completedAt: nullable(row['הושלם בתאריך']),
+    id: row['מזהה'],
+    title: row['כותרת'],
+    description: nullable(row['תיאור']),
+    clientId: nullable(row['מזהה לקוח']),
+    clientName: nullable(row['שם לקוח']),
+    status: validStatus(row['סטטוס']),
+    priority: validPriority(row['עדיפות']),
+    dueAt: nullable(row['מועד יעד']),
+    reminderMinutes: Number(row['תזכורת בדקות']) || 30,
+    snoozedUntil: nullable(row['נדחה עד']),
+    calendarEventId: nullable(row['מזהה אירוע ביומן']),
+    recurrence,
+    recurrenceDay,
+    parentRecurringId,
+    createdAt: row['נוצר בתאריך'],
+    updatedAt: row['עודכן בתאריך'],
+    completedAt: nullable(row['הושלם בתאריך']),
   }
   return { ...base, reminderState: classifyTaskReminder(base) }
 }
 
 function taskToValues(task: Omit<WorkspaceTask, 'reminderState'>): string[] {
-  return [task.id, task.title, task.description ?? '', task.clientId ?? '', task.clientName ?? '', task.status, task.priority, task.dueAt ?? '', String(task.reminderMinutes), task.snoozedUntil ?? '', task.calendarEventId ?? '', task.createdAt, task.updatedAt, task.completedAt ?? '']
+  return [
+    task.id,
+    task.title,
+    task.description ?? '',
+    task.clientId ?? '',
+    task.clientName ?? '',
+    task.status,
+    task.priority,
+    task.dueAt ?? '',
+    String(task.reminderMinutes),
+    task.snoozedUntil ?? '',
+    task.calendarEventId ?? '',
+    task.recurrence ?? 'none',
+    task.recurrenceDay !== null && task.recurrenceDay !== undefined ? String(task.recurrenceDay) : '',
+    task.parentRecurringId ?? '',
+    task.createdAt,
+    task.updatedAt,
+    task.completedAt ?? '',
+  ]
 }
 
 export async function getOperationsWorkspaceSettings(): Promise<OperationsWorkspaceSettings | null> {
@@ -96,7 +187,25 @@ export async function createWorkspaceTask(input: WorkspaceTaskInput): Promise<Wo
   if (!settings) throw new Error('סביבת Nehemiah Operations טרם הוקמה')
   const client = input.clientId ? await getWorkspaceClient(input.clientId) : null
   const now = new Date().toISOString()
-  const task = { id: `task_${randomUUID()}`, title: input.title, description: input.description ?? null, clientId: client?.id ?? null, clientName: client?.name ?? null, status: input.status ?? 'todo' as WorkspaceTaskStatus, priority: input.priority ?? 'medium' as WorkspaceTaskPriority, dueAt: input.dueAt ?? null, reminderMinutes: input.reminderMinutes ?? 30, snoozedUntil: null, calendarEventId: null, createdAt: now, updatedAt: now, completedAt: null }
+  const task: Omit<WorkspaceTask, 'reminderState'> = {
+    id: `task_${randomUUID()}`,
+    title: input.title,
+    description: input.description ?? null,
+    clientId: client?.id ?? null,
+    clientName: client?.name ?? null,
+    status: input.status ?? 'todo' as WorkspaceTaskStatus,
+    priority: input.priority ?? 'medium' as WorkspaceTaskPriority,
+    dueAt: input.dueAt ?? null,
+    reminderMinutes: input.reminderMinutes ?? 30,
+    snoozedUntil: null,
+    calendarEventId: null,
+    recurrence: input.recurrence ?? 'none',
+    recurrenceDay: input.recurrenceDay ?? null,
+    parentRecurringId: input.parentRecurringId ?? null,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+  }
   await appendRows(settings.workbookId, TASKS_TAB, [taskToValues(task)])
   return { ...task, reminderState: classifyTaskReminder(task) }
 }
@@ -106,8 +215,40 @@ export async function updateWorkspaceTask(taskId: string, input: Partial<Workspa
   const found = await findTask(taskId)
   const client = input.clientId === undefined ? null : input.clientId ? await getWorkspaceClient(input.clientId) : null
   const status = input.status ?? found.task.status
-  const updated = { ...found.task, ...input, clientId: input.clientId === undefined ? found.task.clientId : client?.id ?? null, clientName: input.clientId === undefined ? found.task.clientName : client?.name ?? null, status, updatedAt: new Date().toISOString(), completedAt: status === 'completed' ? found.task.completedAt ?? new Date().toISOString() : null }
+  const updated: Omit<WorkspaceTask, 'reminderState'> = {
+    ...found.task,
+    ...input,
+    clientId: input.clientId === undefined ? found.task.clientId : client?.id ?? null,
+    clientName: input.clientId === undefined ? found.task.clientName : client?.name ?? null,
+    status,
+    recurrence: input.recurrence ?? found.task.recurrence,
+    recurrenceDay: input.recurrenceDay !== undefined ? input.recurrenceDay : found.task.recurrenceDay,
+    updatedAt: new Date().toISOString(),
+    completedAt: status === 'completed' ? found.task.completedAt ?? new Date().toISOString() : null,
+  }
   await updateRange(found.settings.workbookId, formatRange(TASKS_TAB, `A${found.rowNumber}`), [taskToValues(updated)])
+
+  // When a recurring task is completed, automatically schedule the next occurrence!
+  if (status === 'completed' && found.task.status !== 'completed' && updated.recurrence && updated.recurrence !== 'none') {
+    try {
+      const nextDue = computeNextRecurringDueDate(found.task.dueAt, updated.recurrence, updated.recurrenceDay)
+      await createWorkspaceTask({
+        title: updated.title,
+        description: updated.description,
+        clientId: updated.clientId,
+        status: 'todo',
+        priority: updated.priority,
+        dueAt: nextDue,
+        reminderMinutes: updated.reminderMinutes,
+        recurrence: updated.recurrence,
+        recurrenceDay: updated.recurrenceDay,
+        parentRecurringId: updated.parentRecurringId || updated.id,
+      })
+    } catch (recurErr) {
+      console.warn('[workspace-tasks] Warning spawning next recurring task:', recurErr)
+    }
+  }
+
   return { ...updated, reminderState: classifyTaskReminder(updated) }
 }
 

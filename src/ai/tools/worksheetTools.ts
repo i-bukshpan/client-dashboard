@@ -754,7 +754,8 @@ export function makeGetClientTasksTool(clientId: string) {
 export function makeCreateOrUpdateTaskTool(clientId: string) {
   return tool({
     description:
-      'Creates a new task or updates an existing task for this client in the Operations workspace.',
+      'Creates a new task or updates an existing task for this client in the Operations workspace. ' +
+      'Supports recurring tasks (e.g. daily, weekly on Sunday, monthly on the 1st or 10th of every month).',
     inputSchema: z.object({
       taskId: z.string().optional().describe('Provide if updating an existing task'),
       title: z.string().describe('Task title in Hebrew'),
@@ -762,8 +763,19 @@ export function makeCreateOrUpdateTaskTool(clientId: string) {
       status: z.enum(['todo', 'in_progress', 'completed', 'cancelled']).optional().default('todo'),
       priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().default('medium'),
       dueAt: z.string().optional().describe('Due date (ISO format or YYYY-MM-DD)'),
+      recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional().default('none').describe('מחזוריות המשימה: none, daily, weekly, monthly, yearly'),
+      recurrenceDay: z.number().optional().describe('יום מחזוריות: 0=ראשון..6=שבת לשבועי, או 1..31 לחודשי (למשל 1 עבור 1 בחודש, 10 עבור 10 בחודש)'),
     }),
-    execute: async (input: { taskId?: string; title: string; description?: string; status?: any; priority?: any; dueAt?: string }) => {
+    execute: async (input: {
+      taskId?: string
+      title: string
+      description?: string
+      status?: any
+      priority?: any
+      dueAt?: string
+      recurrence?: any
+      recurrenceDay?: number
+    }) => {
       try {
         if (input.taskId) {
           const task = await updateWorkspaceTask(input.taskId, {
@@ -772,6 +784,8 @@ export function makeCreateOrUpdateTaskTool(clientId: string) {
             status: input.status,
             priority: input.priority,
             dueAt: input.dueAt,
+            recurrence: input.recurrence,
+            recurrenceDay: input.recurrenceDay,
           })
           return { success: true, message: `✅ משימה "${task.title}" עודכנה בהצלחה (סטטוס: ${task.status})`, task }
         }
@@ -782,8 +796,13 @@ export function makeCreateOrUpdateTaskTool(clientId: string) {
           status: input.status || 'todo',
           priority: input.priority || 'medium',
           dueAt: input.dueAt,
+          recurrence: input.recurrence || 'none',
+          recurrenceDay: input.recurrenceDay,
         })
-        return { success: true, message: `✅ משימה חדשה נוצרה בהצלחה: "${task.title}"`, task }
+        const recMsg = task.recurrence && task.recurrence !== 'none'
+          ? ` [מחזוריות: ${task.recurrence}${task.recurrenceDay !== undefined && task.recurrenceDay !== null ? ` (יום ${task.recurrenceDay})` : ''}]`
+          : ''
+        return { success: true, message: `✅ משימה חדשה נוצרה בהצלחה: "${task.title}"${recMsg}`, task }
       } catch (error: unknown) {
         return { success: false, error: errorMessage(error) }
       }

@@ -156,10 +156,10 @@ export function createGlobalAgentTools() {
      * Aggregated task board across all clients or specific client
      */
     get_workspace_tasks: tool({
-      description: 'שליפת משימות פתוחות מכלל הלקוחות או מלקוח ספציפי.',
+      description: 'שליפת משימות מכלל הלקוחות או מלקוח ספציפי, כולל משימות מחזוריות (יומיות, שבועיות, חודשיות).',
       parameters: z.object({
         clientIdOrName: z.string().optional().describe('סינון לפי לקוח ספציפי (אופציונלי)'),
-        statusFilter: z.enum(['all', 'pending', 'in_progress', 'completed', 'blocked']).optional().default('all'),
+        statusFilter: z.enum(['all', 'todo', 'in_progress', 'completed', 'cancelled']).optional().default('all'),
       }),
       execute: async ({ clientIdOrName, statusFilter }) => {
         try {
@@ -181,16 +181,84 @@ export function createGlobalAgentTools() {
             total: filtered.length,
             tasks: filtered.map((t) => ({
               id: t.id,
-              clientId: t.client_id,
+              clientId: t.clientId,
+              clientName: t.clientName,
               title: t.title,
               status: t.status,
               priority: t.priority,
-              dueDate: t.due_date,
-              assignedTo: t.assigned_to,
+              dueAt: t.dueAt,
+              recurrence: t.recurrence,
+              recurrenceDay: t.recurrenceDay,
+              reminderState: t.reminderState,
             })),
           }
         } catch (err: any) {
           return { error: `שגיאה בשליפת משימות: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Creates or updates a workspace task (one-off or recurring, client-specific or general)
+     */
+    create_or_update_workspace_task: tool({
+      description: 'יצירה או עדכון משימה בסביבת התפעול (כללית עבור נחמיה או מקושרת ללקוח ספציפי). תומך במשימות מחזוריות (למשל: כל ראשון, כל 1 בחודש, כל 10 בחודש וכו\').',
+      parameters: z.object({
+        taskId: z.string().optional().describe('מזהה משימה אם מעדכנים משימה קיימת'),
+        clientIdOrName: z.string().optional().describe('שם הלקוח או מזהה הלקוח (אם המשימה שייכת ללקוח, אחרת תישאר כללית לנחמיה)'),
+        title: z.string().describe('כותרת המשימה בעברית'),
+        description: z.string().optional().describe('תיאור המשימה או הערות'),
+        status: z.enum(['todo', 'in_progress', 'completed', 'cancelled']).optional().default('todo'),
+        priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().default('medium'),
+        dueAt: z.string().optional().describe('מועד יעד ראשון (פורמט ISO או YYYY-MM-DD)'),
+        recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional().default('none').describe('מחזוריות המשימה: none, daily, weekly, monthly, yearly'),
+        recurrenceDay: z.number().optional().describe('יום מחזוריות: 0=ראשון..6=שבת לשבועי, או 1..31 לחודשי (למשל 1 עבור 1 בחודש, 10 עבור 10 בחודש)'),
+      }),
+      execute: async (input) => {
+        try {
+          const { createWorkspaceTask, updateWorkspaceTask } = await import('@/lib/v2/workspace-tasks')
+          let resolvedClientId: string | null = null
+
+          if (input.clientIdOrName) {
+            const clients = await listWorkspaceClients()
+            const target = clients.find(
+              (c) => c.id === input.clientIdOrName || c.name.toLowerCase().includes(input.clientIdOrName!.toLowerCase().trim())
+            )
+            if (target) resolvedClientId = target.id
+          }
+
+          if (input.taskId) {
+            const updated = await updateWorkspaceTask(input.taskId, {
+              title: input.title,
+              description: input.description,
+              status: input.status,
+              priority: input.priority,
+              dueAt: input.dueAt,
+              recurrence: input.recurrence,
+              recurrenceDay: input.recurrenceDay,
+              clientId: resolvedClientId ?? undefined,
+            })
+            return { success: true, message: `✅ משימה "${updated.title}" עודכנה בהצלחה!`, task: updated }
+          }
+
+          const created = await createWorkspaceTask({
+            clientId: resolvedClientId,
+            title: input.title,
+            description: input.description,
+            status: input.status,
+            priority: input.priority,
+            dueAt: input.dueAt,
+            recurrence: input.recurrence,
+            recurrenceDay: input.recurrenceDay,
+          })
+
+          const recText = created.recurrence && created.recurrence !== 'none'
+            ? ` [מחזוריות: ${created.recurrence}${created.recurrenceDay !== undefined && created.recurrenceDay !== null ? ` יום ${created.recurrenceDay}` : ''}]`
+            : ''
+
+          return { success: true, message: `✅ משימה "${created.title}" נוצרה בהצלחה!${recText}`, task: created }
+        } catch (err: any) {
+          return { error: `שגיאה ביצירת/עדכון משימה: ${err.message}` }
         }
       },
     }),
