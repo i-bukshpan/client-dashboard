@@ -22,6 +22,7 @@ import {
   makeReadSheetDataTool,
   makeAppendRowTool,
   makeCreateNewSheetStructureTool,
+  makeCreateClientDriveFolderTool,
   makeUpdateDashboardLayoutTool,
   makeGetCurrentDashboardLayoutTool,
   makeGetDriveFilesTool,
@@ -342,6 +343,7 @@ export async function POST(
 
         // Drive & Documents (RAG)
         get_drive_files: makeGetDriveFilesTool(clientId),
+        create_client_drive_folder: makeCreateClientDriveFolderTool(clientId),
         search_client_documents: makeSearchClientDocumentsTool(clientId),
 
         // 360° Omniscience

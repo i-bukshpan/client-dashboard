@@ -12,6 +12,8 @@ import {
   WorkspaceAccessError,
 } from '@/lib/v2/workspace-dal'
 
+import { GlobalAgentPanel } from '@/components/workspace/GlobalAgentPanel'
+
 export default async function WorkspaceLayout({
   children,
 }: {
@@ -27,7 +29,7 @@ export default async function WorkspaceLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+    <div className="min-h-screen bg-[var(--background)] flex flex-col relative">
       {/* Top navigation bar */}
       <header className="h-14 border-b border-[var(--border)] bg-[var(--card)] flex items-center px-6 gap-4 shrink-0 shadow-sm">
         {/* Logo */}
@@ -110,6 +112,9 @@ export default async function WorkspaceLayout({
       <main className="flex-1 overflow-auto">
         {children}
       </main>
+
+      {/* Global AI Executive Assistant (J.A.R.V.I.S) */}
+      <GlobalAgentPanel />
     </div>
   )
 }

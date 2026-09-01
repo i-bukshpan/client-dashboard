@@ -44,6 +44,8 @@ import {
   Brain,
   Compass,
   FileText,
+  Mic,
+  MicOff,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -65,6 +67,7 @@ import {
   saveClientChatMessagesAction,
   clearClientChatHistoryAction,
 } from '@/app/workspace/actions/chat-history'
+import { useVoiceInput } from '@/hooks/useVoiceInput'
 
 interface ClientAIChatProps {
   clientId: string
@@ -111,6 +114,12 @@ const TOOL_META: Record<string, { icon: React.ElementType; label: string; action
     icon: FolderSearch,
     label: 'סריקת קבצים ב-Drive',
     actionDesc: 'סורק תיקיות וקבצים ב-Google Drive...',
+    color: 'amber',
+  },
+  create_client_drive_folder: {
+    icon: FolderSearch,
+    label: 'יצירת תיקיית Google Drive',
+    actionDesc: 'יוצר תיקיית Drive ייעודית ללקוח...',
     color: 'amber',
   },
   save_client_context: {
@@ -491,6 +500,21 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
   const isHydratedRef = useRef(false)
   const briefPromptRef = useRef('')
   const wasLoadingRef = useRef(false)
+
+  // Hebrew Voice Recognition (Speech-to-Text)
+  const {
+    isListening,
+    isSupported: isVoiceSupported,
+    toggleListening,
+  } = useVoiceInput({
+    lang: 'he-IL',
+    onResult: (transcript) => {
+      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
+    },
+    onError: (errMsg) => {
+      toast.error(errMsg)
+    },
+  })
 
   const storageKey = `nehemiah_workspace_chat_${clientId}`
 
@@ -935,12 +959,29 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
           }}
           className="flex gap-2 items-end"
         >
+          {isVoiceSupported && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleListening}
+              className={`h-10 w-10 p-0 shrink-0 rounded-xl transition-colors ${
+                isListening
+                  ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 animate-pulse'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+              title={isListening ? 'עצור הקלטה קולית' : 'הקלטה קולית בעברית'}
+            >
+              {isListening ? <MicOff className="w-4 h-4 text-red-500" /> : <Mic className="w-4 h-4" />}
+            </Button>
+          )}
+
           <Textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="שאל כל שאלה על הלקוח או בקש פעולה..."
+            placeholder={isListening ? 'מאזין לך בעברית...' : 'שאל כל שאלה על הלקוח או בקש פעולה...'}
             dir="auto"
             rows={1}
             disabled={isLoading}
@@ -961,7 +1002,7 @@ export function ClientAIChat({ clientId, clientName, hasSheet, isOnboarding = fa
           </Button>
         </form>
         <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-          Enter לשליחה · Shift+Enter לשורה חדשה
+          Enter לשליחה · Shift+Enter לשורה חדשה · דיבור קולי בעברית זמין
         </p>
       </div>
     </div>

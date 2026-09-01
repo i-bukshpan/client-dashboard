@@ -296,21 +296,24 @@ function extractMessageBody(payload?: gmail_v1.Schema$MessagePart): { html: stri
  * Lists all available Gmail labels.
  */
 export async function listGmailLabels(): Promise<GmailLabelItem[]> {
-  try {
-    const gmail = await getGmailClient()
-    const res = await gmail.users.labels.list({ userId: 'me' })
-    const labels = res.data.labels || []
+  const { gmailCache } = await import('@/lib/server-cache')
+  return gmailCache.getOrSet('gmail-labels-all', async () => {
+    try {
+      const gmail = await getGmailClient()
+      const res = await gmail.users.labels.list({ userId: 'me' })
+      const labels = res.data.labels || []
 
-    return labels.map((l) => ({
-      id: l.id || '',
-      name: l.name || '',
-      type: l.type === 'system' ? 'system' : 'user',
-      messagesUnread: l.messagesUnread || 0,
-      messagesTotal: l.messagesTotal || 0,
-    }))
-  } catch (err) {
-    throw classifyGmailError(err)
-  }
+      return labels.map((l) => ({
+        id: l.id || '',
+        name: l.name || '',
+        type: l.type === 'system' ? 'system' : 'user',
+        messagesUnread: l.messagesUnread || 0,
+        messagesTotal: l.messagesTotal || 0,
+      }))
+    } catch (err) {
+      throw classifyGmailError(err)
+    }
+  }, 300_000) // 5 minute TTL
 }
 
 /**

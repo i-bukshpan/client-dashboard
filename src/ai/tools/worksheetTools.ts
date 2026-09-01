@@ -275,7 +275,8 @@ export function makeCreateNewSheetStructureTool(clientId: string) {
       'Creates a brand-new Google Spreadsheet for this client with the agreed tab/column structure. ' +
       'IMPORTANT: Only call this tool AFTER you have had a full Q&A conversation with Nehemiah ' +
       'to understand the client\'s business, and after Nehemiah has explicitly approved the structure. ' +
-      'The spreadsheet will be styled with bold headers and shared with the Service Account. ' +
+      'If the client already has a Google Drive folder, the sheet is automatically placed inside it. ' +
+      'If the client does NOT have a Drive folder, only create one if Nehemiah explicitly asked to create a folder (create_drive_folder=true). ' +
       'After creation, the spreadsheet ID is automatically saved to this client\'s record in Supabase.',
     inputSchema: z.object({
       spreadsheet_title: z
@@ -287,24 +288,49 @@ export function makeCreateNewSheetStructureTool(clientId: string) {
         .describe(
           'The list of sheet tabs to create. Each tab has a title and an ordered list of column headers.'
         ),
+      create_drive_folder: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('האם ליצור תיקיית Google Drive חדשה ללקוח במידה ואינה קיימת. העבר true אך ורק אם נחמיה ביקש זאת במפורש.'),
     }),
     execute: async ({
       spreadsheet_title,
       sheets,
+      create_drive_folder = false,
     }: {
       spreadsheet_title: string
       sheets: Array<{ title: string; headers: string[] }>
+      create_drive_folder?: boolean
     }) => {
       try {
-        await getClientRecord(clientId)
+        const client = await getWorkspaceClient(clientId)
+        let folderId = client.drive_folder_id
 
-        // Create the spreadsheet
-        const spreadsheetId = await createSpreadsheet(spreadsheet_title, sheets)
+        // Create a new folder ONLY if Nehemiah explicitly asked for it and one doesn't already exist
+        if (!folderId && create_drive_folder) {
+          try {
+            const { createClientFolder } = await import('@/lib/google-drive')
+            folderId = await createClientFolder(client.name)
+            await getWorkspaceAdminDb()
+              .from('clients')
+              .update({ drive_folder_id: folderId })
+              .eq('id', clientId)
+          } catch (folderErr) {
+            console.warn('[create_new_sheet_structure] Notice creating folder on request:', folderErr)
+          }
+        }
 
-        // Save the ID to Supabase
+        // Create the spreadsheet and place it in the folder if one exists/was created
+        const spreadsheetId = await createSpreadsheet(spreadsheet_title, sheets, folderId || undefined)
+
+        // Save the spreadsheet ID (and folder ID if newly created) to Supabase
         const { error } = await getWorkspaceAdminDb()
           .from('clients')
-          .update({ google_sheet_id: spreadsheetId })
+          .update({
+            google_sheet_id: spreadsheetId,
+            ...(folderId ? { drive_folder_id: folderId } : {}),
+          })
           .eq('id', clientId)
 
         if (error) {
@@ -316,13 +342,70 @@ export function makeCreateNewSheetStructureTool(clientId: string) {
         }
 
         const sheetsUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+        const folderUrl = folderId ? `https://drive.google.com/drive/folders/${folderId}` : null
 
         return {
           success: true,
           spreadsheet_id: spreadsheetId,
           spreadsheet_url: sheetsUrl,
+          drive_folder_id: folderId,
+          drive_folder_url: folderUrl,
           sheets_created: sheets.map((s) => ({ title: s.title, columns: s.headers.length })),
-          message: `✅ הגיליון נוצר בהצלחה! "${spreadsheet_title}" עם ${sheets.length} לשוניות. הקישור: ${sheetsUrl}`,
+          message: folderUrl
+            ? `✅ הגיליון נוצר בהצלחה ומוקם בתיקיית ה-Drive של הלקוח! "${spreadsheet_title}" עם ${sheets.length} לשוניות.\nקישור לגיליון: ${sheetsUrl}\nתיקיית Drive: ${folderUrl}`
+            : `✅ הגיליון נוצר בהצלחה! "${spreadsheet_title}" עם ${sheets.length} לשוניות.\nקישור לגיליון: ${sheetsUrl}`,
+        }
+      } catch (error: unknown) {
+        return { success: false, error: errorMessage(error) }
+      }
+    },
+  })
+}
+
+// ── Tool: create_client_drive_folder ──────────────────────────────────────────
+
+export function makeCreateClientDriveFolderTool(clientId: string) {
+  return tool({
+    description:
+      'Creates a dedicated Google Drive folder for this client and links it in Supabase. ' +
+      'IMPORTANT: Only call this tool when Nehemiah explicitly asks to create or provision a Drive folder for this client.',
+    inputSchema: z.object({}),
+    execute: async () => {
+      try {
+        const client = await getWorkspaceClient(clientId)
+        if (client.drive_folder_id) {
+          const folderUrl = `https://drive.google.com/drive/folders/${client.drive_folder_id}`
+          return {
+            success: true,
+            folder_id: client.drive_folder_id,
+            folder_url: folderUrl,
+            message: `ללקוח כבר קיימת תיקיית Drive מוגדרת: ${folderUrl}`,
+          }
+        }
+
+        const { createClientFolder, moveWorkspaceFile } = await import('@/lib/google-drive')
+        const folderId = await createClientFolder(client.name)
+
+        await getWorkspaceAdminDb()
+          .from('clients')
+          .update({ drive_folder_id: folderId })
+          .eq('id', clientId)
+
+        // If client already has a connected spreadsheet, move it into the new folder
+        if (client.google_sheet_id) {
+          try {
+            await moveWorkspaceFile(client.google_sheet_id, folderId)
+          } catch (moveErr) {
+            console.warn('[create_client_drive_folder] Warning moving existing sheet to new folder:', moveErr)
+          }
+        }
+
+        const folderUrl = `https://drive.google.com/drive/folders/${folderId}`
+        return {
+          success: true,
+          folder_id: folderId,
+          folder_url: folderUrl,
+          message: `✅ תיקיית Google Drive נוצרה בהצלחה עבור ${client.name}!\nקישור לתיקייה: ${folderUrl}`,
         }
       } catch (error: unknown) {
         return { success: false, error: errorMessage(error) }

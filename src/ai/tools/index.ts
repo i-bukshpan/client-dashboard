@@ -97,6 +97,19 @@ export const WRITE_TOOLS = new Set([
   'createReminder', 'deleteReminder',
 ])
 
+/**
+ * Critical write tools that require explicit user confirmation before execution.
+ * Only high-impact financial mutations and destructive operations are gated.
+ * Non-critical writes (tasks, calendar, reminders, worker logs) execute immediately.
+ */
+export const CRITICAL_WRITE_TOOLS = new Set([
+  'addIncome', 'addExpense',
+  'createClient',
+  'addProjectPayment', 'markPaymentPaid', 'addTransaction',
+  'addPartnerTransaction',
+  'markLoanPaymentPaid',
+])
+
 // ── מיפוי שם-כלי → הצהרה ─────────────────────────────────────────────────────
 const declarationMap: Record<string, FunctionDeclaration> = {
   getFinanceSummary: getFinanceSummaryDeclaration,

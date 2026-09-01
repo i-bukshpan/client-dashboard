@@ -4,9 +4,13 @@
  * Google Sheets API integration.
  * This is the core data layer for Nehemiah OS v2 — all client financial
  * and business data lives in Google Sheets, not in Supabase.
+ *
+ * Performance: read operations are cached with server-side TTL caching.
+ * Write operations invalidate all cache entries for the affected spreadsheet.
  */
 
 import { createV2DriveClient, createV2SheetsClient } from '@/lib/v2/google-auth'
+import { sheetsMetaCache, sheetsDataCache } from '@/lib/server-cache'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -160,7 +164,6 @@ export async function getSheetData(
   range?: string
 ): Promise<string[][]> {
   const realId = await ensureNativeGoogleSheet(spreadsheetId)
-  const sheets = getSheetsClient()
 
   // If no range specified, fetch spreadsheet metadata first to get the first sheet's title
   let finalRange = range
@@ -175,16 +178,20 @@ export async function getSheetData(
     finalRange = formatRange(sheetPart, cellPart)
   }
 
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: realId,
-    range: finalRange,
-    valueRenderOption: 'FORMATTED_VALUE',
-    dateTimeRenderOption: 'FORMATTED_STRING',
-  })
+  const cacheKey = `sheet-data:${realId}:${finalRange}`
+  return sheetsDataCache.getOrSet(cacheKey, async () => {
+    const sheets = getSheetsClient()
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: realId,
+      range: finalRange,
+      valueRenderOption: 'FORMATTED_VALUE',
+      dateTimeRenderOption: 'FORMATTED_STRING',
+    })
 
-  return (response.data.values ?? []).map((row) =>
-    row.map((cell) => String(cell ?? ''))
-  )
+    return (response.data.values ?? []).map((row) =>
+      row.map((cell) => String(cell ?? ''))
+    )
+  }, 30_000)
 }
 
 /**
@@ -224,20 +231,23 @@ export async function getSpreadsheetMeta(
   spreadsheetId: string
 ): Promise<SheetMeta[]> {
   const realId = await ensureNativeGoogleSheet(spreadsheetId)
-  const sheets = getSheetsClient()
+  const cacheKey = `sheet-meta:${realId}`
 
-  const response = await sheets.spreadsheets.get({
-    spreadsheetId: realId,
-    fields: 'sheets.properties(sheetId,title,index,gridProperties)',
-  })
+  return sheetsMetaCache.getOrSet(cacheKey, async () => {
+    const sheets = getSheetsClient()
+    const response = await sheets.spreadsheets.get({
+      spreadsheetId: realId,
+      fields: 'sheets.properties(sheetId,title,index,gridProperties)',
+    })
 
-  return (response.data.sheets ?? []).map((s) => ({
-    sheetId: s.properties?.sheetId ?? 0,
-    title: s.properties?.title ?? '',
-    index: s.properties?.index ?? 0,
-    rowCount: s.properties?.gridProperties?.rowCount ?? 1000,
-    columnCount: s.properties?.gridProperties?.columnCount ?? 26,
-  }))
+    return (response.data.sheets ?? []).map((s) => ({
+      sheetId: s.properties?.sheetId ?? 0,
+      title: s.properties?.title ?? '',
+      index: s.properties?.index ?? 0,
+      rowCount: s.properties?.gridProperties?.rowCount ?? 1000,
+      columnCount: s.properties?.gridProperties?.columnCount ?? 26,
+    }))
+  }, 60_000)
 }
 
 // ── Core Write Operations ─────────────────────────────────────────────────────
@@ -264,6 +274,9 @@ export async function appendRows(
     },
   })
 
+  // Invalidate cache for this spreadsheet after write
+  invalidateSheetCache(spreadsheetId)
+
   return {
     updatedRows: response.data.updates?.updatedRows ?? rows.length,
   }
@@ -287,20 +300,26 @@ export async function updateRange(
       values,
     },
   })
+
+  // Invalidate cache for this spreadsheet after write
+  invalidateSheetCache(spreadsheetId)
 }
 
 /** Clears values from a range while preserving formatting and sheet structure. */
 export async function clearRange(spreadsheetId: string, range: string): Promise<void> {
   const sheets = getSheetsClient()
   await sheets.spreadsheets.values.clear({ spreadsheetId, range, requestBody: {} })
+  invalidateSheetCache(spreadsheetId)
 }
 
 /**
  * Creates a brand-new spreadsheet with predefined sheet tabs, headers, and RTL layout.
+ * If parentFolderId is provided, the spreadsheet is automatically moved into that Drive folder.
  */
 export async function createSpreadsheet(
   title: string,
-  sheetsToCreate: SheetTemplate[]
+  sheetsToCreate: SheetTemplate[],
+  parentFolderId?: string
 ): Promise<string> {
   const sheets = getSheetsClient()
 
@@ -349,6 +368,16 @@ export async function createSpreadsheet(
     throw new Error('[google-sheets] Failed to create spreadsheet — no ID returned')
   }
 
+  // Automatically place in parent folder if specified
+  if (parentFolderId) {
+    try {
+      const { moveWorkspaceFile } = await import('@/lib/google-drive')
+      await moveWorkspaceFile(spreadsheetId, parentFolderId)
+    } catch (moveErr) {
+      console.warn('[google-sheets] Warning moving created spreadsheet to parentFolder:', moveErr)
+    }
+  }
+
   return spreadsheetId
 }
 
@@ -387,5 +416,14 @@ export async function addSheetTab(
     await updateRange(spreadsheetId, formatRange(template.title, 'A1'), [template.headers])
   }
 
+  invalidateSheetCache(spreadsheetId)
   return newSheetId
+}
+
+// ── Cache Invalidation ────────────────────────────────────────────────────────
+
+/** Invalidates all cached data for a specific spreadsheet after a write operation. */
+export function invalidateSheetCache(spreadsheetId: string): void {
+  sheetsMetaCache.invalidateByPrefix(`sheet-meta:${spreadsheetId}`)
+  sheetsDataCache.invalidateByPrefix(`sheet-data:${spreadsheetId}`)
 }
