@@ -187,6 +187,35 @@ export async function listWorkspaceClients(): Promise<WorkspaceClientRecord[]> {
   return (data ?? []) as unknown as WorkspaceClientRecord[]
 }
 
+export function findWorkspaceClientByNameOrId(
+  clients: WorkspaceClientRecord[],
+  query: string
+): WorkspaceClientRecord | undefined {
+  if (!query) return undefined
+  const rawQ = query.trim()
+  const cleanQ = rawQ.toLowerCase().replace(/["'״׳`]/g, '').trim()
+  if (!cleanQ) return undefined
+
+  // 1. Exact UUID match
+  const exactId = clients.find((c) => c.id === rawQ)
+  if (exactId) return exactId
+
+  // 2. Exact clean name match
+  const exactName = clients.find(
+    (c) => c.name.trim().toLowerCase().replace(/["'״׳`]/g, '') === cleanQ
+  )
+  if (exactName) return exactName
+
+  // 3. Substring match (either query in client name or client name in query)
+  const substring = clients.find((c) => {
+    const cleanName = c.name.trim().toLowerCase().replace(/["'״׳`]/g, '')
+    return cleanName.includes(cleanQ) || cleanQ.includes(cleanName)
+  })
+  if (substring) return substring
+
+  return undefined
+}
+
 export async function assertClientDriveRoot(
   clientId: string,
   folderId: string

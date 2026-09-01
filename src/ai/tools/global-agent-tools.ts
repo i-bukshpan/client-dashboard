@@ -1,7 +1,7 @@
 /**
  * src/ai/tools/global-agent-tools.ts
  *
- * Tools for the Nehemiah OS v2 Global Executive Agent.
+ * Tools for the Nehemiah OS v2 Global Executive Agent (J.A.R.V.I.S).
  * Gives the agent cross-system omniscience across all workspace clients,
  * internal finances, tasks, calendar events, emails, and spreadsheet data.
  */
@@ -10,9 +10,7 @@ import { z } from 'zod'
 import { tool } from 'ai'
 import {
   listWorkspaceClients,
-  getWorkspaceClient,
-  getWorkspaceAdminDb,
-  type WorkspaceClientRecord,
+  findWorkspaceClientByNameOrId,
 } from '@/lib/v2/workspace-dal'
 import { getSheetRows, getSpreadsheetMeta } from '@/lib/google-sheets'
 import { listClientEmails } from '@/lib/google-gmail'
@@ -23,7 +21,7 @@ import { listWorkspaceCalendarEvents } from '@/lib/v2/google-calendar'
 export function createGlobalAgentTools() {
   return {
     /**
-     * Lists all registered workspace clients with basic connectivity status (drive, sheet, gmail)
+     * Lists all registered workspace clients with basic connectivity status
      */
     list_all_clients: tool({
       description: 'רשימת כל הלקוחות בסביבת העבודה (Workspace) כולל סטטוס, מייל, טלפון, וחיבורי Drive/Sheets/Gmail.',
@@ -60,28 +58,126 @@ export function createGlobalAgentTools() {
     }),
 
     /**
+     * 360-degree client summary (Profile, Drive, Sheets, Open Tasks, Unread Emails, Living Context)
+     */
+    get_client_overview: tool({
+      description: 'קבלת תמונת מצב מקיפה (360°) על לקוח לפי שם או מזהה — כולל פרטי לקוח, סטטוס אפיון, תיקיית Drive, גיליון Sheets, משימות פתוחות, מיילים ומטרות.',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח (למשל "ניסוי", "נסמארט") או מזהה לקוח'),
+      }),
+      execute: async ({ clientIdOrName }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) {
+            return {
+              error: `לא נמצא לקוח בשם או במזהה "${clientIdOrName}". הלקוחות הקיימים: ${clients.map((c) => c.name).join(', ')}`,
+            }
+          }
+
+          // Fetch tasks
+          let openTasks: any[] = []
+          try {
+            const allTasks = await listWorkspaceTasks(client.id)
+            openTasks = allTasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              priority: t.priority,
+              dueAt: t.dueAt,
+              recurrence: t.recurrence,
+              recurrenceDay: t.recurrenceDay,
+            }))
+          } catch { /* ignore */ }
+
+          // Fetch unread emails
+          let emailSummary = { unreadCount: 0, threads: [] as any[] }
+          if (client.gmail_label || client.email) {
+            try {
+              const emailRes = await listClientEmails({
+                clientEmail: client.email || undefined,
+                labelName: client.gmail_label || undefined,
+                unreadOnly: true,
+                maxResults: 5,
+              })
+              emailSummary = {
+                unreadCount: emailRes.unreadCount,
+                threads: emailRes.threads.map((t) => ({
+                  id: t.id,
+                  subject: t.subject,
+                  from: t.from,
+                  date: t.date,
+                })),
+              }
+            } catch { /* ignore */ }
+          }
+
+          // Check connected Sheet
+          let sheetInfo = {
+            hasSheet: !!client.google_sheet_id,
+            sheetId: client.google_sheet_id,
+            tabs: [] as string[],
+          }
+          if (client.google_sheet_id) {
+            try {
+              const meta = await getSpreadsheetMeta(client.google_sheet_id)
+              sheetInfo.tabs = meta.map((m) => m.title)
+            } catch { /* ignore */ }
+          }
+
+          return {
+            client: {
+              id: client.id,
+              name: client.name,
+              status: client.status || 'active',
+              email: client.email,
+              phone: client.phone,
+              address: client.address,
+              portfolioValue: client.portfolio_value,
+              advisoryGoal: client.advisory_goal,
+              riskLevel: client.risk_level,
+              hasDrive: !!client.drive_folder_id,
+              driveFolderId: client.drive_folder_id,
+              hasSheet: !!client.google_sheet_id,
+              hasGmail: !!client.gmail_label || !!client.email,
+              isOnboarded: !!client.client_context_json && Object.keys(client.client_context_json).length > 0,
+            },
+            sheet: sheetInfo,
+            openTasks,
+            unreadEmails: emailSummary,
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בשליפת סיכום לקוח: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
      * Search and view data from any client's connected Google Sheet
      */
     lookup_client_sheet: tool({
       description: 'קריאת נתונים מגיליון Google Sheets של לקוח ספציפי לפי שם או מזהה לקוח.',
       parameters: z.object({
-        clientIdOrName: z.string().describe('מזהה הלקוח (UUID) או שם הלקוח (חיפוש חלקי)'),
+        clientIdOrName: z.string().describe('מזהה הלקוח או שם הלקוח'),
         tabName: z.string().optional().describe('שם הלשונית בגיליון. אם לא סופק יוחזרו רשימת הלשוניות והשורות הראשונות'),
         maxRows: z.number().optional().default(30).describe('מספר שורות מקסימלי להחזרה'),
       }),
       execute: async ({ clientIdOrName, tabName, maxRows }) => {
         try {
           const clients = await listWorkspaceClients()
-          const target = clients.find(
-            (c) => c.id === clientIdOrName || c.name.toLowerCase().includes(clientIdOrName.toLowerCase().trim())
-          )
+          const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
 
           if (!target) {
             return { error: `לא נמצא לקוח בשם או במזהה "${clientIdOrName}"` }
           }
 
           if (!target.google_sheet_id) {
-            return { error: `ללקוח "${target.name}" לא מוגדר גיליון Google Sheets מחובר.` }
+            return {
+              clientName: target.name,
+              clientId: target.id,
+              hasSheet: false,
+              message: `ללקוח "${target.name}" עדיין לא הוגדר גיליון Google Sheets מחובר.`,
+            }
           }
 
           const tabs = await getSpreadsheetMeta(target.google_sheet_id)
@@ -91,6 +187,7 @@ export function createGlobalAgentTools() {
           return {
             clientName: target.name,
             clientId: target.id,
+            hasSheet: true,
             availableTabs: tabs.map((t) => t.title),
             activeTab: selectedTab,
             rowCount: rows.length,
@@ -118,9 +215,7 @@ export function createGlobalAgentTools() {
 
           if (clientIdOrName) {
             const clients = await listWorkspaceClients()
-            const target = clients.find(
-              (c) => c.id === clientIdOrName || c.name.toLowerCase().includes(clientIdOrName.toLowerCase().trim())
-            )
+            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
             if (target) {
               clientEmail = target.email || undefined
               labelName = target.gmail_label || undefined
@@ -200,9 +295,7 @@ export function createGlobalAgentTools() {
           let targetClientId: string | undefined
           if (clientIdOrName) {
             const clients = await listWorkspaceClients()
-            const target = clients.find(
-              (c) => c.id === clientIdOrName || c.name.toLowerCase().includes(clientIdOrName.toLowerCase().trim())
-            )
+            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
             if (target) targetClientId = target.id
           }
 
@@ -255,9 +348,7 @@ export function createGlobalAgentTools() {
 
           if (input.clientIdOrName) {
             const clients = await listWorkspaceClients()
-            const target = clients.find(
-              (c) => c.id === input.clientIdOrName || c.name.toLowerCase().includes(input.clientIdOrName!.toLowerCase().trim())
-            )
+            const target = findWorkspaceClientByNameOrId(clients, input.clientIdOrName)
             if (target) resolvedClientId = target.id
           }
 

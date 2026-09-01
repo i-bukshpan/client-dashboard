@@ -49,6 +49,7 @@ const QUICK_PROMPTS = [
 ]
 
 const TOOL_LABELS: Record<string, string> = {
+  get_client_overview: 'סיכום לקוח 360°',
   list_all_clients: 'שליפת רשימת לקוחות',
   lookup_client_sheet: 'קריאת גיליון Google Sheets',
   check_unread_emails: 'סריקת אימיילים שלא נקראו',

@@ -94,13 +94,13 @@ function rowToTask(row: Record<string, string>): WorkspaceTask {
   const parentRecurringId = nullable(row['מזהה משימת אב'])
 
   const base = {
-    id: row['מזהה'],
-    title: row['כותרת'],
+    id: row['מזהה'] || '',
+    title: row['כותרת'] || '',
     description: nullable(row['תיאור']),
     clientId: nullable(row['מזהה לקוח']),
     clientName: nullable(row['שם לקוח']),
-    status: validStatus(row['סטטוס']),
-    priority: validPriority(row['עדיפות']),
+    status: validStatus(row['סטטוס'] || ''),
+    priority: validPriority(row['עדיפות'] || ''),
     dueAt: nullable(row['מועד יעד']),
     reminderMinutes: Number(row['תזכורת בדקות']) || 30,
     snoozedUntil: nullable(row['נדחה עד']),
@@ -108,33 +108,44 @@ function rowToTask(row: Record<string, string>): WorkspaceTask {
     recurrence,
     recurrenceDay,
     parentRecurringId,
-    createdAt: row['נוצר בתאריך'],
-    updatedAt: row['עודכן בתאריך'],
+    createdAt: row['נוצר בתאריך'] || new Date().toISOString(),
+    updatedAt: row['עודכן בתאריך'] || new Date().toISOString(),
     completedAt: nullable(row['הושלם בתאריך']),
   }
   return { ...base, reminderState: classifyTaskReminder(base) }
 }
 
 function taskToValues(task: Omit<WorkspaceTask, 'reminderState'>): string[] {
-  return [
-    task.id,
-    task.title,
-    task.description ?? '',
-    task.clientId ?? '',
-    task.clientName ?? '',
-    task.status,
-    task.priority,
-    task.dueAt ?? '',
-    String(task.reminderMinutes),
-    task.snoozedUntil ?? '',
-    task.calendarEventId ?? '',
-    task.recurrence ?? 'none',
-    task.recurrenceDay !== null && task.recurrenceDay !== undefined ? String(task.recurrenceDay) : '',
-    task.parentRecurringId ?? '',
-    task.createdAt,
-    task.updatedAt,
-    task.completedAt ?? '',
-  ]
+  const map: Record<string, string> = {
+    'מזהה': task.id,
+    'כותרת': task.title,
+    'תיאור': task.description ?? '',
+    'מזהה לקוח': task.clientId ?? '',
+    'שם לקוח': task.clientName ?? '',
+    'סטטוס': task.status,
+    'עדיפות': task.priority,
+    'מועד יעד': task.dueAt ?? '',
+    'תזכורת בדקות': String(task.reminderMinutes),
+    'נדחה עד': task.snoozedUntil ?? '',
+    'מזהה אירוע ביומן': task.calendarEventId ?? '',
+    'מחזוריות': task.recurrence ?? 'none',
+    'יום מחזוריות': task.recurrenceDay !== null && task.recurrenceDay !== undefined ? String(task.recurrenceDay) : '',
+    'מזהה משימת אב': task.parentRecurringId ?? '',
+    'נוצר בתאריך': task.createdAt,
+    'עודכן בתאריך': task.updatedAt,
+    'הושלם בתאריך': task.completedAt ?? '',
+  }
+  return TASK_HEADERS.map((header) => map[header] ?? '')
+}
+
+export async function ensureTaskSpreadsheetHeaders(workbookId: string): Promise<void> {
+  try {
+    const raw = await getSheetRows(workbookId, TASKS_TAB)
+    // getSheetRows reads first row as headers. If columns are missing or not matching TASK_HEADERS:
+    await updateRange(workbookId, formatRange(TASKS_TAB, 'A1:Q1'), [TASK_HEADERS])
+  } catch (err) {
+    console.warn('[workspace-tasks] ensureTaskSpreadsheetHeaders notice:', err)
+  }
 }
 
 export async function getOperationsWorkspaceSettings(): Promise<OperationsWorkspaceSettings | null> {
@@ -147,7 +158,10 @@ export async function getOperationsWorkspaceSettings(): Promise<OperationsWorksp
 export async function setupOperationsWorkspace(): Promise<OperationsWorkspaceSettings> {
   const session = await requireWorkspaceAdmin()
   const existing = await getOperationsWorkspaceSettings()
-  if (existing) return existing
+  if (existing) {
+    await ensureTaskSpreadsheetHeaders(existing.workbookId)
+    return existing
+  }
   const folderId = await createWorkspaceFolder('Nehemiah Operations', process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID)
   const workbookId = await createSpreadsheet('Nehemiah Operations', TEMPLATES)
   await moveWorkspaceFile(workbookId, folderId)
@@ -165,6 +179,7 @@ export async function listWorkspaceTasks(clientId?: string): Promise<WorkspaceTa
   if (clientId) await getWorkspaceClient(clientId)
   const settings = await getOperationsWorkspaceSettings()
   if (!settings) return []
+  await ensureTaskSpreadsheetHeaders(settings.workbookId)
   const tasks = (await getSheetRows(settings.workbookId, TASKS_TAB)).map(rowToTask)
   return tasks.filter((task) => !clientId || task.clientId === clientId).sort((a, b) => {
     const rank = { overdue: 0, due_today: 1, upcoming: 2, snoozed: 3, none: 4, completed: 5 }
