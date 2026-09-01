@@ -31,9 +31,16 @@ export function createGlobalAgentTools() {
       execute: async ({ statusFilter }) => {
         try {
           const clients = await listWorkspaceClients()
-          const filtered = statusFilter === 'all' 
+          const filtered = (!statusFilter || statusFilter === 'all')
             ? clients 
-            : clients.filter((c) => (c.status || 'active') === statusFilter)
+            : clients.filter((c) => {
+                const s = (c.status || 'active').toLowerCase()
+                if (statusFilter === 'active') return s === 'active' || s === 'פעיל' || !c.status
+                if (statusFilter === 'prospect') return s === 'prospect' || s === 'ליד' || s === 'מתעניין'
+                if (statusFilter === 'inactive') return s === 'inactive' || s === 'לא פעיל'
+                if (statusFilter === 'archived') return s === 'archived' || s === 'בארכיון'
+                return s === statusFilter.toLowerCase()
+              })
 
           return {
             total: filtered.length,
@@ -42,7 +49,7 @@ export function createGlobalAgentTools() {
               name: c.name,
               email: c.email,
               phone: c.phone,
-              status: c.status || 'active',
+              status: c.status || 'פעיל',
               hasDrive: !!c.drive_folder_id,
               hasSheet: !!c.google_sheet_id,
               hasGmail: !!c.gmail_label || !!c.email,
@@ -52,6 +59,7 @@ export function createGlobalAgentTools() {
             })),
           }
         } catch (err: any) {
+          console.error('[global-agent] list_all_clients error:', err)
           return { error: `שגיאה בשליפת רשימת לקוחות: ${err.message}` }
         }
       },
