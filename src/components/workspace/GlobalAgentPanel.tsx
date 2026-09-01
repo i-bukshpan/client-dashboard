@@ -51,13 +51,25 @@ const QUICK_PROMPTS = [
 const TOOL_LABELS: Record<string, string> = {
   get_client_overview: 'סיכום לקוח 360°',
   list_all_clients: 'שליפת רשימת לקוחות',
+  create_new_client: 'הוספת לקוח חדש ל-CRM',
+  update_client_details: 'עדכון פרטי לקוח',
   lookup_client_sheet: 'קריאת גיליון Google Sheets',
+  create_client_spreadsheet: 'יצירת גיליון Google Sheets חדש',
+  append_data_to_client_sheet: 'הזנת נתונים לגיליון',
+  update_client_sheet_range: 'עדכון תאים בגיליון',
+  create_client_drive_folder: 'יצירת תיקיית Google Drive',
   check_unread_emails: 'סריקת אימיילים שלא נקראו',
   search_emails: 'חיפוש אימיילים ב-Gmail',
+  send_email: 'שליחת אימייל',
+  reply_to_email: 'מענה לאימייל',
+  trash_email_thread: 'מחיקת אימייל לאשפה',
+  label_email_thread: 'סיווג תווית אימייל',
   get_workspace_tasks: 'שליפת משימות',
   create_or_update_workspace_task: 'יצירה / עדכון משימה',
+  delete_workspace_task: 'מחיקת משימה',
   get_agency_finance_summary: 'סיכום כספי הסוכנות',
   get_calendar_overview: 'סריקת יומן פגישות',
+  create_calendar_event: 'קביעת פגישה ביומן',
 }
 
 export function GlobalAgentPanel() {

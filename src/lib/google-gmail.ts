@@ -552,6 +552,46 @@ export async function markEmailThreadRead(threadId: string, read = true): Promis
   }
 }
 
+/**
+ * Trashes an email thread.
+ */
+export async function trashEmailThread(threadId: string): Promise<boolean> {
+  try {
+    const gmail = await getGmailClient()
+    await gmail.users.threads.trash({
+      userId: 'me',
+      id: threadId,
+    })
+    return true
+  } catch (err) {
+    throw classifyGmailError(err)
+  }
+}
+
+/**
+ * Modifies labels for an email thread (adding/removing label IDs).
+ */
+export async function modifyThreadLabels(
+  threadId: string,
+  addLabelIds: string[] = [],
+  removeLabelIds: string[] = []
+): Promise<boolean> {
+  try {
+    const gmail = await getGmailClient()
+    await gmail.users.threads.modify({
+      userId: 'me',
+      id: threadId,
+      requestBody: {
+        addLabelIds,
+        removeLabelIds,
+      },
+    })
+    return true
+  } catch (err) {
+    throw classifyGmailError(err)
+  }
+}
+
 // ── Email Sending & Replying ──────────────────────────────────────────────────
 
 function buildRfc2822Message({

@@ -3,12 +3,24 @@
 import { useMemo, useState } from 'react'
 import { addDays } from 'date-fns'
 import { useRouter } from 'next/navigation'
-import { CalendarPlus, Check, Clock3, LayoutGrid, List, Loader2, Pencil, Plus, Repeat } from 'lucide-react'
+import {
+  CalendarPlus,
+  Check,
+  Clock3,
+  LayoutGrid,
+  List,
+  Loader2,
+  Pencil,
+  Plus,
+  Repeat,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   completeWorkspaceTaskAction,
   convertTaskToCalendarAction,
   createWorkspaceTaskAction,
+  deleteWorkspaceTaskAction,
   snoozeWorkspaceTaskAction,
   updateWorkspaceTaskAction,
 } from '@/app/workspace/actions/tasks'
@@ -104,18 +116,24 @@ export function WorkspaceTaskBoard({
   compact?: boolean
 }) {
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState<'all' | 'recurring'>('all')
   const [view, setView] = useState<'board' | 'list'>(compact ? 'list' : 'board')
   const [editor, setEditor] = useState<WorkspaceTask | 'new' | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  const recurringTasks = useMemo(
+    () => tasks.filter((task) => task.recurrence && task.recurrence !== 'none'),
+    [tasks]
+  )
 
   const counts = useMemo(
     () => ({
       overdue: tasks.filter((task) => task.reminderState === 'overdue').length,
       today: tasks.filter((task) => task.reminderState === 'due_today').length,
       upcoming: tasks.filter((task) => task.reminderState === 'upcoming').length,
-      recurring: tasks.filter((task) => task.recurrence && task.recurrence !== 'none').length,
+      recurring: recurringTasks.length,
     }),
-    [tasks]
+    [tasks, recurringTasks]
   )
 
   async function run(id: string, action: () => Promise<unknown>) {
@@ -197,6 +215,18 @@ export function WorkspaceTaskBoard({
               <CalendarPlus /> ליומן
             </Button>
           )}
+          <Button
+            size="xs"
+            variant="ghost"
+            className="text-rose-400 hover:text-rose-500 hover:bg-rose-500/10 mr-auto"
+            onClick={() => {
+              if (confirm('האם למחוק משימה זו?')) {
+                run(task.id, () => deleteWorkspaceTaskAction(task.id))
+              }
+            }}
+          >
+            <Trash2 className="size-3" />
+          </Button>
           {busyId === task.id && <Loader2 className="size-3 animate-spin" />}
         </div>
       </article>
@@ -211,20 +241,30 @@ export function WorkspaceTaskBoard({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Badge className="bg-rose-500/15 text-rose-400">{counts.overdue} באיחור</Badge>
-          <Badge className="bg-amber-500/15 text-amber-400">{counts.today} להיום</Badge>
-          <Badge className="bg-blue-500/15 text-blue-400">{counts.upcoming} בקרוב</Badge>
-          {counts.recurring > 0 && (
-            <Badge className="bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center gap-1 font-bold">
-              <Repeat className="size-3" />
-              {counts.recurring} מחזוריות
-            </Badge>
-          )}
+      {/* Top Bar with Filter & Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/20 p-2.5 rounded-2xl border border-border/60">
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={activeTab === 'all' ? 'default' : 'ghost'}
+            className="rounded-xl font-bold"
+            onClick={() => setActiveTab('all')}
+          >
+            כל המשימות ({tasks.length})
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === 'recurring' ? 'default' : 'ghost'}
+            className="rounded-xl font-bold flex items-center gap-1.5"
+            onClick={() => setActiveTab('recurring')}
+          >
+            <Repeat className="size-3.5" />
+            משימות מחזוריות קבועות ({counts.recurring})
+          </Button>
         </div>
-        <div className="flex gap-2">
-          {!compact && (
+
+        <div className="flex items-center gap-2">
+          {activeTab === 'all' && !compact && (
             <>
               <Button size="sm" variant={view === 'board' ? 'secondary' : 'ghost'} onClick={() => setView('board')}>
                 <LayoutGrid />
@@ -240,29 +280,134 @@ export function WorkspaceTaskBoard({
         </div>
       </div>
 
-      {view === 'board' ? (
-        <div className="grid gap-4 lg:grid-cols-3">
-          {columns.map((column) => (
-            <section key={column.status} className="rounded-2xl bg-muted/30 p-3">
-              <h2 className="mb-3 flex items-center justify-between font-bold">
-                {column.label}
-                <Badge variant="outline">{tasks.filter((task) => task.status === column.status).length}</Badge>
-              </h2>
-              <div className="space-y-3">
-                {tasks
-                  .filter((task) => task.status === column.status)
-                  .map((task) => (
-                    <Card key={task.id} task={task} />
-                  ))}
-              </div>
-            </section>
-          ))}
+      {/* Counts Header for regular view */}
+      {activeTab === 'all' && (
+        <div className="flex flex-wrap gap-2">
+          <Badge className="bg-rose-500/15 text-rose-400">{counts.overdue} באיחור</Badge>
+          <Badge className="bg-amber-500/15 text-amber-400">{counts.today} להיום</Badge>
+          <Badge className="bg-blue-500/15 text-blue-400">{counts.upcoming} בקרוב</Badge>
         </div>
-      ) : (
-        <div className="grid gap-3">
-          {tasks.map((task) => (
-            <Card key={task.id} task={task} />
-          ))}
+      )}
+
+      {/* Tab 1: All Tasks Board / List */}
+      {activeTab === 'all' && (
+        view === 'board' ? (
+          <div className="grid gap-4 lg:grid-cols-3">
+            {columns.map((column) => (
+              <section key={column.status} className="rounded-2xl bg-muted/30 p-3">
+                <h2 className="mb-3 flex items-center justify-between font-bold">
+                  {column.label}
+                  <Badge variant="outline">{tasks.filter((task) => task.status === column.status).length}</Badge>
+                </h2>
+                <div className="space-y-3">
+                  {tasks
+                    .filter((task) => task.status === column.status)
+                    .map((task) => (
+                      <Card key={task.id} task={task} />
+                    ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {tasks.map((task) => (
+              <Card key={task.id} task={task} />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Tab 2: Dedicated Recurring Tasks Manager */}
+      {activeTab === 'recurring' && (
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div>
+              <h2 className="font-black text-lg flex items-center gap-2">
+                <Repeat className="size-5 text-indigo-500" />
+                ניהול משימות מחזוריות קבועות
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                משימות אלו מתחדשות אוטומטית בכל מחזור זמן שנקבע (חודשי, שבועי או יומי)
+              </p>
+            </div>
+            <Button size="sm" onClick={() => setEditor('new')} className="flex items-center gap-1">
+              <Plus className="size-3.5" /> משימה מחזורית חדשה
+            </Button>
+          </div>
+
+          {recurringTasks.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground space-y-2">
+              <Repeat className="size-10 mx-auto text-muted-foreground/40" />
+              <p className="font-bold">אין משימות מחזוריות מוגדרות כרגע</p>
+              <p className="text-xs">צור משימה עם תדירות חודשית (כגון כל 1 בחודש) או שבועית כדי לנהל אותה כאן.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {recurringTasks.map((task) => {
+                const recurrenceText = formatRecurrence(task)
+                return (
+                  <div
+                    key={task.id}
+                    className="rounded-xl border border-border/80 bg-muted/10 p-3.5 space-y-3 hover:border-indigo-500/40 transition-colors shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-black text-base">{task.title}</h3>
+                        {task.clientName && (
+                          <p className="text-xs text-indigo-400 font-semibold">{task.clientName}</p>
+                        )}
+                      </div>
+                      <Badge variant="outline">{STATUS[task.status]}</Badge>
+                    </div>
+
+                    {task.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+                    )}
+
+                    <div className="rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 flex items-center justify-between text-xs text-indigo-400 font-bold">
+                      <span className="flex items-center gap-1.5">
+                        <Repeat className="size-3.5" />
+                        {recurrenceText}
+                      </span>
+                      {task.dueAt && (
+                        <span className="text-[11px] text-muted-foreground font-normal">
+                          יעד: {new Date(task.dueAt).toLocaleDateString('he-IL')}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-border/60 pt-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Button size="xs" variant="ghost" onClick={() => setEditor(task)}>
+                          <Pencil /> עריכה
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => run(task.id, () => completeWorkspaceTaskAction(task.id))}
+                        >
+                          <Check /> השלם מחזור
+                        </Button>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="text-rose-400 hover:text-rose-500 hover:bg-rose-500/10"
+                        onClick={() => {
+                          if (confirm('האם למחוק משימה מחזורית זו?')) {
+                            run(task.id, () => deleteWorkspaceTaskAction(task.id))
+                          }
+                        }}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

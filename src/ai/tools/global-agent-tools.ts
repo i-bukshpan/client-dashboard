@@ -1,9 +1,13 @@
 /**
  * src/ai/tools/global-agent-tools.ts
  *
- * Tools for the Nehemiah OS v2 Global Executive Agent (J.A.R.V.I.S).
- * Gives the agent cross-system omniscience across all workspace clients,
- * internal finances, tasks, calendar events, emails, and spreadsheet data.
+ * Full Executive Assistant / Secretary Suite (J.A.R.V.I.S) for Nehemiah OS v2.
+ * Gives the Global Agent end-to-end execution capabilities:
+ * - Email management (send, search, reply, trash, label)
+ * - Task management (CRUD for one-off and recurring tasks)
+ * - Client management (create, update, 360 overview)
+ * - Google Drive & Sheets (create folders, create spreadsheets, read, append & update data)
+ * - Calendar & Agency Finances (events & financial reporting)
  */
 
 import { z } from 'zod'
@@ -11,17 +15,46 @@ import { tool } from 'ai'
 import {
   listWorkspaceClients,
   findWorkspaceClientByNameOrId,
+  getWorkspaceAdminDb,
+  getWorkspaceClient,
 } from '@/lib/v2/workspace-dal'
-import { getSheetRows, getSpreadsheetMeta } from '@/lib/google-sheets'
-import { listClientEmails } from '@/lib/google-gmail'
-import { listWorkspaceTasks } from '@/lib/v2/workspace-tasks'
+import {
+  getSheetRows,
+  getSpreadsheetMeta,
+  appendRows,
+  updateRange,
+  createSpreadsheet,
+  formatRange,
+} from '@/lib/google-sheets'
+import {
+  listClientEmails,
+  sendNewClientEmail,
+  replyToEmailThread,
+  trashEmailThread,
+  modifyThreadLabels,
+  listGmailLabels,
+} from '@/lib/google-gmail'
+import {
+  listWorkspaceTasks,
+  createWorkspaceTask,
+  updateWorkspaceTask,
+  deleteWorkspaceTask,
+} from '@/lib/v2/workspace-tasks'
 import { getInternalFinanceAgentContext } from '@/lib/v2/internal-finance'
-import { listWorkspaceCalendarEvents } from '@/lib/v2/google-calendar'
+import {
+  listWorkspaceCalendarEvents,
+  createWorkspaceCalendarEvent,
+} from '@/lib/v2/google-calendar'
+import { createClientFolder } from '@/lib/google-drive'
 
 export function createGlobalAgentTools() {
   return {
+    // ═════════════════════════════════════════════════════════════════════════
+    // 1. CLIENT CRM TOOLS
+    // ═════════════════════════════════════════════════════════════════════════
+
     /**
-     * Lists all registered workspace clients with basic connectivity status
+     * Lists all registered workspace clients
      */
     list_all_clients: tool({
       description: 'רשימת כל הלקוחות בסביבת העבודה (Workspace) כולל סטטוס, מייל, טלפון, וחיבורי Drive/Sheets/Gmail.',
@@ -32,7 +65,7 @@ export function createGlobalAgentTools() {
         try {
           const clients = await listWorkspaceClients()
           const filtered = (!statusFilter || statusFilter === 'all')
-            ? clients 
+            ? clients
             : clients.filter((c) => {
                 const s = (c.status || 'active').toLowerCase()
                 if (statusFilter === 'active') return s === 'active' || s === 'פעיל' || !c.status
@@ -66,7 +99,7 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * 360-degree client summary (Profile, Drive, Sheets, Open Tasks, Unread Emails, Living Context)
+     * 360-degree client summary
      */
     get_client_overview: tool({
       description: 'קבלת תמונת מצב מקיפה (360°) על לקוח לפי שם או מזהה — כולל פרטי לקוח, סטטוס אפיון, תיקיית Drive, גיליון Sheets, משימות פתוחות, מיילים ומטרות.',
@@ -137,7 +170,7 @@ export function createGlobalAgentTools() {
             client: {
               id: client.id,
               name: client.name,
-              status: client.status || 'active',
+              status: client.status || 'פעיל',
               email: client.email,
               phone: client.phone,
               address: client.address,
@@ -161,54 +194,229 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * Search and view data from any client's connected Google Sheet
+     * Creates a new client in the CRM
      */
-    lookup_client_sheet: tool({
-      description: 'קריאת נתונים מגיליון Google Sheets של לקוח ספציפי לפי שם או מזהה לקוח.',
+    create_new_client: tool({
+      description: 'הוספת לקוח חדש למערכת ה-CRM (שם, אימייל, טלפון, סטטוס, יעד ייעוץ).',
       parameters: z.object({
-        clientIdOrName: z.string().describe('מזהה הלקוח או שם הלקוח'),
-        tabName: z.string().optional().describe('שם הלשונית בגיליון. אם לא סופק יוחזרו רשימת הלשוניות והשורות הראשונות'),
-        maxRows: z.number().optional().default(30).describe('מספר שורות מקסימלי להחזרה'),
+        name: z.string().describe('שם הלקוח / החברה בעברית'),
+        email: z.string().optional().describe('כתובת אימייל'),
+        phone: z.string().optional().describe('מספר טלפון'),
+        status: z.string().optional().default('פעיל').describe('סטטוס לקוח (פעיל, ליד, מתעניין)'),
+        advisoryGoal: z.string().optional().describe('יעד ייעוץ או תחום פעילות'),
       }),
-      execute: async ({ clientIdOrName, tabName, maxRows }) => {
+      execute: async ({ name, email, phone, status, advisoryGoal }) => {
         try {
-          const clients = await listWorkspaceClients()
-          const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          const db = getWorkspaceAdminDb()
+          const { data, error } = await db
+            .from('clients')
+            .insert({
+              name: name.trim(),
+              email: email?.trim() || null,
+              phone: phone?.trim() || null,
+              status: status || 'פעיל',
+              advisory_goal: advisoryGoal || null,
+              client_context_json: {},
+              dashboard_config_json: {},
+            })
+            .select()
+            .single()
 
-          if (!target) {
-            return { error: `לא נמצא לקוח בשם או במזהה "${clientIdOrName}"` }
-          }
-
-          if (!target.google_sheet_id) {
-            return {
-              clientName: target.name,
-              clientId: target.id,
-              hasSheet: false,
-              message: `ללקוח "${target.name}" עדיין לא הוגדר גיליון Google Sheets מחובר.`,
-            }
-          }
-
-          const tabs = await getSpreadsheetMeta(target.google_sheet_id)
-          const selectedTab = tabName || tabs[0]?.title || 'Sheet1'
-          const rows = await getSheetRows(target.google_sheet_id, selectedTab)
-
-          return {
-            clientName: target.name,
-            clientId: target.id,
-            hasSheet: true,
-            availableTabs: tabs.map((t) => t.title),
-            activeTab: selectedTab,
-            rowCount: rows.length,
-            rows: rows.slice(0, maxRows),
-          }
+          if (error) throw new Error(error.message)
+          return { success: true, message: `✅ הלקוח "${name}" נוסף בהצלחה למערכת!`, client: data }
         } catch (err: any) {
-          return { error: `שגיאה בקריאת גיליון הלקוח: ${err.message}` }
+          return { error: `שגיאה ביצירת לקוח: ${err.message}` }
         }
       },
     }),
 
     /**
-     * Scan unread emails across the entire inbox or per client
+     * Updates an existing client details in CRM
+     */
+    update_client_details: tool({
+      description: 'עדכון פרטי לקוח קיים (שם, אימייל, טלפון, סטטוס, יעד ייעוץ, תווית Gmail וכו\').',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח או מזהה הלקוח'),
+        name: z.string().optional(),
+        email: z.string().optional(),
+        phone: z.string().optional(),
+        status: z.string().optional(),
+        advisoryGoal: z.string().optional(),
+        gmailLabel: z.string().optional(),
+      }),
+      execute: async ({ clientIdOrName, name, email, phone, status, advisoryGoal, gmailLabel }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
+
+          const updates: Record<string, any> = {}
+          if (name !== undefined) updates.name = name.trim()
+          if (email !== undefined) updates.email = email.trim() || null
+          if (phone !== undefined) updates.phone = phone.trim() || null
+          if (status !== undefined) updates.status = status
+          if (advisoryGoal !== undefined) updates.advisory_goal = advisoryGoal
+          if (gmailLabel !== undefined) updates.gmail_label = gmailLabel
+
+          const db = getWorkspaceAdminDb()
+          const { data, error } = await db.from('clients').update(updates).eq('id', client.id).select().single()
+          if (error) throw new Error(error.message)
+
+          return { success: true, message: `✅ פרטי הלקוח "${client.name}" עודכנו בהצלחה!`, client: data }
+        } catch (err: any) {
+          return { error: `שגיאה בעדכון פרטי לקוח: ${err.message}` }
+        }
+      },
+    }),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 2. TASK SECRETARY TOOLS (ONE-OFF & RECURRING)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Fetches tasks across the workspace with full recurring & regular breakdown
+     */
+    get_workspace_tasks: tool({
+      description: 'שליפת כל המשימות הפתוחות במערכת — מחולקות למשימות רגילות שוטפות ולמשימות מחזוריות (יומי, שבועי, חודשי).',
+      parameters: z.object({
+        clientIdOrName: z.string().optional().describe('סינון לפי לקוח ספציפי (אופציונלי)'),
+        statusFilter: z.enum(['all', 'todo', 'in_progress', 'completed', 'cancelled']).optional().default('all'),
+      }),
+      execute: async ({ clientIdOrName, statusFilter }) => {
+        try {
+          let targetClientId: string | undefined
+          if (clientIdOrName) {
+            const clients = await listWorkspaceClients()
+            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+            if (target) targetClientId = target.id
+          }
+
+          const tasks = await listWorkspaceTasks(targetClientId)
+          const filtered = statusFilter === 'all'
+            ? tasks
+            : tasks.filter((t) => t.status === statusFilter)
+
+          const regularTasks = filtered.filter((t) => !t.recurrence || t.recurrence === 'none')
+          const recurringTasks = filtered.filter((t) => t.recurrence && t.recurrence !== 'none')
+
+          return {
+            total: filtered.length,
+            regularCount: regularTasks.length,
+            recurringCount: recurringTasks.length,
+            regularTasks: regularTasks.map((t) => ({
+              id: t.id,
+              clientId: t.clientId,
+              clientName: t.clientName,
+              title: t.title,
+              status: t.status,
+              priority: t.priority,
+              dueAt: t.dueAt,
+              reminderState: t.reminderState,
+            })),
+            recurringTasks: recurringTasks.map((t) => ({
+              id: t.id,
+              clientId: t.clientId,
+              clientName: t.clientName,
+              title: t.title,
+              status: t.status,
+              priority: t.priority,
+              recurrence: t.recurrence,
+              recurrenceDay: t.recurrenceDay,
+              dueAt: t.dueAt,
+            })),
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בשליפת משימות: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Creates or updates a workspace task
+     */
+    create_or_update_workspace_task: tool({
+      description: 'יצירה או עדכון משימה בסביבת התפעול (כללית עבור נחמיה או מקושרת ללקוח ספציפי). תומך במשימות מחזוריות (למשל: כל ראשון, כל 1 בחודש, כל 10 בחודש וכו\').',
+      parameters: z.object({
+        taskId: z.string().optional().describe('מזהה משימה אם מעדכנים משימה קיימת'),
+        clientIdOrName: z.string().optional().describe('שם הלקוח או מזהה הלקוח (אם המשימה שייכת ללקוח, אחרת תישאר כללית לנחמיה)'),
+        title: z.string().describe('כותרת המשימה בעברית'),
+        description: z.string().optional().describe('תיאור המשימה או הערות'),
+        status: z.enum(['todo', 'in_progress', 'completed', 'cancelled']).optional().default('todo'),
+        priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().default('medium'),
+        dueAt: z.string().optional().describe('מועד יעד ראשון (פורמט ISO או YYYY-MM-DD)'),
+        recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional().default('none').describe('מחזוריות המשימה: none, daily, weekly, monthly, yearly'),
+        recurrenceDay: z.number().optional().describe('יום מחזוריות: 0=ראשון..6=שבת לשבועי, או 1..31 לחודשי (למשל 1 עבור 1 בחודש, 10 עבור 10 בחודש)'),
+      }),
+      execute: async (input) => {
+        try {
+          let resolvedClientId: string | null = null
+
+          if (input.clientIdOrName) {
+            const clients = await listWorkspaceClients()
+            const target = findWorkspaceClientByNameOrId(clients, input.clientIdOrName)
+            if (target) resolvedClientId = target.id
+          }
+
+          if (input.taskId) {
+            const updated = await updateWorkspaceTask(input.taskId, {
+              title: input.title,
+              description: input.description,
+              status: input.status,
+              priority: input.priority,
+              dueAt: input.dueAt,
+              recurrence: input.recurrence,
+              recurrenceDay: input.recurrenceDay,
+              clientId: resolvedClientId ?? undefined,
+            })
+            return { success: true, message: `✅ משימה "${updated.title}" עודכנה בהצלחה!`, task: updated }
+          }
+
+          const created = await createWorkspaceTask({
+            clientId: resolvedClientId,
+            title: input.title,
+            description: input.description,
+            status: input.status,
+            priority: input.priority,
+            dueAt: input.dueAt,
+            recurrence: input.recurrence,
+            recurrenceDay: input.recurrenceDay,
+          })
+
+          const recText = created.recurrence && created.recurrence !== 'none'
+            ? ` [מחזוריות: ${created.recurrence}${created.recurrenceDay !== undefined && created.recurrenceDay !== null ? ` יום ${created.recurrenceDay}` : ''}]`
+            : ''
+
+          return { success: true, message: `✅ משימה "${created.title}" נוצרה בהצלחה!${recText}`, task: created }
+        } catch (err: any) {
+          return { error: `שגיאה ביצירת/עדכון משימה: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Deletes a task by ID
+     */
+    delete_workspace_task: tool({
+      description: 'מחיקת משימה מלוח המשימות ומ-Google Sheets לפי מזהה משימה.',
+      parameters: z.object({
+        taskId: z.string().describe('מזהה המשימה למחיקה'),
+      }),
+      execute: async ({ taskId }) => {
+        try {
+          const res = await deleteWorkspaceTask(taskId)
+          return { success: true, message: `✅ המשימה נמחקה בהצלחה!`, taskId: res.id }
+        } catch (err: any) {
+          return { error: `שגיאה במחיקת משימה: ${err.message}` }
+        }
+      },
+    }),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 3. GMAIL SECRETARY TOOLS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Scan unread emails
      */
     check_unread_emails: tool({
       description: 'סריקת אימיילים שלא נקראו ב-Gmail — ברמה כללית (כל התיבה) או עבור לקוח ספציפי.',
@@ -256,7 +464,7 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * Search emails across Gmail with arbitrary query or client search
+     * Search emails across Gmail
      */
     search_emails: tool({
       description: 'חיפוש אימיילים ב-Gmail לפי מילות מפתח, שאילתה חופשית (query), שם לקוח או כתובת דוא"ל.',
@@ -290,114 +498,298 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * Aggregated task board across all clients or specific client
+     * Sends a new email via Gmail
      */
-    get_workspace_tasks: tool({
-      description: 'שליפת משימות מכלל הלקוחות או מלקוח ספציפי, כולל משימות מחזוריות (יומיות, שבועיות, חודשיות).',
+    send_email: tool({
+      description: 'שליחת אימייל חדש מכתובת ה-Gmail של נחמיה אל לקוח או נמען חיצוני.',
       parameters: z.object({
-        clientIdOrName: z.string().optional().describe('סינון לפי לקוח ספציפי (אופציונלי)'),
-        statusFilter: z.enum(['all', 'todo', 'in_progress', 'completed', 'cancelled']).optional().default('all'),
+        to: z.string().describe('כתובת אימייל הנמען (או שם לקוח, שיאותר אוטומטית)'),
+        subject: z.string().describe('נושא ההודעה בעברית'),
+        body: z.string().describe('תוכן ההודעה (טקסט עשיר או רגיל בעברית)'),
+        cc: z.string().optional().describe('נמעני CC (מופרדים בפסיק)'),
       }),
-      execute: async ({ clientIdOrName, statusFilter }) => {
+      execute: async ({ to, subject, body, cc }) => {
         try {
-          let targetClientId: string | undefined
-          if (clientIdOrName) {
+          let recipientEmail = to.trim()
+          if (!recipientEmail.includes('@')) {
             const clients = await listWorkspaceClients()
-            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
-            if (target) targetClientId = target.id
+            const client = findWorkspaceClientByNameOrId(clients, to)
+            if (client?.email) {
+              recipientEmail = client.email
+            } else {
+              return { error: `לא נמצאה כתובת אימייל עבור "${to}". אנא ציין כתובת אימייל תקינה.` }
+            }
           }
 
-          const tasks = await listWorkspaceTasks(targetClientId)
-          const filtered = statusFilter === 'all'
-            ? tasks
-            : tasks.filter((t) => t.status === statusFilter)
-
-          return {
-            total: filtered.length,
-            tasks: filtered.map((t) => ({
-              id: t.id,
-              clientId: t.clientId,
-              clientName: t.clientName,
-              title: t.title,
-              status: t.status,
-              priority: t.priority,
-              dueAt: t.dueAt,
-              recurrence: t.recurrence,
-              recurrenceDay: t.recurrenceDay,
-              reminderState: t.reminderState,
-            })),
-          }
-        } catch (err: any) {
-          return { error: `שגיאה בשליפת משימות: ${err.message}` }
-        }
-      },
-    }),
-
-    /**
-     * Creates or updates a workspace task (one-off or recurring, client-specific or general)
-     */
-    create_or_update_workspace_task: tool({
-      description: 'יצירה או עדכון משימה בסביבת התפעול (כללית עבור נחמיה או מקושרת ללקוח ספציפי). תומך במשימות מחזוריות (למשל: כל ראשון, כל 1 בחודש, כל 10 בחודש וכו\').',
-      parameters: z.object({
-        taskId: z.string().optional().describe('מזהה משימה אם מעדכנים משימה קיימת'),
-        clientIdOrName: z.string().optional().describe('שם הלקוח או מזהה הלקוח (אם המשימה שייכת ללקוח, אחרת תישאר כללית לנחמיה)'),
-        title: z.string().describe('כותרת המשימה בעברית'),
-        description: z.string().optional().describe('תיאור המשימה או הערות'),
-        status: z.enum(['todo', 'in_progress', 'completed', 'cancelled']).optional().default('todo'),
-        priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().default('medium'),
-        dueAt: z.string().optional().describe('מועד יעד ראשון (פורמט ISO או YYYY-MM-DD)'),
-        recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).optional().default('none').describe('מחזוריות המשימה: none, daily, weekly, monthly, yearly'),
-        recurrenceDay: z.number().optional().describe('יום מחזוריות: 0=ראשון..6=שבת לשבועי, או 1..31 לחודשי (למשל 1 עבור 1 בחודש, 10 עבור 10 בחודש)'),
-      }),
-      execute: async (input) => {
-        try {
-          const { createWorkspaceTask, updateWorkspaceTask } = await import('@/lib/v2/workspace-tasks')
-          let resolvedClientId: string | null = null
-
-          if (input.clientIdOrName) {
-            const clients = await listWorkspaceClients()
-            const target = findWorkspaceClientByNameOrId(clients, input.clientIdOrName)
-            if (target) resolvedClientId = target.id
-          }
-
-          if (input.taskId) {
-            const updated = await updateWorkspaceTask(input.taskId, {
-              title: input.title,
-              description: input.description,
-              status: input.status,
-              priority: input.priority,
-              dueAt: input.dueAt,
-              recurrence: input.recurrence,
-              recurrenceDay: input.recurrenceDay,
-              clientId: resolvedClientId ?? undefined,
-            })
-            return { success: true, message: `✅ משימה "${updated.title}" עודכנה בהצלחה!`, task: updated }
-          }
-
-          const created = await createWorkspaceTask({
-            clientId: resolvedClientId,
-            title: input.title,
-            description: input.description,
-            status: input.status,
-            priority: input.priority,
-            dueAt: input.dueAt,
-            recurrence: input.recurrence,
-            recurrenceDay: input.recurrenceDay,
+          const res = await sendNewClientEmail({
+            to: recipientEmail,
+            subject,
+            bodyText: body,
+            cc: cc ? cc.split(',').map((c) => c.trim()) : undefined,
           })
 
-          const recText = created.recurrence && created.recurrence !== 'none'
-            ? ` [מחזוריות: ${created.recurrence}${created.recurrenceDay !== undefined && created.recurrenceDay !== null ? ` יום ${created.recurrenceDay}` : ''}]`
-            : ''
-
-          return { success: true, message: `✅ משימה "${created.title}" נוצרה בהצלחה!${recText}`, task: created }
+          return { success: true, message: `✅ האימייל נשלח בהצלחה אל ${recipientEmail}! (נושא: "${subject}")`, messageId: res.id }
         } catch (err: any) {
-          return { error: `שגיאה ביצירת/עדכון משימה: ${err.message}` }
+          return { error: `שגיאה בשליחת אימייל: ${err.message}` }
         }
       },
     }),
 
     /**
-     * Cross-system agency finance overview
+     * Replies to an existing Gmail thread
+     */
+    reply_to_email: tool({
+      description: 'מענה והשבת אימייל לשרשור קיים ב-Gmail.',
+      parameters: z.object({
+        threadId: z.string().describe('מזהה שרשור האימייל ב-Gmail'),
+        to: z.string().describe('כתובת הנמען'),
+        subject: z.string().describe('נושא המענה'),
+        body: z.string().describe('תוכן המענה בעברית'),
+      }),
+      execute: async ({ threadId, to, subject, body }) => {
+        try {
+          const res = await replyToEmailThread({
+            threadId,
+            to,
+            subject,
+            bodyText: body,
+          })
+          return { success: true, message: `✅ התגובה נשלחה בהצלחה בשרשור!`, messageId: res.id }
+        } catch (err: any) {
+          return { error: `שגיאה במענה לאימייל: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Trashes/Deletes an email thread
+     */
+    trash_email_thread: tool({
+      description: 'העברת שרשור אימייל לאשפה ב-Gmail (מחיקה).',
+      parameters: z.object({
+        threadId: z.string().describe('מזהה השרשור ב-Gmail'),
+      }),
+      execute: async ({ threadId }) => {
+        try {
+          await trashEmailThread(threadId)
+          return { success: true, message: `✅ שרשור האימייל הועבר לאשפה בהצלחה!` }
+        } catch (err: any) {
+          return { error: `שגיאה בהעברה לאשפה: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Adds or removes a Gmail label on an email thread
+     */
+    label_email_thread: tool({
+      description: 'שיוך ומיון שרשור אימייל לתווית לקוח או הסרת תווית ב-Gmail.',
+      parameters: z.object({
+        threadId: z.string().describe('מזהה השרשור ב-Gmail'),
+        labelName: z.string().describe('שם התווית ב-Gmail (למשל: "נסמארט", "חשבוניות")'),
+        action: z.enum(['add', 'remove']).default('add'),
+      }),
+      execute: async ({ threadId, labelName, action }) => {
+        try {
+          const labels = await listGmailLabels()
+          const target = labels.find((l) => l.name.toLowerCase() === labelName.toLowerCase())
+          if (!target) {
+            return { error: `תווית בשם "${labelName}" לא נמצאה ב-Gmail. התוויות הקיימות: ${labels.map((l) => l.name).join(', ')}` }
+          }
+
+          if (action === 'add') {
+            await modifyThreadLabels(threadId, [target.id], [])
+            return { success: true, message: `✅ השרשור סווג בהצלחה תחת התווית "${labelName}"!` }
+          } else {
+            await modifyThreadLabels(threadId, [], [target.id])
+            return { success: true, message: `✅ התווית "${labelName}" הוסרה מהשרשור!` }
+          }
+        } catch (err: any) {
+          return { error: `שגיאה במיון תווית אימייל: ${err.message}` }
+        }
+      },
+    }),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 4. GOOGLE DRIVE & SHEETS SECRETARY TOOLS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Creates a Google Drive folder for a client
+     */
+    create_client_drive_folder: tool({
+      description: 'יצירת תיקיית Google Drive ייעודית עבור לקוח וקישורה ל-CRM.',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח או מזהה הלקוח'),
+        folderName: z.string().optional().describe('שם התיקייה (ברירת מחדל: שם הלקוח)'),
+      }),
+      execute: async ({ clientIdOrName, folderName }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
+
+          const nameToUse = folderName || client.name
+          const folderId = await createClientFolder(nameToUse)
+
+          const db = getWorkspaceAdminDb()
+          await db.from('clients').update({ drive_folder_id: folderId }).eq('id', client.id)
+
+          return {
+            success: true,
+            message: `✅ תיקיית Google Drive חדשה ("${nameToUse}") נוצרה וקושרה ללקוח ${client.name}!`,
+            folderId,
+          }
+        } catch (err: any) {
+          return { error: `שגיאה ביצירת תיקיית Drive: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Creates a new Google Spreadsheet for a client with custom tabs & headers
+     */
+    create_client_spreadsheet: tool({
+      description: 'יצירת גיליון Google Sheets חדש עבור לקוח (עם לשוניות ועמודות מוגדרות) ושמירתו ב-CRM ובתיקיית ה-Drive של הלקוח.',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח או מזהה הלקוח'),
+        title: z.string().describe('כותרת הגיליון בעברית'),
+        sheets: z.array(
+          z.object({
+            title: z.string().describe('שם הלשונית, למשל: "תזרים", "הכנסות", "הוצאות"'),
+            headers: z.array(z.string()).describe('כותרות העמודות בשורה הראשונה'),
+          })
+        ).describe('מבנה הלשוניות והעמודות'),
+      }),
+      execute: async ({ clientIdOrName, title, sheets }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
+
+          const spreadsheetId = await createSpreadsheet(title, sheets, client.drive_folder_id || undefined)
+
+          const db = getWorkspaceAdminDb()
+          await db.from('clients').update({ google_sheet_id: spreadsheetId }).eq('id', client.id)
+
+          return {
+            success: true,
+            message: `✅ גיליון חדש "${title}" נוצר בהצלחה וקושר ללקוח ${client.name}!`,
+            spreadsheetId,
+          }
+        } catch (err: any) {
+          return { error: `שגיאה ביצירת גיליון: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Lookup and read data from a client spreadsheet
+     */
+    lookup_client_sheet: tool({
+      description: 'קריאת נתונים מגיליון Google Sheets של לקוח ספציפי לפי שם או מזהה לקוח.',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('מזהה הלקוח או שם הלקוח'),
+        tabName: z.string().optional().describe('שם הלשונית בגיליון. אם לא סופק יוחזרו רשימת הלשוניות והשורות הראשונות'),
+        maxRows: z.number().optional().default(30).describe('מספר שורות מקסימלי להחזרה'),
+      }),
+      execute: async ({ clientIdOrName, tabName, maxRows }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+
+          if (!target) return { error: `לא נמצא לקוח בשם או במזהה "${clientIdOrName}"` }
+
+          if (!target.google_sheet_id) {
+            return {
+              clientName: target.name,
+              clientId: target.id,
+              hasSheet: false,
+              message: `ללקוח "${target.name}" עדיין לא הוגדר גיליון Google Sheets מחובר.`,
+            }
+          }
+
+          const tabs = await getSpreadsheetMeta(target.google_sheet_id)
+          const selectedTab = tabName || tabs[0]?.title || 'Sheet1'
+          const rows = await getSheetRows(target.google_sheet_id, selectedTab)
+
+          return {
+            clientName: target.name,
+            clientId: target.id,
+            hasSheet: true,
+            availableTabs: tabs.map((t) => t.title),
+            activeTab: selectedTab,
+            rowCount: rows.length,
+            rows: rows.slice(0, maxRows),
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בקריאת גיליון הלקוח: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Appends rows/data into a client spreadsheet tab
+     */
+    append_data_to_client_sheet: tool({
+      description: 'הוספת שורות ונתונים חדשים ללשונית בגיליון Google Sheets של לקוח.',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח או מזהה הלקוח'),
+        tabName: z.string().describe('שם הלשונית בגיליון להוספת הנתונים'),
+        rows: z.array(z.array(z.string())).describe('מערך של שורות ערכים להוספה'),
+      }),
+      execute: async ({ clientIdOrName, tabName, rows }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
+          if (!client.google_sheet_id) return { error: `ללקוח "${client.name}" אין גיליון מקושר` }
+
+          const res = await appendRows(client.google_sheet_id, tabName, rows)
+          return {
+            success: true,
+            message: `✅ נוספו בהצלחה ${res.updatedRows} שורות ללשונית "${tabName}" בגיליון של ${client.name}!`,
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בהוספת נתונים לגיליון: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Updates specific cells/range in client spreadsheet
+     */
+    update_client_sheet_range: tool({
+      description: 'עדכון תאים וטווח נתונים בגיליון Google Sheets של לקוח (למשל: תא בודד או טווח A2:D2).',
+      parameters: z.object({
+        clientIdOrName: z.string().describe('שם הלקוח או מזהה הלקוח'),
+        tabName: z.string().describe('שם הלשונית'),
+        range: z.string().describe('טווח התאים, למשל: "A2:C2" או "B5"'),
+        values: z.array(z.array(z.string())).describe('מערך הערכים החדשים'),
+      }),
+      execute: async ({ clientIdOrName, tabName, range, values }) => {
+        try {
+          const clients = await listWorkspaceClients()
+          const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+          if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
+          if (!client.google_sheet_id) return { error: `ללקוח "${client.name}" אין גיליון מקושר` }
+
+          const fullRange = formatRange(tabName, range)
+          await updateRange(client.google_sheet_id, fullRange, values)
+
+          return { success: true, message: `✅ טווח ${range} בלשונית "${tabName}" עודכן בהצלחה בגיליון של ${client.name}!` }
+        } catch (err: any) {
+          return { error: `שגיאה בעדכון תאים בגיליון: ${err.message}` }
+        }
+      },
+    }),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 5. CALENDAR & AGENCY FINANCE TOOLS
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Agency finance summary
      */
     get_agency_finance_summary: tool({
       description: 'תמונת מצב פיננסית פנימית של סוכנות נחמיה (הכנסות, הוצאות, ריטיינרים, חשבוניות).',
@@ -413,7 +805,7 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * Upcoming calendar events across agency
+     * Upcoming calendar events
      */
     get_calendar_overview: tool({
       description: 'אירועים ופגישות קרובות ביומן Google Calendar.',
@@ -440,6 +832,52 @@ export function createGlobalAgentTools() {
           }
         } catch (err: any) {
           return { error: `שגיאה בשליפת יומן: ${err.message}` }
+        }
+      },
+    }),
+
+    /**
+     * Creates a new calendar meeting or event
+     */
+    create_calendar_event: tool({
+      description: 'קביעת פגישה או אירוע חדש ב-Google Calendar של נחמיה (כולל קישור ללקוח ושליחת תזכורות).',
+      parameters: z.object({
+        title: z.string().describe('כותרת הפגישה או האירוע'),
+        startDateTime: z.string().describe('מועד התחלה (פורמט ISO או YYYY-MM-DDTHH:mm:ss)'),
+        endDateTime: z.string().optional().describe('מועד סיום (אם לא סופק יוגדר לשעה אחת)'),
+        clientIdOrName: z.string().optional().describe('שם הלקוח או מזהה הלקוח (אם הפגישה משויכת ללקוח)'),
+        description: z.string().optional().describe('תיאור הפגישה או הערות'),
+        attendees: z.array(z.string()).optional().describe('רשימת אימיילים של משתתפים'),
+      }),
+      execute: async ({ title, startDateTime, endDateTime, clientIdOrName, description, attendees }) => {
+        try {
+          let resolvedClientId: string | null = null
+          if (clientIdOrName) {
+            const clients = await listWorkspaceClients()
+            const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
+            if (target) resolvedClientId = target.id
+          }
+
+          const start = new Date(startDateTime)
+          const end = endDateTime ? new Date(endDateTime) : new Date(start.getTime() + 60 * 60 * 1000)
+
+          const event = await createWorkspaceCalendarEvent({
+            title,
+            description: description || null,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            clientId: resolvedClientId,
+            attendees: attendees || [],
+            reminders: [30],
+          })
+
+          return {
+            success: true,
+            message: `✅ הפגישה "${title}" נקבעה בהצלחה ביומן ל-${start.toLocaleString('he-IL')}!`,
+            eventId: event.id,
+          }
+        } catch (err: any) {
+          return { error: `שגיאה בקביעת פגישה ביומן: ${err.message}` }
         }
       },
     }),

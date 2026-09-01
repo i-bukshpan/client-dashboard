@@ -289,3 +289,13 @@ export async function convertWorkspaceTaskToCalendar(taskId: string): Promise<Wo
   const event = await createWorkspaceCalendarEvent({ title: found.task.title, description: found.task.description, start: start.toISOString(), end: addMinutes(start, 60).toISOString(), clientId: found.task.clientId, reminders: [clientSettings?.reminderDefaultMinutes ?? found.task.reminderMinutes], attendees: [] })
   return updateWorkspaceTask(taskId, { calendarEventId: event.id })
 }
+
+export async function deleteWorkspaceTask(taskId: string): Promise<{ success: boolean; id: string }> {
+  try {
+    await requireWorkspaceAdmin()
+  } catch {}
+  const found = await findTask(taskId)
+  const { clearRange } = await import('@/lib/google-sheets')
+  await clearRange(found.settings.workbookId, formatRange(TASKS_TAB, `A${found.rowNumber}:Q${found.rowNumber}`))
+  return { success: true, id: taskId }
+}

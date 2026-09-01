@@ -34,7 +34,27 @@ export async function convertTaskToCalendarAction(taskId: string) {
   catch (error: unknown) { return failure(error, 'המרת המשימה לאירוע נכשלה') }
 }
 
+export async function deleteWorkspaceTaskAction(taskId: string) {
+  try {
+    await requireWorkspaceAdmin()
+    const id = z.string().min(8).max(100).parse(taskId)
+    const { deleteWorkspaceTask } = await import('@/lib/v2/workspace-tasks')
+    const res = await deleteWorkspaceTask(id)
+    refresh()
+    return { success: true as const, ...res }
+  } catch (error: unknown) {
+    return failure(error, 'מחיקת המשימה נכשלה')
+  }
+}
+
 export async function saveClientWorkspaceSettingsAction(raw: unknown) {
-  try { await requireWorkspaceAdmin(); const input = clientWorkspaceSettingsSchema.parse(raw); const settings = await saveClientWorkspaceSettings(input); revalidatePath(`/workspace/clients/${settings.clientId}`); return { success: true as const, settings } }
-  catch (error: unknown) { return failure(error, 'שמירת הגדרות הלקוח נכשלה') }
+  try {
+    await requireWorkspaceAdmin()
+    const input = clientWorkspaceSettingsSchema.parse(raw)
+    const settings = await saveClientWorkspaceSettings(input)
+    revalidatePath(`/workspace/clients/${settings.clientId}`)
+    return { success: true as const, settings }
+  } catch (error: unknown) {
+    return failure(error, 'שמירת הגדרות הלקוח נכשלה')
+  }
 }
