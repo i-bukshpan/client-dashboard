@@ -6,18 +6,19 @@
  * Server Actions for on-demand Daily Brief generation.
  */
 
-import { generateGlobalDailyBrief, type GlobalDailyBrief } from '@/lib/v2/global-daily-brief'
+import { getOrGenerateGlobalDailyBrief, type GlobalDailyBrief } from '@/lib/v2/global-daily-brief'
 import { requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
 
-export async function fetchGlobalDailyBriefAction(): Promise<{
+export async function fetchGlobalDailyBriefAction(forceRefresh = false): Promise<{
   success: boolean
   data?: GlobalDailyBrief
+  cached?: boolean
   error?: string
 }> {
   try {
     await requireWorkspaceAdmin()
-    const brief = await generateGlobalDailyBrief()
-    return { success: true, data: brief }
+    const { brief, cached } = await getOrGenerateGlobalDailyBrief(forceRefresh)
+    return { success: true, data: brief, cached }
   } catch (error: any) {
     console.error('[fetchGlobalDailyBriefAction] Error:', error)
     return {

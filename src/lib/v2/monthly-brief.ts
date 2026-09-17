@@ -115,11 +115,16 @@ async function ensureBriefTab(spreadsheetId: string): Promise<void> {
 }
 
 export async function listMonthlyBriefs(clientId: string): Promise<MonthlyBriefRecord[]> {
-  const client = await getWorkspaceClient(clientId)
-  if (!client.google_sheet_id) return []
-  const tabs = await getSpreadsheetMeta(client.google_sheet_id)
-  if (!tabs.some((tab) => tab.title === BRIEFS_TAB)) return []
-  return (await getSheetRows(client.google_sheet_id, BRIEFS_TAB)).map((row) => briefFromRow(client.id, client.name, row)).sort((a, b) => b.reportMonth.localeCompare(a.reportMonth))
+  try {
+    const client = await getWorkspaceClient(clientId)
+    if (!client.google_sheet_id) return []
+    const tabs = await getSpreadsheetMeta(client.google_sheet_id)
+    if (!tabs.some((tab) => tab.title === BRIEFS_TAB)) return []
+    return (await getSheetRows(client.google_sheet_id, BRIEFS_TAB)).map((row) => briefFromRow(client.id, client.name, row)).sort((a, b) => b.reportMonth.localeCompare(a.reportMonth))
+  } catch (err) {
+    console.warn('[monthly-brief] listMonthlyBriefs failed:', err)
+    return []
+  }
 }
 
 async function saveBrief(brief: MonthlyBriefRecord): Promise<MonthlyBriefRecord> {

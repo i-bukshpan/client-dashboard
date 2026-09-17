@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   },
 }
 
+import Script from 'next/script'
 import { Toaster } from 'sonner'
 import { AuthRecoveryListener } from '@/components/auth/AuthRecoveryListener'
 
@@ -37,17 +38,19 @@ export default function RootLayout({
         <Toaster position="bottom-left" richColors />
         
         {/* Service Worker Registration */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/sw.js').then(function() {
-                console.log('PWA Ready');
-              }).catch(function(err) {
-                console.error('PWA Error', err);
+        <Script id="sw-registration" strategy="afterInteractive">
+          {`
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function() {
+                  console.log('PWA Ready');
+                }).catch(function(err) {
+                  console.error('PWA Error', err);
+                });
               });
-            });
-          }
-        `}} />
+            }
+          `}
+        </Script>
       </body>
     </html>
   )

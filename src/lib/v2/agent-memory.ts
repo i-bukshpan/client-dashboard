@@ -130,11 +130,30 @@ export async function deleteClientLivingMemory(
 
 /**
  * Formats living memory items into a readable, high-signal Markdown block for the AI Agent.
+ * Prioritizes high-importance items and recent facts, truncating to maxItems to prevent prompt bloat.
  */
-export function formatLivingMemoryForPrompt(memories: AgentMemoryItem[]): string {
+export function formatLivingMemoryForPrompt(
+  memories: AgentMemoryItem[],
+  maxItems: number = 15
+): string {
   if (!memories || memories.length === 0) {
     return 'אין עדיין זיכרונות מצטברים עבור לקוח זה. תוכל להשתמש בכלי `remember_client_fact` כדי לתעד עובדות והחלטות חדשות.'
   }
+
+  const importanceWeight: Record<MemoryImportance, number> = {
+    high: 3,
+    medium: 2,
+    low: 1,
+  }
+
+  // Sort by importance descending, then recency descending
+  const sorted = [...memories].sort((a, b) => {
+    const weightDiff = (importanceWeight[b.importance] || 2) - (importanceWeight[a.importance] || 2)
+    if (weightDiff !== 0) return weightDiff
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
+  const capped = sorted.slice(0, maxItems)
 
   const categoryLabels: Record<MemoryCategory, string> = {
     decision: '📌 החלטות וסיכומי דברים',
@@ -146,7 +165,7 @@ export function formatLivingMemoryForPrompt(memories: AgentMemoryItem[]): string
   }
 
   const grouped: Partial<Record<MemoryCategory, AgentMemoryItem[]>> = {}
-  for (const item of memories) {
+  for (const item of capped) {
     if (!grouped[item.category]) grouped[item.category] = []
     grouped[item.category]!.push(item)
   }
@@ -162,5 +181,10 @@ export function formatLivingMemoryForPrompt(memories: AgentMemoryItem[]): string
     sections.push(`### ${title}\n${lines.join('\n')}`)
   }
 
+  if (memories.length > maxItems) {
+    sections.push(`_ועוד ${memories.length - maxItems} עובדות היסטוריות פחות קריטיות בארכיון הזיכרון._`)
+  }
+
   return sections.join('\n\n')
 }
+

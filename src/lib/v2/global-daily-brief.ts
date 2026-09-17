@@ -19,10 +19,20 @@ export interface GlobalDailyBrief {
     pendingOnboarding: number
     dueTodayTasksCount: number
     overdueTasksCount: number
+    routinesTodayCount: number
     upcomingEventsCount: number
     unreadEmailsCount: number
     actionRequiredCount: number
   }
+  routinesToday: Array<{
+    id: string
+    clientId: string
+    clientName: string
+    title: string
+    dayOfMonth: number
+    frequency: string
+    assignedRole: string
+  }>
   unreadEmails: Array<{
     threadId: string
     subject: string
@@ -116,7 +126,25 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
     console.warn('[global-daily-brief] Failed to load workspace tasks:', error)
   }
 
-  // 3. Fetch Calendar Events for Today & Upcoming 7 Days
+  // 3. Fetch Today's Recurring Routines
+  let routinesToday: GlobalDailyBrief['routinesToday'] = []
+  try {
+    const { listTodayRoutinesAcrossWorkspace } = await import('@/lib/v2/client-ecosystem-dal')
+    const rList = await listTodayRoutinesAcrossWorkspace(now.getDate(), { skipAdminCheck: true })
+    routinesToday = rList.map((r) => ({
+      id: r.id,
+      clientId: r.clientId,
+      clientName: r.clientName || 'לקוח',
+      title: r.title,
+      dayOfMonth: r.dayOfMonth,
+      frequency: r.frequency,
+      assignedRole: r.assignedRole,
+    }))
+  } catch (error) {
+    console.warn('[global-daily-brief] Failed to load today routines:', error)
+  }
+
+  // 4. Fetch Calendar Events for Today & Upcoming 7 Days
   const startOfDay = new Date(now)
   startOfDay.setHours(0, 0, 0, 0)
   const endOfWindow = new Date(now)
@@ -241,6 +269,9 @@ export async function generateGlobalDailyBrief(): Promise<GlobalDailyBrief> {
 תאריך היום: ${formattedDate}
 סה"כ לקוחות: ${clients.length} (מאופיינים: ${onboardedCount}, ממתינים לאפיון: ${pendingOnboardingCount})
 
+שגרות ומשימות מחזוריות להיום (${routinesToday.length}):
+${routinesToday.map((r) => `- [שגרה: ${r.clientName}] ${r.title} (אחראי: ${r.assignedRole}, יום ${r.dayOfMonth})`).join('\n') || 'אין שגרות קבועות להיום'}
+
 מיילים שלא נקראו בתיבה (${totalUnreadEmailsCount}):
 ${unreadEmailsList.map((m) => `- מ:${m.from} | נושא: "${m.subject}" ${m.clientName ? `[לקוח: ${m.clientName}]` : ''}`).join('\n') || 'אין מיילים לא נקראו'}
 
@@ -267,7 +298,7 @@ ${financialAlerts.map((a) => `- ${a.clientName}: ${a.title}`).join('\n') || 'ה�
 תפקידך לנסח בריף בוקר מנהלים (Executive Morning Brief) אקטיבי, חד, מקצועי ופרקטי בעברית.
 הבריף צריך לכלול:
 1. **תמונת מצב מנהלים קצרה וחדה (Executive Overview)**.
-2. **דגשים לפעולה מיידית (Action Items)** ממוינים לפי עדיפות: מיילים דחופים, משימות באיחור, פגישות קרובות.
+2. **דגשים לפעולה מיידית (Action Items)** ממוינים לפי עדיפות: שגרות קבועות להיום, מיילים דחופים, משימות באיחור, פגישות קרובות.
 3. **התראות לקוחות ופיננסים**.
 טון נמרץ, ישיר, ממוקד החלטות, תוך שימוש באימוג'ים אלגנטיים והדגשות bold על שמות ומספרים.`,
       prompt: `צור בריף מנהלים יומי על בסיס הנתונים הבאים:\n${briefContextPrompt}`,
@@ -276,7 +307,7 @@ ${financialAlerts.map((a) => `- ${a.clientName}: ${a.title}`).join('\n') || 'ה�
   } catch (error) {
     console.warn('[global-daily-brief] AI text generation failed, using fallback:', error)
     aiSummaryMarkdown = `### 📋 תמונת מצב יומית
-היום יש **${dueTodayTasks.length}** משימות לביצוע, **${overdueTasks.length}** משימות באיחור, **${totalUnreadEmailsCount}** מיילים לא נקראו, ו-**${calendarEvents.length}** אירועים ביומן.
+היום יש **${dueTodayTasks.length}** משימות לביצוע, **${routinesToday.length}** שגרות מחזוריות להיום, **${overdueTasks.length}** משימות באיחור, **${totalUnreadEmailsCount}** מיילים לא נקראו, ו-**${calendarEvents.length}** אירועים ביומן.
 ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור בדחיפות.**` : '✅ אין משימות באיחור.'}`
   }
 
@@ -287,12 +318,21 @@ ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור 
     ``,
     `📊 *מבט על:*`,
     `• לקוחות פעילים: ${clients.length}`,
+    `• שגרות מחזוריות להיום: ${routinesToday.length}`,
     `• מיילים שלא נקראו: ${totalUnreadEmailsCount}`,
     `• משימות להיום: ${dueTodayTasks.length}`,
     `• משימות באיחור: ${overdueTasks.length}`,
     `• פגישות השבוע: ${calendarEvents.length}`,
     ``,
   ]
+
+  if (routinesToday.length > 0) {
+    whatsappLines.push(`🔄 *שגרות מחזוריות להיום:*`)
+    routinesToday.slice(0, 5).forEach((r) => {
+      whatsappLines.push(`• [${r.clientName}] ${r.title} (${r.assignedRole})`)
+    })
+    whatsappLines.push(``)
+  }
 
   if (totalUnreadEmailsCount > 0 && unreadEmailsList.length > 0) {
     whatsappLines.push(`✉️ *מיילים הממתינים למענה:*`)
@@ -348,10 +388,12 @@ ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור 
       pendingOnboarding: pendingOnboardingCount,
       dueTodayTasksCount: dueTodayTasks.length,
       overdueTasksCount: overdueTasks.length,
+      routinesTodayCount: routinesToday.length,
       upcomingEventsCount: calendarEvents.length,
       unreadEmailsCount: totalUnreadEmailsCount,
-      actionRequiredCount: overdueTasks.length + financialAlerts.length + totalUnreadEmailsCount,
+      actionRequiredCount: overdueTasks.length + routinesToday.length + financialAlerts.length + totalUnreadEmailsCount,
     },
+    routinesToday,
     unreadEmails: unreadEmailsList,
     tasks: {
       overdue: overdueTasks.map((t) => ({ id: t.id, title: t.title, clientName: t.clientName, dueAt: t.dueAt, priority: t.priority })),
@@ -364,5 +406,101 @@ ${overdueTasks.length > 0 ? `⚠️ **יש לטפל במשימות באיחור 
     aiSummaryMarkdown,
     whatsappFormattedText,
   }
+}
+
+// ── In-Memory & Database Cache Layer ──────────────────────────────────────────
+
+interface CachedGlobalDailyBrief {
+  data: GlobalDailyBrief
+  generatedAt: number
+  dateKey: string // YYYY-MM-DD
+}
+
+let memoryCachedDailyBrief: CachedGlobalDailyBrief | null = null
+
+/**
+ * Returns the cached Global Daily Brief if available and fresh (< 4 hours old, same day),
+ * or generates and persists a new one.
+ */
+export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promise<{
+  brief: GlobalDailyBrief
+  cached: boolean
+}> {
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+  const fourHoursMs = 1000 * 60 * 60 * 4
+
+  // 1. In-memory cache hit
+  if (!forceRefresh && memoryCachedDailyBrief) {
+    const isSameDay = memoryCachedDailyBrief.dateKey === todayKey
+    const isRecent = Date.now() - memoryCachedDailyBrief.generatedAt < fourHoursMs
+    if (isSameDay && isRecent) {
+      return { brief: memoryCachedDailyBrief.data, cached: true }
+    }
+  }
+
+  // 2. Database cache hit in v3_notebook_artifacts
+  if (!forceRefresh) {
+    try {
+      const db = getWorkspaceAdminDb()
+      const { data: dbArtifacts } = await db
+        .from('v3_notebook_artifacts')
+        .select('*')
+        .eq('artifact_type', 'brief')
+        .is('client_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (dbArtifacts && dbArtifacts.length > 0) {
+        const latest = dbArtifacts[0]
+        const briefData = latest.content_json as unknown as GlobalDailyBrief
+        if (briefData && briefData.generatedAt) {
+          const briefDateKey = new Date(briefData.generatedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+          const ageMs = Date.now() - new Date(briefData.generatedAt).getTime()
+          if (briefDateKey === todayKey && ageMs < fourHoursMs) {
+            memoryCachedDailyBrief = {
+              data: briefData,
+              generatedAt: new Date(briefData.generatedAt).getTime(),
+              dateKey: briefDateKey,
+            }
+            return { brief: briefData, cached: true }
+          }
+        }
+      }
+    } catch (dbCacheErr) {
+      console.warn('[global-daily-brief] Error checking DB brief cache:', dbCacheErr)
+    }
+  }
+
+  // 3. Generate fresh brief
+  const freshBrief = await generateGlobalDailyBrief()
+
+  // Save to memory cache
+  memoryCachedDailyBrief = {
+    data: freshBrief,
+    generatedAt: Date.now(),
+    dateKey: todayKey,
+  }
+
+  // Persist to DB cache asynchronously
+  try {
+    const db = getWorkspaceAdminDb()
+    await db.from('v3_notebook_artifacts').insert({
+      artifact_type: 'brief',
+      client_id: null,
+      title: `בריף מנהלים יומי — ${freshBrief.formattedDate}`,
+      content_json: freshBrief as any,
+      content_md: freshBrief.aiSummaryMarkdown,
+      metadata: {
+        generatedAt: freshBrief.generatedAt,
+        stats: freshBrief.stats,
+        isAutoCached: true,
+      },
+      is_pinned: false,
+    })
+  } catch (saveErr) {
+    console.warn('[global-daily-brief] Error saving brief to v3_notebook_artifacts:', saveErr)
+  }
+
+  return { brief: freshBrief, cached: false }
 }
 

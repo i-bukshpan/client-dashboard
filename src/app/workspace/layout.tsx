@@ -6,13 +6,11 @@
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck, Sun, Mail } from 'lucide-react'
+import { TrendingUp, Users, ArrowLeft, CalendarDays, WalletCards, ClipboardCheck, Sun, Mail, BookOpen } from 'lucide-react'
 import {
   requireWorkspaceAdmin,
   WorkspaceAccessError,
 } from '@/lib/v2/workspace-dal'
-
-import { GlobalAgentPanel } from '@/components/workspace/GlobalAgentPanel'
 
 export default async function WorkspaceLayout({
   children,
@@ -43,7 +41,7 @@ export default async function WorkspaceLayout({
           <div className="leading-none">
             <p className="font-black text-foreground text-sm">Nehemiah OS</p>
             <p className="text-[10px] text-muted-foreground font-medium tracking-wide">
-              v2 · Workspace
+              v3 · Notebook Workspace
             </p>
           </div>
         </Link>
@@ -53,11 +51,11 @@ export default async function WorkspaceLayout({
         {/* Nav links */}
         <nav className="flex items-center gap-1">
           <Link
-            href="/workspace/brief"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            href="/workspace/notebook"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 transition-colors"
           >
-            <Sun className="w-3.5 h-3.5 text-amber-500" />
-            בריף יומי
+            <BookOpen className="w-3.5 h-3.5" />
+            מחברת
           </Link>
           <Link
             href="/workspace/clients"
@@ -112,9 +110,6 @@ export default async function WorkspaceLayout({
       <main className="flex-1 overflow-auto">
         {children}
       </main>
-
-      {/* Global AI Executive Assistant (J.A.R.V.I.S) */}
-      <GlobalAgentPanel />
     </div>
   )
 }

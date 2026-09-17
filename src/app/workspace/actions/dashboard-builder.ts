@@ -9,7 +9,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { getSpreadsheetMeta, getSheetData, formatRange } from '@/lib/google-sheets'
-import { getWorkspaceAdminDb, getWorkspaceClient, requireWorkspaceAdmin } from '@/lib/v2/workspace-dal'
+import {
+  getWorkspaceAdminDb,
+  getWorkspaceClient,
+  parseWorkspaceClientId,
+  requireWorkspaceAdmin,
+} from '@/lib/v2/workspace-dal'
 import { dashboardConfigSchema } from '@/lib/v2/dashboard-schema'
 import type { DashboardConfig, DashboardWidget } from '@/types/dashboard'
 
@@ -28,28 +33,30 @@ export async function getSheetTabsWithHeadersAction(clientId: string): Promise<{
 }> {
   try {
     await requireWorkspaceAdmin()
-    const client = await getWorkspaceClient(clientId)
+    const validId = parseWorkspaceClientId(clientId)
+    const client = await getWorkspaceClient(validId)
     if (!client.google_sheet_id) {
       return { success: false, tabs: [], error: 'לא מוגדר גיליון Google Sheets ללקוח' }
     }
 
     const meta = await getSpreadsheetMeta(client.google_sheet_id)
-    const tabs: SheetTabHeaderInfo[] = []
+    const eligibleTabs = meta.filter((tab) => tab.title !== 'בריפים חודשיים')
 
-    for (const tab of meta) {
-      if (tab.title === 'בריפים חודשיים') continue
-      try {
-        const rawData = await getSheetData(client.google_sheet_id, formatRange(tab.title, 'A1:ZZ1'))
-        const headers = (rawData[0] || []).map((h) => String(h).trim()).filter(Boolean)
-        tabs.push({
-          title: tab.title,
-          headers,
-        })
-      } catch (err) {
-        console.warn(`[dashboard-builder] Failed to read headers for tab ${tab.title}:`, err)
-        tabs.push({ title: tab.title, headers: [] })
-      }
-    }
+    const tabs: SheetTabHeaderInfo[] = await Promise.all(
+      eligibleTabs.map(async (tab) => {
+        try {
+          const rawData = await getSheetData(client.google_sheet_id!, formatRange(tab.title, 'A1:ZZ1'))
+          const headers = (rawData[0] || []).map((h) => String(h).trim()).filter(Boolean)
+          return {
+            title: tab.title,
+            headers,
+          }
+        } catch (err) {
+          console.warn(`[dashboard-builder] Failed to read headers for tab ${tab.title}:`, err)
+          return { title: tab.title, headers: [] }
+        }
+      })
+    )
 
     return { success: true, tabs }
   } catch (error: unknown) {
@@ -70,17 +77,18 @@ export async function saveDashboardConfigAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await requireWorkspaceAdmin()
+    const validId = parseWorkspaceClientId(clientId)
     const validated = dashboardConfigSchema.parse(config)
 
     const db = getWorkspaceAdminDb()
     const { error } = await db
       .from('clients')
       .update({ dashboard_config_json: validated })
-      .eq('id', clientId)
+      .eq('id', validId)
 
     if (error) throw new Error(error.message)
 
-    revalidatePath(`/workspace/clients/${clientId}`)
+    revalidatePath(`/workspace/clients/${validId}`)
     return { success: true }
   } catch (error: unknown) {
     return {
@@ -98,7 +106,8 @@ export async function getCurrentDashboardConfigAction(
 ): Promise<{ success: boolean; config: DashboardConfig | null; error?: string }> {
   try {
     await requireWorkspaceAdmin()
-    const client = await getWorkspaceClient(clientId)
+    const validId = parseWorkspaceClientId(clientId)
+    const client = await getWorkspaceClient(validId)
     const parsed = dashboardConfigSchema.safeParse(client.dashboard_config_json)
     return {
       success: true,

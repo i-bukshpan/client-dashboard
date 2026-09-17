@@ -2,6 +2,7 @@ import 'server-only'
 
 import { google } from 'googleapis'
 import type { JWT, OAuth2Client } from 'google-auth-library'
+import { decryptSecret } from '@/lib/v2/token-crypto'
 
 export const V2_GOOGLE_SCOPES = {
   DRIVE: 'https://www.googleapis.com/auth/drive',
@@ -21,6 +22,10 @@ function normalizedPrivateKey(): string | null {
   return process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n') ?? null
 }
 
+function hasServiceAccount(): boolean {
+  return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && normalizedPrivateKey())
+}
+
 function createOAuthClient(): OAuth2Client | null {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
@@ -32,7 +37,9 @@ function createOAuthClient(): OAuth2Client | null {
     clientSecret,
     process.env.GOOGLE_REDIRECT_URI ?? process.env.NEXT_PUBLIC_APP_URL
   )
-  client.setCredentials({ refresh_token: refreshToken })
+  const decrypted = decryptSecret(refreshToken)
+  if (!decrypted) return null
+  client.setCredentials({ refresh_token: decrypted })
   return client
 }
 
@@ -56,16 +63,32 @@ function createServiceAccount(scopes: V2GoogleScope[]): JWT {
 /** Creates a fresh auth client per operation; no credentials are shared across requests. */
 export function createV2GoogleAuth(
   scopes: V2GoogleScope[],
-  options: { requireOAuth?: boolean } = {}
+  options: { requireOAuth?: boolean; preferOAuth?: boolean } = {}
 ): V2GoogleAuthResult {
+  const serviceAccountAvailable = hasServiceAccount()
+
+  // 1. If Service Account is available and OAuth is not explicitly required or preferred,
+  // use Service Account (reliable, non-expiring server-to-server enterprise credentials)
+  if (serviceAccountAvailable && !options.preferOAuth && !options.requireOAuth) {
+    return { auth: createServiceAccount(scopes), mode: 'service-account' }
+  }
+
+  // 2. Try OAuth client if available
   const oauth = createOAuthClient()
   if (oauth) return { auth: oauth, mode: 'oauth' }
+
+  // 3. Fall back to Service Account if available
+  if (serviceAccountAvailable) {
+    return { auth: createServiceAccount(scopes), mode: 'service-account' }
+  }
 
   if (options.requireOAuth) {
     throw new Error('[v2/google-auth] This operation requires Nehemiah OAuth credentials')
   }
 
-  return { auth: createServiceAccount(scopes), mode: 'service-account' }
+  throw new Error(
+    '[v2/google-auth] Configure GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY or GOOGLE_OAUTH_*'
+  )
 }
 
 export function createV2DriveClient() {
@@ -83,7 +106,8 @@ export function createV2SheetsClient() {
 
 export function createV2CalendarClient() {
   const { auth } = createV2GoogleAuth([V2_GOOGLE_SCOPES.CALENDAR], {
-    requireOAuth: !process.env.GOOGLE_SERVICE_ACCOUNT_SUBJECT,
+    requireOAuth: !hasServiceAccount(),
   })
   return google.calendar({ version: 'v3', auth })
 }
+

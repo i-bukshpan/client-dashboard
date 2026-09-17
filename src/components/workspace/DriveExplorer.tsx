@@ -39,7 +39,7 @@ import type { ClientDriveFile as DriveFile } from '@/lib/workspace-utils'
 import { formatFileSize } from '@/lib/workspace-utils'
 import { format } from 'date-fns'
 import { he } from 'date-fns/locale'
-import { linkSheetAction, uploadFileToDriveAction } from '@/app/admin/crm/[id]/actions-workspace'
+import { linkSheetAction, uploadFileToDriveAction } from '@/app/workspace/actions/drive-sheets'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 

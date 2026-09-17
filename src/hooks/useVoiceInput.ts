@@ -79,8 +79,12 @@ function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor 
 export function useVoiceInput(options: UseVoiceInputOptions): UseVoiceInputReturn {
   const { lang = 'he-IL', continuous = false, onResult, onError } = options
   const [isListening, setIsListening] = useState(false)
+  const [isSupported, setIsSupported] = useState(false)
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null)
-  const isSupported = typeof window !== 'undefined' && !!getSpeechRecognitionConstructor()
+
+  useEffect(() => {
+    setIsSupported(!!getSpeechRecognitionConstructor())
+  }, [])
 
   // Stable callback refs to avoid re-creating the recognition instance
   const onResultRef = useRef(onResult)

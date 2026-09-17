@@ -149,7 +149,7 @@ export function MonthlyBriefPanel({ clientId, briefs }: { clientId: string; brie
 
       {!current ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
-          טרם נוצר בריף חודשי לחודש זה. לחץ על "יצירת בריף" כדי להפיק.
+          טרם נוצר בריף חודשי לחודש זה. לחץ על &quot;יצירת בריף&quot; כדי להפיק.
         </div>
       ) : (
         <article className="space-y-5 rounded-2xl border border-border bg-card p-6">

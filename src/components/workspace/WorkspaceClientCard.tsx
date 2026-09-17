@@ -145,9 +145,9 @@ export function WorkspaceClientCard({ client }: Props) {
             </div>
 
             {client.email && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5" dir="ltr">
+              <bdi dir="ltr" className="text-xs text-muted-foreground truncate mt-0.5 font-mono select-all block text-right">
                 {client.email}
-              </p>
+              </bdi>
             )}
 
             {/* Workspace status badges */}

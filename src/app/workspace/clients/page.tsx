@@ -39,13 +39,13 @@ export default async function WorkspaceClientsPage() {
               {pendingOnboarding.length} לקוח{pendingOnboarding.length !== 1 ? 'ות' : ''} ממתינ{pendingOnboarding.length !== 1 ? 'ים' : ''} לאפיון ראשוני
             </p>
             <p className="text-xs text-amber-700 mt-0.5">
-              הסוכן טרם למד על הלקוחות הבאים. פתח כל לקוח ועבור לטאב AI Agent להתחלת תהליך האפיון.
+              הסוכן טרם למד על הלקוחות הבאים. פתח כל לקוח ועבור למחברת AI להתחלת תהליך האפיון.
             </p>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {pendingOnboarding.slice(0, 8).map((c) => (
                 <Link
                   key={c.id}
-                  href={`/workspace/clients/${c.id}?tab=ai`}
+                  href={`/workspace/clients/${c.id}/notebook`}
                   className="text-[11px] px-2.5 py-1 rounded-full bg-white border border-amber-300 text-amber-700 font-semibold hover:bg-amber-100 transition-colors"
                 >
                   {c.name}

@@ -23,6 +23,11 @@ import {
   Brain,
   MessageSquare,
   Loader2,
+  Volume2,
+  VolumeX,
+  Bot,
+  CalendarClock,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,18 +48,98 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  const [isFromCache, setIsFromCache] = useState<boolean>(false)
 
-  const loadBrief = useCallback(async (isSilent = false) => {
+  const toggleAudioBrief = useCallback(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.error('הדפדפן אינו תומך בהקראה קולית')
+      return
+    }
+
+    if (isPlayingAudio) {
+      window.speechSynthesis.cancel()
+      setIsPlayingAudio(false)
+      return
+    }
+
+    if (!brief) return
+
+    const cleanText = brief.aiSummaryMarkdown
+      .replace(/[*#_`>]/g, '')
+      .replace(/\[.*?\]/g, '')
+      .replace(/\n+/g, '. ')
+
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    utterance.lang = 'he-IL'
+    utterance.rate = 1.0
+
+    const voices = window.speechSynthesis.getVoices()
+    const heVoice = voices.find((v) => v.lang.startsWith('he') || v.lang.includes('Hebrew'))
+    if (heVoice) utterance.voice = heVoice
+
+    utterance.onend = () => setIsPlayingAudio(false)
+    utterance.onerror = () => setIsPlayingAudio(false)
+
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+    setIsPlayingAudio(true)
+    toast.info('🎙️ משמיע את בריף הבוקר...')
+  }, [isPlayingAudio, brief])
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  const openSuperAgent = (promptText?: string) => {
+    window.dispatchEvent(new CustomEvent('open-global-agent', {
+      detail: { prompt: promptText || 'סכם לי את הצעדים הדחופים מתוך בריף הבוקר' }
+    }))
+  }
+
+  // 1. Check local storage cache on frame 0 for instant load (0ms wait)
+  useEffect(() => {
+    if (brief) return
+    try {
+      const cachedStr = localStorage.getItem('nehemiah_cached_daily_brief')
+      if (cachedStr) {
+        const parsed = JSON.parse(cachedStr)
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+        if (parsed?.dateKey === todayKey && parsed?.brief) {
+          setBrief(parsed.brief)
+          setIsFromCache(true)
+          setLoading(false)
+        }
+      }
+    } catch {}
+  }, [brief])
+
+  const loadBrief = useCallback(async (isSilent = false, forceRefresh = false) => {
     if (!isSilent) setLoading(true)
     else setRefreshing(true)
     setError(null)
 
-    const res = await fetchGlobalDailyBriefAction()
+    const res = await fetchGlobalDailyBriefAction(forceRefresh)
     setLoading(false)
     setRefreshing(false)
 
     if (res.success && res.data) {
       setBrief(res.data)
+      setIsFromCache(!!res.cached)
+      try {
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+        localStorage.setItem(
+          'nehemiah_cached_daily_brief',
+          JSON.stringify({ brief: res.data, dateKey: todayKey, savedAt: Date.now() })
+        )
+      } catch {}
+      if (forceRefresh) {
+        toast.success('הבריף היומי רוענן מחדש בהצלחה!')
+      }
     } else {
       setError(res.error || 'שגיאה בטעינת הבריף היומי')
     }
@@ -62,7 +147,7 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
 
   useEffect(() => {
     if (!brief) {
-      loadBrief(false)
+      loadBrief(false, false)
     }
   }, [brief, loadBrief])
 
@@ -81,7 +166,7 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
   }
 
   function handleRefresh() {
-    loadBrief(true)
+    loadBrief(true, true)
   }
 
   if (loading || !brief) {
@@ -171,9 +256,16 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-black text-foreground">בריף יומי מנהלים</h1>
-              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-[10px]">
-                ● עדכני להיום
-              </Badge>
+              {isFromCache ? (
+                <Badge className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 font-bold text-[10px] gap-1 shadow-2xs">
+                  <Zap className="w-3 h-3 text-blue-500 fill-blue-500" />
+                  נשמר בזיכרון (טעינה מיידית)
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold text-[10px]">
+                  ● מעודכן לעכשיו
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5 font-medium">
               {brief.formattedDate} · ריכוז פעילות, משימות, יומן ופיננסים רוחבי
@@ -181,15 +273,42 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Audio Brief Player */}
           <Button
-            onClick={handleCopyWhatsApp}
-            className="h-9 px-4 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs text-xs"
+            onClick={toggleAudioBrief}
+            variant="outline"
+            className={`h-9 px-3.5 gap-2 text-xs font-bold transition-all shadow-xs ${
+              isPlayingAudio
+                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-400 animate-pulse'
+                : 'hover:bg-muted text-foreground'
+            }`}
+            title="האזנה קולית חכמה לבריף הבוקר"
           >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'הועתק ללוח!' : 'העתק ל-WhatsApp'}
+            {isPlayingAudio ? <VolumeX className="w-4 h-4 text-amber-600 animate-spin" /> : <Volume2 className="w-4 h-4 text-indigo-600" />}
+            {isPlayingAudio ? 'עצור הקראה' : 'האזן לבריף קולי'}
           </Button>
 
+          {/* Super Agent Ask Trigger */}
+          <Button
+            onClick={() => openSuperAgent('סכם לי את 3 הצעדים הדחופים ביותר מתוך בריף הבוקר ומי הלקוחות שדורשים טיפול.')}
+            className="h-9 px-3.5 gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-xs shadow-xs"
+            title="שאל את סוכן-העל על הבריף (Ctrl+K)"
+          >
+            <Bot className="w-3.5 h-3.5" />
+            שאל סוכן-על
+          </Button>
+
+          {/* WhatsApp Export Button */}
+          <Button
+            onClick={handleCopyWhatsApp}
+            className="h-9 px-3.5 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs text-xs"
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? 'הועתק ללוח!' : 'WhatsApp'}
+          </Button>
+
+          {/* Refresh Button */}
           <Button
             variant="outline"
             size="sm"
@@ -225,14 +344,18 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
         <Card className="border-border/60 shadow-xs bg-card/80">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground">משימות להיום</span>
+              <span className="text-xs font-bold text-muted-foreground">משימות ושגרות להיום</span>
               <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-foreground">{stats.dueTodayTasksCount}</span>
-              <span className="text-[11px] text-blue-600 font-semibold">לביצוע היום</span>
+              <span className="text-2xl font-black text-foreground">
+                {stats.dueTodayTasksCount + (brief.routinesToday?.length || 0)}
+              </span>
+              <span className="text-[11px] text-blue-600 font-semibold">
+                {brief.routinesToday && brief.routinesToday.length > 0 ? `(כולל ${brief.routinesToday.length} שגרות)` : 'לביצוע היום'}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -257,34 +380,46 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
         <Card className="border-border/60 shadow-xs bg-card/80">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground">אירועים השבוע</span>
+              <span className="text-xs font-bold text-muted-foreground">אירועים ופגישות</span>
               <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
                 <CalendarDays className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-foreground">{stats.upcomingEventsCount}</span>
-              <span className="text-[11px] text-purple-600 font-semibold">פגישות ותזכורות</span>
+              <span className="text-[11px] text-purple-600 font-semibold">השבוע</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* AI Morning Brief Highlights Card */}
-      <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-indigo-50/50 to-white p-5 shadow-sm space-y-3">
+      <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/80 via-indigo-50/50 to-white dark:from-violet-950/20 dark:via-indigo-950/10 dark:to-card p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-violet-800 font-bold text-sm">
+          <div className="flex items-center gap-2 text-violet-800 dark:text-violet-300 font-bold text-sm">
             <div className="w-6 h-6 rounded-lg bg-violet-600 flex items-center justify-center text-white shadow-xs">
               <Sparkles className="w-3.5 h-3.5" />
             </div>
             <span>הנחיות בוקר ודגשי AI לנחמיה</span>
           </div>
-          <Badge variant="outline" className="text-[10px] text-violet-700 border-violet-300 bg-violet-100/60 font-semibold">
-            ניתוח אוטונומי
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => openSuperAgent('תפרט לי יותר על ההנחיות והדגשים שהעלית בבריף הבוקר')}
+              className="h-7 px-2.5 text-[11px] font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100/50 gap-1"
+            >
+              <Bot className="w-3 h-3" />
+              העמק עם הסוכן
+            </Button>
+            <Badge variant="outline" className="text-[10px] text-violet-700 border-violet-300 bg-violet-100/60 font-semibold">
+              J.A.R.V.I.S
+            </Badge>
+          </div>
         </div>
 
-        <div className="text-xs text-foreground/90 leading-relaxed whitespace-pre-line bg-white/70 p-4 rounded-xl border border-violet-100 font-normal">
+        <div className="text-xs text-foreground/90 leading-relaxed whitespace-pre-line bg-card/80 p-4 rounded-xl border border-violet-100 dark:border-violet-900/30 font-normal">
           {brief.aiSummaryMarkdown}
         </div>
       </div>
@@ -294,7 +429,7 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
         <TabsList className="bg-card border border-border p-1 rounded-xl h-10 w-full justify-start gap-1 flex-wrap">
           <TabsTrigger value="tasks" className="rounded-lg text-xs font-bold gap-1.5 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             <Clock className="w-3.5 h-3.5" />
-            משימות ({tasks.dueToday.length + tasks.overdue.length})
+            משימות ושגרות ({tasks.dueToday.length + tasks.overdue.length + (brief.routinesToday?.length || 0)})
           </TabsTrigger>
           <TabsTrigger value="emails" className="rounded-lg text-xs font-bold gap-1.5 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
             <MessageSquare className="w-3.5 h-3.5" />
@@ -314,8 +449,54 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Tasks */}
+        {/* Tab 1: Tasks & Routines */}
         <TabsContent value="tasks" className="space-y-4 mt-0">
+          {/* Today's Recurring Routines (If any) */}
+          {brief.routinesToday && brief.routinesToday.length > 0 && (
+            <Card className="border-indigo-200/80 bg-gradient-to-r from-indigo-50/50 via-purple-50/30 to-background dark:from-indigo-950/20 dark:via-purple-950/10 dark:to-card shadow-xs">
+              <CardHeader className="p-4 pb-2.5 border-b border-indigo-100 dark:border-indigo-900/40 flex flex-row items-center justify-between">
+                <CardTitle className="text-xs font-black text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                  <CalendarClock className="w-4 h-4 text-indigo-600" />
+                  שגרות מחזוריות להיום ({brief.routinesToday.length})
+                </CardTitle>
+                <Badge className="bg-indigo-600 text-white text-[10px] font-bold">
+                  שגרה חודשית קבועה
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {brief.routinesToday.map((r) => (
+                  <div
+                    key={r.id}
+                    className="p-3 rounded-xl border border-indigo-200/70 dark:border-indigo-900/50 bg-card hover:border-indigo-400 transition-all flex flex-col justify-between gap-2 shadow-xs"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <Badge variant="outline" className="text-[9px] font-bold text-indigo-700 dark:text-indigo-400 border-indigo-300 bg-indigo-50 dark:bg-indigo-950/50">
+                          {r.clientName}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          {r.assignedRole === 'nehemiah' ? 'נחמיה' : r.assignedRole === 'cpa' ? 'רואה חשבון' : r.assignedRole === 'secretary' ? 'מזכירות' : 'לקוח'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-foreground line-clamp-2">{r.title}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-border/40 mt-1">
+                      <span className="text-[10px] text-muted-foreground">יום {r.dayOfMonth} בחודש</span>
+                      <Link
+                        href={`/workspace/clients/${r.clientId}`}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5"
+                      >
+                        פתח תיק לקוח
+                        <ChevronLeft className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Overdue */}
             <Card className="border-border/70 shadow-xs">
@@ -513,8 +694,8 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
                       <span className="text-muted-foreground/50">ללא גיליון</span>
                     )}
                   </div>
-                  <Link href={`/workspace/clients/${c.id}?tab=ai`} className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5">
-                    צ&apos;אט AI <ChevronLeft className="w-3 h-3" />
+                  <Link href={`/workspace/clients/${c.id}/notebook`} className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5">
+                    מחברת AI <ChevronLeft className="w-3 h-3" />
                   </Link>
                 </div>
               </div>
@@ -549,10 +730,10 @@ export function GlobalDailyBriefView({ initialBrief = null }: Props) {
                       </div>
                     </div>
                     <Link
-                      href={`/workspace/clients/${a.clientId}?tab=ai`}
+                      href={`/workspace/clients/${a.clientId}/notebook`}
                       className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] shrink-0 transition-colors shadow-xs"
                     >
-                      פתח סוכן AI
+                      פתח מחברת AI
                     </Link>
                   </div>
                 ))

@@ -72,7 +72,7 @@ import {
 import {
   getSheetRowsAction,
   getDashboardConfigAction,
-} from '@/app/admin/crm/[id]/actions-workspace'
+} from '@/app/workspace/actions/drive-sheets'
 import {
   analyzeAndGenerateDashboardAction,
   resetClientAgentDataAction,
@@ -1203,8 +1203,21 @@ export function DashboardEngine({
                   className="h-8 gap-1.5 text-xs font-semibold"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  רענן
+                  רענן נתונים
                 </Button>
+                {hasSheet && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoBuild}
+                    disabled={isAutoBuilding}
+                    className="h-8 gap-1.5 text-xs font-bold bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 shadow-xs"
+                    title="סריקה מחדש של הגיליון ובניית ווידג'טים מעודכנים ב-AI"
+                  >
+                    {isAutoBuilding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-600" />}
+                    סנכרון AI מגיליון
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

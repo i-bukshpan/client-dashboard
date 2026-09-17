@@ -6,25 +6,24 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    // Legacy modules remain visible as warnings while CI blocks new compiler errors.
-    // These rules are intentionally not disabled so the debt stays measurable.
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
-      'react/no-unescaped-entities': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/refs': 'warn',
-      'react-hooks/purity': 'warn',
       'prefer-const': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
     },
   },
-  // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".agents/**",
+    "docs/**",
+    "scripts/**",
+    "scratch/**",
+    "output/**",
+    "node_modules/**",
   ]),
 ]);
 

@@ -214,14 +214,19 @@ export async function setupOperationsWorkspace(): Promise<OperationsWorkspaceSet
 export async function listWorkspaceTasks(clientId?: string): Promise<WorkspaceTask[]> {
   await requireWorkspaceAdmin()
   if (clientId) await getWorkspaceClient(clientId)
-  const settings = await getOperationsWorkspaceSettings()
-  if (!settings) return []
-  await ensureTaskSpreadsheetHeaders(settings.workbookId)
-  const tasks = (await getSheetRows(settings.workbookId, TASKS_TAB)).map(rowToTask)
-  return tasks.filter((task) => !clientId || task.clientId === clientId).sort((a, b) => {
-    const rank = { overdue: 0, due_today: 1, upcoming: 2, snoozed: 3, none: 4, completed: 5 }
-    return rank[a.reminderState] - rank[b.reminderState] || (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999')
-  })
+  try {
+    const settings = await getOperationsWorkspaceSettings()
+    if (!settings) return []
+    await ensureTaskSpreadsheetHeaders(settings.workbookId)
+    const tasks = (await getSheetRows(settings.workbookId, TASKS_TAB)).map(rowToTask)
+    return tasks.filter((task) => !clientId || task.clientId === clientId).sort((a, b) => {
+      const rank = { overdue: 0, due_today: 1, upcoming: 2, snoozed: 3, none: 4, completed: 5 }
+      return rank[a.reminderState] - rank[b.reminderState] || (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999')
+    })
+  } catch (err) {
+    console.warn('[workspace-tasks] listWorkspaceTasks failed:', err)
+    return []
+  }
 }
 
 async function findTask(taskId: string): Promise<{ settings: OperationsWorkspaceSettings; task: WorkspaceTask; rowNumber: number }> {

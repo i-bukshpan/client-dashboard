@@ -1,15 +1,24 @@
 import 'server-only'
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto'
 
 const PREFIX = 'enc:v1:'
 
 function encryptionKey(): Buffer {
   const encoded = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-  if (!encoded) throw new Error('[token-crypto] GOOGLE_TOKEN_ENCRYPTION_KEY is required')
-  const key = Buffer.from(encoded, 'base64')
-  if (key.length !== 32) throw new Error('[token-crypto] GOOGLE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key')
-  return key
+  if (encoded) {
+    try {
+      const key = Buffer.from(encoded, 'base64')
+      if (key.length === 32) return key
+    } catch {
+      // fallback below
+    }
+  }
+  const fallbackSecret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (fallbackSecret) {
+    return createHash('sha256').update(`nehemiah-v2-token-key:${fallbackSecret}`).digest()
+  }
+  throw new Error('[token-crypto] GOOGLE_TOKEN_ENCRYPTION_KEY or SUPABASE_SERVICE_ROLE_KEY is required')
 }
 
 export function encryptSecret(value: string): string {

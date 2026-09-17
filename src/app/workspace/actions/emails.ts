@@ -22,6 +22,7 @@ import {
 import {
   getWorkspaceAdminDb,
   getWorkspaceClient,
+  parseWorkspaceClientId,
   requireWorkspaceAdmin,
 } from '@/lib/v2/workspace-dal'
 
@@ -328,17 +329,18 @@ export async function updateClientGmailLabelAction(
 ): Promise<EmailActionResult<{ gmailLabel: string | null }>> {
   try {
     await requireWorkspaceAdmin()
+    const validClientId = parseWorkspaceClientId(clientId)
     const sanitized = gmailLabel?.trim() || null
     const db = getWorkspaceAdminDb()
 
     const { error } = await db
       .from('clients')
       .update({ gmail_label: sanitized })
-      .eq('id', clientId)
+      .eq('id', validClientId)
 
     if (error) throw new Error(error.message)
 
-    revalidatePath(`/workspace/clients/${clientId}`)
+    revalidatePath(`/workspace/clients/${validClientId}`)
     revalidatePath('/workspace/clients')
     return { success: true, data: { gmailLabel: sanitized } }
   } catch (error) {

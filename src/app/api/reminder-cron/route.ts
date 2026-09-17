@@ -139,6 +139,14 @@ async function fetchPendingReminders() {
     }
   }
 
+  // Run any pending autonomous agent scheduled tasks
+  try {
+    const { runPendingAgentScheduledTasks } = await import('@/lib/v2/agent-scheduler')
+    await runPendingAgentScheduledTasks(5)
+  } catch (agentErr) {
+    console.warn('[reminder-cron] agent tasks trigger error:', agentErr)
+  }
+
   return {
     reminders: (data as any[]).map((r) => ({
       phone: r.phone,
@@ -307,6 +315,86 @@ async function generateOverdueReport() {
   return { success: true, overdue: lines.length }
 }
 
+// ── Workspace Daily Digest (Tasks & Calendar) ───────────────────────────────────
+
+async function generateWorkspaceDailyDigest() {
+  const { startOfDayISO, endOfDayISO } = todayRange()
+  const adminPhones: string[] = []
+  if (process.env.BOT_ADMIN_PHONE) adminPhones.push(process.env.BOT_ADMIN_PHONE.replace(/^\+/, ''))
+  if (process.env.BOT_EXTRA_ADMIN_PHONE) adminPhones.push(process.env.BOT_EXTRA_ADMIN_PHONE.replace(/^\+/, ''))
+
+  const sendAt = new Date(new Date().toLocaleDateString('sv', { timeZone: 'Asia/Jerusalem' }) + 'T07:30:00+03:00').toISOString()
+
+  let dueTodayCount = 0
+  let overdueCount = 0
+  const taskHighlights: string[] = []
+
+  try {
+    const { listWorkspaceTasks } = await import('@/lib/v2/workspace-tasks')
+    const tasks = await listWorkspaceTasks()
+    for (const t of tasks) {
+      if (t.status === 'completed' || t.status === 'cancelled') continue
+      if (t.reminderState === 'due_today') {
+        dueTodayCount++
+        if (taskHighlights.length < 5) taskHighlights.push(`• [היום] ${t.title}${t.clientName ? ` (${t.clientName})` : ''}`)
+      } else if (t.reminderState === 'overdue') {
+        overdueCount++
+        if (taskHighlights.length < 5) taskHighlights.push(`• [באיחור] ${t.title}${t.clientName ? ` (${t.clientName})` : ''}`)
+      }
+    }
+  } catch (err) {
+    console.warn('[reminder-cron] Could not fetch workspace tasks:', err)
+  }
+
+  const eventHighlights: string[] = []
+  try {
+    const { listWorkspaceCalendarEvents } = await import('@/lib/v2/google-calendar')
+    const calResult = await listWorkspaceCalendarEvents({ timeMin: startOfDayISO, timeMax: endOfDayISO })
+    for (const e of calResult.events) {
+      const timeStr = e.start ? fmtTime(e.start) : ''
+      eventHighlights.push(`• ${e.title}${timeStr ? ` בשעה ${timeStr}` : ''}`)
+    }
+  } catch (err) {
+    console.warn('[reminder-cron] Could not fetch workspace calendar:', err)
+  }
+
+  if (dueTodayCount === 0 && overdueCount === 0 && eventHighlights.length === 0) {
+    return { success: true, message: 'No pending workspace tasks or events for today' }
+  }
+
+  const sections: string[] = [
+    `📋 *תקציר בוקר - Workspace נחמיה (${fmtDate(startOfDayISO)}):*`,
+  ]
+
+  if (eventHighlights.length > 0) {
+    sections.push(`\n📅 *פגישות היום ביומן:*\n${eventHighlights.join('\n')}`)
+  }
+
+  if (taskHighlights.length > 0) {
+    sections.push(`\n📝 *משימות לטיפול (סה"כ להיום: ${dueTodayCount}, באיחור: ${overdueCount}):*\n${taskHighlights.join('\n')}`)
+  }
+
+  const message = sections.join('\n')
+
+  for (const phone of adminPhones) {
+    await db.from('bot_reminders').insert({
+      phone,
+      message,
+      reminder_type: 'workspace_digest',
+      scheduled_at: sendAt,
+      is_sent: false,
+    })
+  }
+
+  return {
+    success: true,
+    dueTodayCount,
+    overdueCount,
+    eventsCount: eventHighlights.length,
+    recipients: adminPhones.length,
+  }
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
@@ -338,6 +426,11 @@ export async function POST(request: Request) {
       return NextResponse.json(result)
     }
 
+    if (body.action === 'workspace_daily_digest') {
+      const result = await generateWorkspaceDailyDigest()
+      return NextResponse.json(result)
+    }
+
     // Default: fetch pending reminders (same as GET)
     const result = await fetchPendingReminders()
     return NextResponse.json(result)
@@ -346,3 +439,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+

@@ -28,7 +28,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getSheetDataAction, getSheetTabsAction, appendRowAction } from '@/app/admin/crm/[id]/actions-workspace'
+import { getSheetDataAction, getSheetTabsAction, appendRowAction } from '@/app/workspace/actions/drive-sheets'
 import type { SheetMeta } from '@/lib/google-sheets'
 
 interface SheetsViewerProps {
