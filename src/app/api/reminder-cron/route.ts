@@ -147,6 +147,14 @@ async function fetchPendingReminders() {
     console.warn('[reminder-cron] agent tasks trigger error:', agentErr)
   }
 
+  // Pre-generate / cache today's global daily brief in DB if not ready
+  try {
+    const { getOrGenerateGlobalDailyBrief } = await import('@/lib/v2/global-daily-brief')
+    await getOrGenerateGlobalDailyBrief(false)
+  } catch (briefErr) {
+    console.warn('[reminder-cron] Daily brief auto-cache error:', briefErr)
+  }
+
   return {
     reminders: (data as any[]).map((r) => ({
       phone: r.phone,
@@ -158,6 +166,14 @@ async function fetchPendingReminders() {
 // ── Generate daily morning reminders ────────────────────────────────────────────
 
 async function generateDailyReminders() {
+  // Ensure fresh morning brief is prepared in DB for Nehemiah's arrival
+  try {
+    const { getOrGenerateGlobalDailyBrief } = await import('@/lib/v2/global-daily-brief')
+    await getOrGenerateGlobalDailyBrief(true)
+  } catch (briefErr) {
+    console.warn('[reminder-cron] Daily brief morning generation error:', briefErr)
+  }
+
   const { startOfDayISO, endOfDayISO, tomorrowISO, dayAfterISO } = todayRange()
   const generatedCount = { meetings: 0, payments: 0, workers: 0 }
 

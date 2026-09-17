@@ -419,8 +419,8 @@ interface CachedGlobalDailyBrief {
 let memoryCachedDailyBrief: CachedGlobalDailyBrief | null = null
 
 /**
- * Returns the cached Global Daily Brief if available and fresh (< 4 hours old, same day),
- * or generates and persists a new one.
+ * Returns the cached Global Daily Brief from public.v2_daily_brief_cache if available for today,
+ * or generates a fresh one and persists/overwrites it in the database for today.
  */
 export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promise<{
   brief: GlobalDailyBrief
@@ -429,7 +429,7 @@ export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promi
   const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
   const fourHoursMs = 1000 * 60 * 60 * 4
 
-  // 1. In-memory cache hit
+  // 1. Check in-memory cache first (instant 0ms)
   if (!forceRefresh && memoryCachedDailyBrief) {
     const isSameDay = memoryCachedDailyBrief.dateKey === todayKey
     const isRecent = Date.now() - memoryCachedDailyBrief.generatedAt < fourHoursMs
@@ -438,40 +438,35 @@ export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promi
     }
   }
 
-  // 2. Database cache hit in v3_notebook_artifacts
+  const db = getWorkspaceAdminDb()
+
+  // 2. Check dedicated database cache table (public.v2_daily_brief_cache)
   if (!forceRefresh) {
     try {
-      const db = getWorkspaceAdminDb()
-      const { data: dbArtifacts } = await db
-        .from('v3_notebook_artifacts')
+      const { data: dbCache, error: cacheErr } = await db
+        .from('v2_daily_brief_cache')
         .select('*')
-        .eq('artifact_type', 'brief')
-        .is('client_id', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('date_key', todayKey)
+        .maybeSingle()
 
-      if (dbArtifacts && dbArtifacts.length > 0) {
-        const latest = dbArtifacts[0]
-        const briefData = latest.content_json as unknown as GlobalDailyBrief
+      if (!cacheErr && dbCache?.brief_json) {
+        const briefData = dbCache.brief_json as unknown as GlobalDailyBrief
         if (briefData && briefData.generatedAt) {
-          const briefDateKey = new Date(briefData.generatedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
-          const ageMs = Date.now() - new Date(briefData.generatedAt).getTime()
-          if (briefDateKey === todayKey && ageMs < fourHoursMs) {
-            memoryCachedDailyBrief = {
-              data: briefData,
-              generatedAt: new Date(briefData.generatedAt).getTime(),
-              dateKey: briefDateKey,
-            }
-            return { brief: briefData, cached: true }
+          const updatedAt = new Date(dbCache.updated_at || dbCache.created_at).getTime()
+          memoryCachedDailyBrief = {
+            data: briefData,
+            generatedAt: updatedAt,
+            dateKey: todayKey,
           }
+          return { brief: briefData, cached: true }
         }
       }
     } catch (dbCacheErr) {
-      console.warn('[global-daily-brief] Error checking DB brief cache:', dbCacheErr)
+      console.warn('[global-daily-brief] Error checking v2_daily_brief_cache:', dbCacheErr)
     }
   }
 
-  // 3. Generate fresh brief
+  // 3. Generate fresh brief for today
   const freshBrief = await generateGlobalDailyBrief()
 
   // Save to memory cache
@@ -481,9 +476,38 @@ export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promi
     dateKey: todayKey,
   }
 
-  // Persist to DB cache asynchronously
+  // Persist / Overwrite in v2_daily_brief_cache for todayKey
   try {
-    const db = getWorkspaceAdminDb()
+    const { error: upsertErr } = await db
+      .from('v2_daily_brief_cache')
+      .upsert(
+        {
+          date_key: todayKey,
+          brief_json: freshBrief as any,
+          ai_summary: freshBrief.aiSummaryMarkdown,
+          stats_json: freshBrief.stats as any,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'date_key' }
+      )
+
+    if (upsertErr) {
+      console.warn('[global-daily-brief] Error upserting to v2_daily_brief_cache:', upsertErr.message)
+    }
+  } catch (saveErr) {
+    console.warn('[global-daily-brief] Exception saving brief to v2_daily_brief_cache:', saveErr)
+  }
+
+  // Also maintain latest brief in v3_notebook_artifacts for Studio reference
+  try {
+    // Delete any existing auto-cached brief for today to prevent duplicates
+    await db
+      .from('v3_notebook_artifacts')
+      .delete()
+      .eq('artifact_type', 'brief')
+      .is('client_id', null)
+      .ilike('title', `%${freshBrief.formattedDate}%`)
+
     await db.from('v3_notebook_artifacts').insert({
       artifact_type: 'brief',
       client_id: null,
@@ -494,11 +518,12 @@ export async function getOrGenerateGlobalDailyBrief(forceRefresh = false): Promi
         generatedAt: freshBrief.generatedAt,
         stats: freshBrief.stats,
         isAutoCached: true,
+        dateKey: todayKey,
       },
       is_pinned: false,
     })
-  } catch (saveErr) {
-    console.warn('[global-daily-brief] Error saving brief to v3_notebook_artifacts:', saveErr)
+  } catch (artifactErr) {
+    console.warn('[global-daily-brief] Error syncing to v3_notebook_artifacts:', artifactErr)
   }
 
   return { brief: freshBrief, cached: false }

@@ -85,6 +85,9 @@ import { useVoiceInput } from '@/hooks/useVoiceInput'
 import { CitationText, type Citation } from '@/components/notebook/CitationBadge'
 import { ArtifactVisualRenderer } from '@/components/notebook/ArtifactVisualRenderer'
 import {
+  fetchWorkspaceChatSessionsAction,
+  saveWorkspaceChatSessionAction,
+  deleteWorkspaceChatSessionAction,
   fetchClientChatHistoryAction,
   saveClientChatMessagesAction,
 } from '@/app/workspace/actions/chat-history'
@@ -353,26 +356,46 @@ export function NotebookChat({
 
     async function initSessions() {
       let loadedSessions: ChatSession[] = []
+
+      // 1. First fetch persisted sessions directly from Supabase v3_chat_sessions
+      let cloudLoaded = false
       try {
-        const raw = localStorage.getItem(storageKey)
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            loadedSessions = parsed
-          }
+        const cloudRes = await fetchWorkspaceChatSessionsAction(clientId || null)
+        if (cloudRes.success && cloudRes.sessions && cloudRes.sessions.length > 0) {
+          loadedSessions = cloudRes.sessions.map((s) => ({
+            id: s.id,
+            title: s.title,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            messages: s.messages,
+          }))
+          cloudLoaded = true
         }
-      } catch {
-        // ignore storage parse error
+      } catch (cloudErr) {
+        console.warn('[NotebookChat] Cloud sessions fetch error:', cloudErr)
       }
 
-      // If no local sessions exist for this client, check Supabase history
+      // 2. Fallback to localStorage if cloud returned no sessions
+      if (!cloudLoaded && loadedSessions.length === 0) {
+        try {
+          const raw = localStorage.getItem(storageKey)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              loadedSessions = parsed
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Fallback to legacy client chat history if still empty
       if (loadedSessions.length === 0 && clientId) {
         try {
           const cloudRes = await fetchClientChatHistoryAction(clientId)
           if (cloudRes.success && cloudRes.messages && cloudRes.messages.length > 0) {
             const title = extractSessionTitle(cloudRes.messages, 'שיחה קודמת')
             const reconstructedSession: ChatSession = {
-              id: `sess_cloud_${Date.now()}`,
+              id: `sess_client_${clientId}`,
               title,
               createdAt: cloudRes.messages[0]?.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -381,11 +404,11 @@ export function NotebookChat({
             loadedSessions = [reconstructedSession]
           }
         } catch (e) {
-          console.warn('[NotebookChat] Cloud history fetch failed:', e)
+          console.warn('[NotebookChat] Legacy cloud history fetch failed:', e)
         }
       }
 
-      // If still empty, create default welcome session
+      // 4. If still empty, create default welcome session
       if (loadedSessions.length === 0) {
         const welcome = createWelcomeMessage(mode, clientName)
         const defaultSession: ChatSession = {
@@ -396,6 +419,14 @@ export function NotebookChat({
           messages: [welcome],
         }
         loadedSessions = [defaultSession]
+
+        // Persist initial welcome session to Supabase
+        saveWorkspaceChatSessionAction({
+          id: defaultSession.id,
+          clientId: clientId || null,
+          title: defaultSession.title,
+          messages: defaultSession.messages,
+        }).catch(() => {})
       }
 
       // Determine active session
@@ -426,6 +457,8 @@ export function NotebookChat({
 
     if (messages.length === 0) return
 
+    let currentSessionTitle = 'שיחה חדשה'
+
     setSessions((prev) => {
       const idx = prev.findIndex((s) => s.id === activeSessionId)
       if (idx === -1) return prev
@@ -435,6 +468,7 @@ export function NotebookChat({
       if (title === 'שיחה חדשה' || !title) {
         title = extractSessionTitle(messages, 'שיחה חדשה')
       }
+      currentSessionTitle = title
 
       const updatedSession: ChatSession = {
         ...current,
@@ -453,10 +487,16 @@ export function NotebookChat({
       return next
     })
 
-    // Cloud synchronization for client mode when streaming finishes
-    if (!isLoading && clientId) {
-      saveClientChatMessagesAction(clientId, messages).catch((err) => {
-        console.warn('[NotebookChat] Cloud sync error:', err)
+    // Cloud synchronization to Supabase v3_chat_sessions when streaming finishes
+    if (!isLoading && activeSessionId && messages.length > 0) {
+      const activeTitle = currentSessionTitle || extractSessionTitle(messages, 'שיחה חדשה')
+      saveWorkspaceChatSessionAction({
+        id: activeSessionId,
+        clientId: clientId || null,
+        title: activeTitle,
+        messages: messages as any[],
+      }).catch((err) => {
+        console.warn('[NotebookChat] Cloud session sync error:', err)
       })
     }
   }, [messages, activeSessionId, storageKey, isLoading, clientId])
@@ -559,12 +599,20 @@ export function NotebookChat({
       return next
     })
 
+    // Persist new session to Supabase v3_chat_sessions
+    saveWorkspaceChatSessionAction({
+      id: newId,
+      clientId: clientId || null,
+      title: 'שיחה חדשה',
+      messages: [welcome],
+    }).catch((err) => console.warn('[NotebookChat] Error creating new chat in cloud:', err))
+
     setActiveSessionId(newId)
     isSwitchingSessionRef.current = true
     setMessages([welcome] as any)
     setIsHistoryOpen(false)
     toast.success('נפתחה שיחה חדשה')
-  }, [mode, clientName, storageKey, activeSessionKey, setMessages])
+  }, [mode, clientName, storageKey, activeSessionKey, clientId, setMessages])
 
   // Switch to an existing session
   const handleSelectSession = useCallback(
@@ -593,6 +641,12 @@ export function NotebookChat({
   const handleDeleteSession = useCallback(
     (e: React.MouseEvent, sessionId: string) => {
       e.stopPropagation()
+
+      // Delete from Supabase v3_chat_sessions
+      deleteWorkspaceChatSessionAction(sessionId).catch((err) => {
+        console.warn('[NotebookChat] Error deleting session from cloud:', err)
+      })
+
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== sessionId)
 
@@ -703,16 +757,16 @@ export function NotebookChat({
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden relative" dir="rtl">
       {/* ── Top Header with Mode Selector, 2-Mode Detail Toggle & Chat Actions ── */}
-      <div className="px-4 py-2.5 border-b border-border/70 bg-card/70 backdrop-blur-md shrink-0 flex items-center justify-between gap-2.5 shadow-xs">
-        {/* Right side (in RTL): Panel Toggle (Sources) + Agent Icon + Context & Client Switcher */}
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="px-4 py-2 border-b border-border/70 bg-card/80 backdrop-blur-md shrink-0 flex items-center justify-between gap-2.5 shadow-2xs">
+        {/* ── Section 1 (Right in RTL): Context, Client & View Depth ── */}
+        <div className="flex items-center gap-2 min-w-0 shrink-0">
           {onToggleSources && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={onToggleSources}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/80 shrink-0 cursor-pointer"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/70 shrink-0 cursor-pointer rounded-lg"
               title={showSources ? 'הסתר פאנל מקורות' : 'הצג פאנל מקורות'}
             >
               {showSources ? (
@@ -723,17 +777,13 @@ export function NotebookChat({
             </Button>
           )}
 
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
-            <Bot className="w-4 h-4" />
-          </div>
-
           {/* Mode & Client Dropdown Selector */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 px-2.5 text-xs font-bold border-border/80 hover:border-indigo-400 bg-background/80 hover:bg-muted/80 shadow-2xs transition-all max-w-[170px] sm:max-w-[240px]"
+                className="h-8 gap-2 px-2.5 text-xs font-bold border-border/80 hover:border-border bg-background/90 hover:bg-muted/60 shadow-2xs transition-all max-w-[170px] sm:max-w-[220px] rounded-xl cursor-pointer"
               >
                 {mode === 'client' ? (
                   <>
@@ -750,7 +800,7 @@ export function NotebookChat({
                     </span>
                   </>
                 )}
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
 
@@ -839,76 +889,74 @@ export function NotebookChat({
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* 2 Conversation Modes Toggle (מורחב / קצר) — Compact & Refined */}
+          <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/60 text-[11px] font-medium shrink-0">
+            <button
+              type="button"
+              onClick={() => handleDetailModeChange('expanded')}
+              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                detailMode === 'expanded'
+                  ? 'bg-background text-foreground shadow-2xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="מצב מורחב: תשובות מפורטות, ניתוחים עמוקים, כרטיסים וטבלאות מלאות"
+            >
+              <BookOpen className="w-3 h-3 text-indigo-500" />
+              <span className="hidden sm:inline">מורחב</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDetailModeChange('brief')}
+              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                detailMode === 'brief'
+                  ? 'bg-background text-foreground shadow-2xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="מצב קצר: תמציתי, שורה תחתונה, מספרים קריטיים ו-2-4 נקודות מפתח"
+            >
+              <Zap className="w-3 h-3 text-amber-500" />
+              <span className="hidden sm:inline">קצר</span>
+            </button>
+          </div>
         </div>
 
-        {/* Center: 2 Conversation Modes Toggle (מורחב / קצר) */}
-        <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border/60 text-[11px] font-semibold shrink-0">
+        {/* ── Section 2 (Center in RTL): Executive Automation Tools Capsule ── */}
+        <div className="flex items-center bg-muted/40 p-0.5 rounded-xl border border-border/60 shrink-0 shadow-2xs">
           <button
             type="button"
-            onClick={() => handleDetailModeChange('expanded')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-              detailMode === 'expanded'
-                ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            title="מצב מורחב: תשובות מפורטות, ניתוחים עמוקים, כרטיסים וטבלאות מלאות"
+            onClick={() => setShowDailyBriefModal(true)}
+            className="h-7.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-background/90 hover:shadow-2xs"
+            title="בריף בוקר יומי (מצב משימות, יומן, דוא״ל והודעות)"
           >
-            <BookOpen className="w-3 h-3" />
-            <span className="hidden sm:inline">מצב מורחב</span>
-            <span className="sm:hidden">מורחב</span>
+            <Sun className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>בריף יומי</span>
           </button>
+
+          <div className="w-px h-3.5 bg-border/60" />
+
           <button
             type="button"
-            onClick={() => handleDetailModeChange('brief')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-              detailMode === 'brief'
-                ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-            title="מצב קצר: תמציתי, שורה תחתונה, מספרים קריטיים ו-2-4 נקודות מפתח"
+            onClick={() => setShowAgentTasksModal(true)}
+            className="h-7.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-background/90 hover:shadow-2xs"
+            title="משימות ושגרות אוטונומיות לסוכן AI"
           >
-            <Zap className="w-3 h-3" />
-            <span className="hidden sm:inline">מצב קצר</span>
-            <span className="sm:hidden">קצר</span>
+            <Bot className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+            <span>משימות סוכן</span>
           </button>
         </div>
 
-        {/* Left side (in RTL): Action Buttons: "+ שיחה חדשה", "היסטוריה" + Panel Toggle (Studio) */}
+        {/* ── Section 3 (Left in RTL): Action Buttons: "+ שיחה חדשה", "היסטוריה" + Studio Toggle ── */}
         <div className="flex items-center gap-1.5 shrink-0">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDailyBriefModal(true)}
-            className="h-8 gap-1 px-2 sm:px-2.5 text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30 shadow-2xs cursor-pointer"
-            title="בריף בוקר יומי (מצב משימות, יומן, דוא״ל והודעות)"
-          >
-            <Sun className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="hidden xl:inline">בריף בוקר</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAgentTasksModal(true)}
-            className="h-8 gap-1 px-2 sm:px-2.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30 shadow-2xs cursor-pointer"
-            title="משימות ושגרות אוטונומיות לסוכן AI"
-          >
-            <Bot className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-            <span className="hidden xl:inline">משימות סוכן</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
             size="sm"
             onClick={handleNewChat}
-            className="h-8 gap-1 px-2 sm:px-2.5 text-xs font-semibold bg-indigo-50/60 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800 shadow-2xs cursor-pointer"
+            className="h-7.5 gap-1.5 px-3 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs rounded-xl cursor-pointer"
             title="התחל שיחה חדשה"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">שיחה חדשה</span>
+            <span className="hidden sm:inline">שיחה חדשה</span>
           </Button>
 
           <Button
@@ -916,15 +964,15 @@ export function NotebookChat({
             variant="ghost"
             size="sm"
             onClick={() => setIsHistoryOpen((v) => !v)}
-            className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground relative px-2 cursor-pointer"
+            className="h-7.5 gap-1 text-xs text-muted-foreground hover:text-foreground relative px-2 cursor-pointer rounded-lg"
             title="היסטוריית שיחות שמורות"
           >
             <History className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">היסטוריה</span>
+            <span className="hidden md:inline">היסטוריה</span>
             {sessions.length > 0 && (
               <Badge
                 variant="secondary"
-                className="text-[10px] px-1 py-0 h-4 bg-muted font-bold"
+                className="text-[10px] px-1.5 py-0 h-4 bg-muted/80 font-bold border-border/60"
               >
                 {sessions.length}
               </Badge>
@@ -937,7 +985,7 @@ export function NotebookChat({
               variant="ghost"
               size="icon"
               onClick={onToggleStudio}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/80 shrink-0 cursor-pointer"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted/80 shrink-0 cursor-pointer rounded-lg"
               title={showStudio ? 'הסתר פאנל סטודיו' : 'הצג פאנל סטודיו'}
             >
               {showStudio ? (

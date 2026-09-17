@@ -58,7 +58,19 @@ import {
   executeAgentScheduledTask,
 } from '@/lib/v2/agent-scheduler'
 
-export function createGlobalAgentTools() {
+export function createGlobalAgentTools(options?: { autonomous?: boolean }) {
+  const checkGate = async (
+    actionType: string,
+    payload: unknown,
+    confirmationId: string | undefined,
+    confirmationMessage: string
+  ) => {
+    if (options?.autonomous) {
+      return { approved: true as const }
+    }
+    return requireAgentConfirmation(actionType, payload, confirmationId, confirmationMessage)
+  }
+
   return {
     // ═════════════════════════════════════════════════════════════════════════
     // 1. CLIENT CRM TOOLS
@@ -236,7 +248,7 @@ export function createGlobalAgentTools() {
           const cleanPhone = phone?.trim() || null
           const cleanStatus = status || 'פעיל'
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'create_new_client',
             { name: cleanName, email: cleanEmail, phone: cleanPhone, status: cleanStatus, advisoryGoal },
             confirmationId,
@@ -296,7 +308,7 @@ export function createGlobalAgentTools() {
           if (advisoryGoal !== undefined) updates.advisory_goal = advisoryGoal
           if (gmailLabel !== undefined) updates.gmail_label = gmailLabel
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'update_client_details',
             { clientId: client.id, updates },
             confirmationId,
@@ -420,7 +432,7 @@ export function createGlobalAgentTools() {
             ? `לאשר עדכון משימה "${input.title}"?`
             : `לאשר יצירת משימה חדשה "${input.title}"?`
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'create_or_update_workspace_task',
             {
               taskId: input.taskId,
@@ -485,7 +497,7 @@ export function createGlobalAgentTools() {
       }),
       execute: async ({ taskId, confirmationId }) => {
         try {
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'delete_workspace_task', { taskId }, confirmationId,
             `האם למחוק לצמיתות את המשימה ${taskId}?`
           )
@@ -620,7 +632,7 @@ export function createGlobalAgentTools() {
           }
 
           const payload = { to: recipientEmail, subject, body, cc }
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'send_email', payload, confirmationId,
             `לאשר שליחת אימייל אל ${recipientEmail} בנושא "${subject}"?`
           )
@@ -653,7 +665,7 @@ export function createGlobalAgentTools() {
       }),
       execute: async ({ threadId, to, subject, body, confirmationId }) => {
         try {
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'reply_to_email', { threadId, to, subject, body }, confirmationId,
             `לאשר שליחת המענה אל ${to} בנושא "${subject}"?`
           )
@@ -682,7 +694,7 @@ export function createGlobalAgentTools() {
       }),
       execute: async ({ threadId, confirmationId }) => {
         try {
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'trash_email_thread', { threadId }, confirmationId,
             `לאשר העברת שרשור ${threadId} לאשפה?`
           )
@@ -752,7 +764,7 @@ export function createGlobalAgentTools() {
           }
 
           const nameToUse = folderName || client.name
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'create_client_drive_folder',
             { clientId: client.id, folderName: nameToUse },
             confirmationId,
@@ -803,7 +815,7 @@ export function createGlobalAgentTools() {
             }
           }
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'create_client_spreadsheet',
             { clientId: client.id, title, sheetsCount: sheets.length },
             confirmationId,
@@ -976,7 +988,7 @@ export function createGlobalAgentTools() {
           if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
           if (!client.google_sheet_id) return { error: `ללקוח "${client.name}" אין גיליון מקושר` }
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'append_data_to_client_sheet', { clientId: client.id, tabName, rows }, confirmationId,
             `לאשר הוספת ${rows.length} שורות ללשונית "${tabName}" של ${client.name}?`
           )
@@ -1011,7 +1023,7 @@ export function createGlobalAgentTools() {
           if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
           if (!client.google_sheet_id) return { error: `ללקוח "${client.name}" אין גיליון מקושר` }
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'update_client_sheet_range', { clientId: client.id, tabName, range, values }, confirmationId,
             `לאשר דריסת הטווח ${range} בלשונית "${tabName}" של ${client.name}?`
           )
@@ -1116,7 +1128,7 @@ export function createGlobalAgentTools() {
           const start = new Date(startDateTime)
           const end = endDateTime ? new Date(endDateTime) : new Date(start.getTime() + 60 * 60 * 1000)
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'create_calendar_event', { title, startDateTime, endDateTime, clientId: resolvedClientId, description, attendees }, confirmationId,
             `לאשר יצירת האירוע "${title}" בתאריך ${start.toLocaleString('he-IL')}?`
           )
@@ -1271,7 +1283,7 @@ export function createGlobalAgentTools() {
           const client = findWorkspaceClientByNameOrId(clients, clientIdOrName)
           if (!client) return { error: `לא נמצא לקוח בשם "${clientIdOrName}"` }
 
-          const gate = await requireAgentConfirmation(
+          const gate = await checkGate(
             'record_client_goal',
             { clientId: client.id, title, targetValue, currentValue, unit, targetDate },
             confirmationId,
@@ -1359,39 +1371,28 @@ export function createGlobalAgentTools() {
     }),
 
     /**
-     * Save an artifact directly to the Studio
+     * Save an artifact directly to the Studio (Instant, automatic, zero confirmation gate)
      */
     save_to_studio: tool({
-      description: 'שמירת תוצר, סיכום, בריף, כרטיס KPI, תוכנית פעולה או טבלה כארטיפקט שמור בסטודיו (Studio) של הלקוח או של הסוכנות.',
+      description: 'שמירת תוצר, סיכום, בריף, כרטיס KPI, תוכנית פעולה או טבלה כארטיפקט שמור בסטודיו (Studio) של הלקוח או של הסוכנות. פעולה זו שמורה פנימית ומתבצעת מיידית ללא שום בקשת אישור.',
       inputSchema: z.object({
         clientIdOrName: z.string().optional().describe('שם הלקוח או מזהה הלקוח (אם זה ארטיפקט עבור לקוח מסוים, אחרת יישמר ברמת הסוכנות)'),
         artifactType: z.enum(['card', 'brief', 'chart', 'action_plan', 'table', 'meeting_prep']).describe('סוג הארטיפקט'),
         title: z.string().describe('כותרת ברורה ותמציתית בעברית עבור הארטיפקט'),
         contentMd: z.string().describe('תוכן הארטיפקט ב-Markdown עשיר ומפורט'),
         contentJson: z.record(z.string(), z.unknown()).optional().describe('נתונים מובנים נוספים במידת הצורך'),
-        confirmationId: confirmationIdSchema,
       }),
-      execute: async ({ clientIdOrName, artifactType, title, contentMd, contentJson, confirmationId }) => {
+      execute: async ({ clientIdOrName, artifactType, title, contentMd, contentJson }) => {
         try {
           let resolvedClientId: string | null = null
-          let clientName = 'הסוכנות (גלובלי)'
 
           if (clientIdOrName) {
             const clients = await listWorkspaceClients()
             const target = findWorkspaceClientByNameOrId(clients, clientIdOrName)
             if (target) {
               resolvedClientId = target.id
-              clientName = target.name
             }
           }
-
-          const gate = await requireAgentConfirmation(
-            'save_to_studio',
-            { clientId: resolvedClientId, artifactType, title },
-            confirmationId,
-            `לאשר שמירת הארטיפקט "${title}" בסטודיו של ${clientName}?`
-          )
-          if (!gate.approved) return gate
 
           const { saveNotebookArtifact } = await import('@/lib/v2/notebook-artifacts')
           const artifact = await saveNotebookArtifact({
