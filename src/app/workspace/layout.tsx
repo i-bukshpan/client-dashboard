@@ -11,6 +11,7 @@ import {
   requireWorkspaceAdmin,
   WorkspaceAccessError,
 } from '@/lib/v2/workspace-dal'
+import { MCPIntegrationModal } from '@/components/workspace/MCPIntegrationModal'
 
 export default async function WorkspaceLayout({
   children,
@@ -95,6 +96,9 @@ export default async function WorkspaceLayout({
         </nav>
 
         <div className="flex-1" />
+
+        {/* WhatsApp Bot MCP Integration Link & Modal */}
+        <MCPIntegrationModal />
 
         {/* Back to legacy admin */}
         <Link

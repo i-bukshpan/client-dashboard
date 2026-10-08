@@ -185,3 +185,162 @@ export async function moveWorkspaceFile(fileId: string, folderId: string): Promi
     fields: 'id, parents',
   })
 }
+
+/**
+ * Searches for files across Google Drive by filename or content keywords.
+ * Supports restricting to a specific parent folder (e.g. client folder).
+ */
+export async function searchDriveFiles(
+  query: string,
+  options?: { folderId?: string; pageSize?: number }
+): Promise<DriveFile[]> {
+  if (!query || !query.trim()) return []
+  const drive = getDriveClient()
+  const safeQuery = query.trim().replace(/'/g, "\\'")
+  const pageSize = Math.min(options?.pageSize || 20, 50)
+
+  // Try combined search first (name or fullText)
+  try {
+    let q = `trashed = false and (name contains '${safeQuery}' or fullText contains '${safeQuery}')`
+    if (options?.folderId) {
+      q = `'${options.folderId}' in parents and trashed = false and (name contains '${safeQuery}' or fullText contains '${safeQuery}')`
+    }
+
+    const response = await drive.files.list({
+      q,
+      fields: 'files(id, name, mimeType, modifiedTime, size, webViewLink, iconLink)',
+      pageSize,
+      orderBy: 'modifiedTime desc',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    })
+
+    const files = response.data.files ?? []
+    return files.map((f) => {
+      const isFolder = f.mimeType === 'application/vnd.google-apps.folder'
+      return {
+        id: f.id ?? '',
+        name: f.name ?? 'Untitled',
+        mimeType: f.mimeType ?? 'application/octet-stream',
+        modifiedTime: f.modifiedTime ?? new Date().toISOString(),
+        size: f.size ?? null,
+        webViewLink:
+          f.webViewLink ??
+          (isFolder
+            ? `https://drive.google.com/drive/folders/${f.id}`
+            : `https://drive.google.com/file/d/${f.id}`),
+        iconLink: f.iconLink ?? '',
+        isFolder,
+      }
+    })
+  } catch (_err: any) {
+    // If fullText search causes query syntax error on certain drive accounts, fallback to name contains
+    const fallbackQ = options?.folderId
+      ? `'${options.folderId}' in parents and trashed = false and name contains '${safeQuery}'`
+      : `trashed = false and name contains '${safeQuery}'`
+
+    const fallbackResponse = await drive.files.list({
+      q: fallbackQ,
+      fields: 'files(id, name, mimeType, modifiedTime, size, webViewLink, iconLink)',
+      pageSize,
+      orderBy: 'modifiedTime desc',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    })
+
+    const files = fallbackResponse.data.files ?? []
+    return files.map((f) => {
+      const isFolder = f.mimeType === 'application/vnd.google-apps.folder'
+      return {
+        id: f.id ?? '',
+        name: f.name ?? 'Untitled',
+        mimeType: f.mimeType ?? 'application/octet-stream',
+        modifiedTime: f.modifiedTime ?? new Date().toISOString(),
+        size: f.size ?? null,
+        webViewLink:
+          f.webViewLink ??
+          (isFolder
+            ? `https://drive.google.com/drive/folders/${f.id}`
+            : `https://drive.google.com/file/d/${f.id}`),
+        iconLink: f.iconLink ?? '',
+        isFolder,
+      }
+    })
+  }
+}
+
+/**
+ * Reads text content or exported text from a Drive file (Docs, plain text, markdown, csv).
+ * Truncates safely to maxBytes (default 40KB) to prevent token overflow.
+ */
+export async function getDriveFileText(
+  fileId: string,
+  maxBytes: number = 40960
+): Promise<{ text: string; mimeType: string; name: string }> {
+  const drive = getDriveClient()
+
+  // 1. Get file metadata
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'id, name, mimeType, size',
+    supportsAllDrives: true,
+  })
+
+  const fileName = meta.data.name ?? 'Untitled'
+  const mimeType = meta.data.mimeType ?? 'application/octet-stream'
+
+  // 2. If Google Doc -> export as plain text
+  if (mimeType === 'application/vnd.google-apps.document') {
+    const exported = await drive.files.export(
+      { fileId, mimeType: 'text/plain' },
+      { responseType: 'text' }
+    )
+    const rawText = String(exported.data ?? '')
+    return {
+      name: fileName,
+      mimeType,
+      text: rawText.length > maxBytes ? rawText.slice(0, maxBytes) + '\n...[תוכן נחתך]' : rawText,
+    }
+  }
+
+  // 3. If Google Sheet -> export first sheet as csv
+  if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+    const exported = await drive.files.export(
+      { fileId, mimeType: 'text/csv' },
+      { responseType: 'text' }
+    )
+    const rawText = String(exported.data ?? '')
+    return {
+      name: fileName,
+      mimeType,
+      text: rawText.length > maxBytes ? rawText.slice(0, maxBytes) + '\n...[תוכן נחתך]' : rawText,
+    }
+  }
+
+  // 4. If binary or text file -> download media
+  const buffer = await downloadFileFromDrive(fileId)
+  const isLikelyText =
+    mimeType.startsWith('text/') ||
+    mimeType.includes('json') ||
+    mimeType.includes('xml') ||
+    mimeType.includes('javascript') ||
+    fileName.endsWith('.txt') ||
+    fileName.endsWith('.md') ||
+    fileName.endsWith('.csv') ||
+    fileName.endsWith('.json')
+
+  if (isLikelyText) {
+    const text = buffer.toString('utf8', 0, Math.min(buffer.length, maxBytes))
+    return {
+      name: fileName,
+      mimeType,
+      text: buffer.length > maxBytes ? text + '\n...[תוכן נחתך]' : text,
+    }
+  }
+
+  return {
+    name: fileName,
+    mimeType,
+    text: `[קובץ בינארי מסוג ${mimeType}, גודל: ${buffer.length} בתים. קישור צפייה זמין דרך Google Drive]`,
+  }
+}
