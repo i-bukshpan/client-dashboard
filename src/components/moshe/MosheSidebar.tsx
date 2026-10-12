@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { WorkerBotNotification } from './WorkerBotNotification'
+import { MosheMCPModal } from './MosheMCPModal'
 
 const NAV = [
   { href: '/moshe', label: 'דשבורד', icon: LayoutDashboard, exact: true },
@@ -105,8 +106,19 @@ export function MosheSidebar({ isAdmin, onClose, pendingRepliesCount, pendingRep
         <WorkerBotNotification initialPending={pendingReplies} />
       </div>
 
-      {/* Footer: settings + logout */}
-      <div className="p-3 border-t border-white/10 space-y-0.5">
+      {/* Footer: MCP + settings + logout */}
+      <div className="p-3 border-t border-white/10 space-y-1">
+        <MosheMCPModal
+          trigger={
+            <button
+              onClick={onClose}
+              className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all w-full text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 border border-amber-400/20"
+            >
+              <Bot className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>חיבור בוטים (MCP)</span>
+            </button>
+          }
+        />
         <Link
           href="/moshe/settings"
           onClick={onClose}

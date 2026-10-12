@@ -211,44 +211,147 @@ export async function addProjectPayment(raw: unknown) {
     project_id: z.string().uuid(),
     amount: z.string().min(1, 'סכום נדרש'),
     due_date: z.string().optional(),
+    paid_at: z.string().optional(),
+    is_paid: z.boolean().optional(),
     notes: z.string().optional(),
   })
   const parsed = schema.safeParse(raw)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
+  const isPaid = !!d.is_paid
+  let paidAt: string | null = null
+  if (isPaid) {
+    if (d.paid_at) {
+      paidAt = d.paid_at.includes('T') ? d.paid_at : new Date(d.paid_at).toISOString()
+    } else {
+      paidAt = new Date().toISOString()
+    }
+  }
+
   const { data: payment, error } = await db.from('moshe_project_payments').insert({
     project_id: d.project_id,
     amount: parseFloat(d.amount),
     due_date: d.due_date || null,
+    paid_at: paidAt,
+    is_paid: isPaid,
     notes: d.notes || null,
   }).select('id').single()
 
   if (error) return { error: `שגיאה בהוספת תשלום: ${error.message}` }
-  await writeAudit(d.project_id, 'create', 'payment', `תשלום פרויקט חדש נוסף: ₪${Number(d.amount).toLocaleString('he-IL')}`, (payment as any).id)
+  const logDesc = isPaid
+    ? `תשלום שבוצע בפועל נוסף: ₪${Number(d.amount).toLocaleString('he-IL')}`
+    : `תשלום חדש נוסף ללוח תשלומים: ₪${Number(d.amount).toLocaleString('he-IL')}`
+  await writeAudit(d.project_id, 'create', 'payment', logDesc, (payment as any).id)
   revalidatePath(`/moshe/projects/${d.project_id}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
 }
 
-export async function toggleProjectPayment(id: string, projectId: string, isPaid: boolean) {
+export async function toggleProjectPayment(
+  id: string,
+  projectId: string,
+  isPaid: boolean,
+  paidAt?: string | null,
+  addAsTransaction: boolean = false
+) {
   const { data: oldPayment } = await db.from('moshe_project_payments').select('*').eq('id', id).single()
   if (!oldPayment) return { error: 'תשלום לא נמצא' }
 
+  let effectivePaidAt: string | null = null
+  if (isPaid) {
+    if (addAsTransaction) {
+      if (paidAt) {
+        effectivePaidAt = paidAt.includes('T') ? paidAt : new Date(paidAt).toISOString()
+      } else {
+        effectivePaidAt = oldPayment.paid_at || new Date().toISOString()
+      }
+    } else {
+      // סימון כבוצע בלוח בלבד — לא מוסיף תנועה כספית שבוצעה!
+      effectivePaidAt = null
+    }
+  } else {
+    effectivePaidAt = null
+  }
+
   const { error } = await db
     .from('moshe_project_payments')
-    .update({ is_paid: isPaid, paid_at: isPaid ? new Date().toISOString() : null })
+    .update({ is_paid: isPaid, paid_at: effectivePaidAt })
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
   
   const desc = isPaid 
-    ? `תשלום פרויקט סומן כשולם (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})` 
-    : `תשלום פרויקט בוטל כשולם (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})`
+    ? (addAsTransaction 
+        ? `תשלום פרויקט סומן ונוסף כתנועה שבוצעה: ₪${Number(oldPayment.amount).toLocaleString('he-IL')}` 
+        : `תשלום פרויקט סומן כהושלם בלוח התשלומים בלבד: ₪${Number(oldPayment.amount).toLocaleString('he-IL')}`)
+    : `תשלום פרויקט הוחזר לסטטוס טרם שולם בלוח: ₪${Number(oldPayment.amount).toLocaleString('he-IL')}`
 
   await writeAudit(projectId, 'update', 'payment', desc, id, oldPayment)
   revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe')
+  revalidatePath('/moshe/calendar')
+  return { success: true }
+}
+
+export async function linkExecutedPaymentToScheduled(
+  executedId: string,
+  scheduledId: string,
+  projectId: string
+) {
+  const [{ data: execPayment }, { data: schedPayment }] = await Promise.all([
+    db.from('moshe_project_payments').select('*').eq('id', executedId).single(),
+    db.from('moshe_project_payments').select('*').eq('id', scheduledId).single(),
+  ])
+
+  if (!execPayment || !schedPayment) {
+    return { error: 'אחד התשלומים לא נמצא במערכת' }
+  }
+
+  const paidAt = execPayment.paid_at || new Date().toISOString()
+  const combinedNotes = schedPayment.notes
+    ? `${schedPayment.notes} (${execPayment.notes || 'שולם'})`
+    : execPayment.notes || 'שולם כחלק מלוח תשלומים'
+
+  const { error: updateErr } = await db
+    .from('moshe_project_payments')
+    .update({
+      is_paid: true,
+      paid_at: paidAt,
+      notes: combinedNotes,
+      amount: execPayment.amount || schedPayment.amount,
+    })
+    .eq('id', scheduledId)
+
+  if (updateErr) return { error: `שגיאה בעדכון לוח התשלומים: ${updateErr.message}` }
+
+  if (executedId !== scheduledId) {
+    await db.from('moshe_project_payments').delete().eq('id', executedId)
+  }
+
+  await writeAudit(
+    projectId,
+    'update',
+    'payment',
+    `תנועה שבוצעה שויכה לשורת לוח תשלומים: ₪${Number(execPayment.amount).toLocaleString('he-IL')}`,
+    scheduledId
+  )
+
+  revalidatePath(`/moshe/projects/${projectId}`)
+  revalidatePath('/moshe')
+  revalidatePath('/moshe/calendar')
+  return { success: true }
+}
+
+export async function setPaymentDueDate(id: string, projectId: string, dueDate: string | null) {
+  const { error } = await db
+    .from('moshe_project_payments')
+    .update({ due_date: dueDate })
+    .eq('id', id)
+
+  if (error) return { error: `שגיאה בעדכון תאריך יעד: ${error.message}` }
+
+  revalidatePath(`/moshe/projects/${projectId}`)
   revalidatePath('/moshe/calendar')
   return { success: true }
 }

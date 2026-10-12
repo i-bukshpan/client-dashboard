@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import { MosheSidebar } from './MosheSidebar'
 import { WorkerBotNotification } from './WorkerBotNotification'
+import { MosheMCPModal } from './MosheMCPModal'
 
 interface PendingReply {
   messageId: string
@@ -63,6 +64,7 @@ export function MosheShell({ isAdmin, children, pendingReplies }: Props) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <MosheMCPModal />
             {isAdmin && (
               <a
                 href="/admin/dashboard"

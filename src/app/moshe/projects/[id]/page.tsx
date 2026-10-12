@@ -245,7 +245,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </div>
 
         <TabsContent value="payments" className="focus-visible:outline-none">
-          <ProjectPaymentsTab projectId={id} payments={pp} />
+          <ProjectPaymentsTab
+            projectId={id}
+            payments={pp}
+            projectName={p.name}
+            totalProjectCost={p.total_project_cost ? Number(p.total_project_cost) : undefined}
+          />
         </TabsContent>
 
         <TabsContent value="buyers" className="focus-visible:outline-none">

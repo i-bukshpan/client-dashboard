@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2, Download, HardDrive } from 'lucide-react'
+import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2, Download, HardDrive, Bot } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { MosheMCPModal } from '@/components/moshe/MosheMCPModal'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -200,6 +201,23 @@ export default function SettingsPage() {
           {pwLoading ? 'מחליף סיסמה...' : 'החלף סיסמה'}
         </Button>
       </form>
+
+      {/* MCP Bot Integrations */}
+      <div className="bg-white rounded-2xl border border-amber-200/80 p-5 space-y-4 shadow-xs">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-600 flex items-center gap-1.5">
+              <Bot className="w-4 h-4 text-amber-600" />
+              חיבור בוטים ו-MCP
+            </p>
+            <p className="text-xs text-slate-500 mt-1">חיבור בוט וואטסאפ (WhatsApp Bot), n8n, Claude Desktop ו-Cursor למידע של פורטל משה</p>
+          </div>
+          <MosheMCPModal />
+        </div>
+        <p className="text-[11px] text-slate-400">
+          השרת מוגן באמצעות טוקן ומאפשר לבוטים חיצוניים לתשאל פרויקטים, לוחות תשלומים, קונים, הלוואות ועובדים ללא חשיפת שאר המערכת.
+        </p>
+      </div>
 
       {/* Backup */}
       <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
