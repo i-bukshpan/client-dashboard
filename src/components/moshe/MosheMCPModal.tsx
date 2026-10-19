@@ -31,6 +31,7 @@ import {
   FolderKanban,
   MessageSquare,
   Lock,
+  Search,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -89,6 +90,10 @@ export function MosheMCPModal({ trigger }: Props) {
   // New token input
   const [newTokenName, setNewTokenName] = useState('')
   const [isCreatingToken, setIsCreatingToken] = useState(false)
+
+  // Tools filtering & search
+  const [toolSearch, setToolSearch] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
   // Fetch info when modal opens
   const loadData = async () => {
@@ -412,42 +417,119 @@ export function MosheMCPModal({ trigger }: Props) {
               )}
 
               {/* ── TAB 2: TOOLS CATALOG ── */}
-              {activeTab === 'tools' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-800">
-                        כלים זמינים לבוט ({tools.length})
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        כל הכלים מוגבלים אוטומטית לנתוני פורטל משה בלבד. הבוט יכול לתשאל, לחשב ולהוסיף תשלומים.
-                      </p>
-                    </div>
-                  </div>
+              {activeTab === 'tools' && (() => {
+                const categories = [
+                  { id: 'all', label: 'הכל' },
+                  { id: 'projects', label: 'פרויקטים' },
+                  { id: 'payments', label: 'לוח תשלומים ותנועות' },
+                  { id: 'buyers', label: 'קונים ותקבולים' },
+                  { id: 'finance', label: 'הכנסות / הוצאות ומאזן' },
+                  { id: 'partners', label: 'שותפים והשקעות' },
+                  { id: 'loans', label: 'הלוואות וגמ"חים' },
+                  { id: 'neighbors', label: 'שכנים והסכמים' },
+                  { id: 'calendar', label: 'יומן ופגישות' },
+                  { id: 'workers', label: 'עובדים ומשימות' },
+                  { id: 'audit', label: 'שחזור ויומן פעולות' },
+                  { id: 'search', label: 'חיפוש מהיר' },
+                ]
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pe-1">
-                    {tools.map((t) => (
-                      <div
-                        key={t.name}
-                        className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-amber-300 hover:shadow-xs transition-all space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[11px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                            {t.name}
-                          </span>
-                          <span className="text-[10px] text-slate-400 capitalize">
-                            {t.category}
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-slate-800">{t.titleHebrew}</p>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                          {t.description}
+                const filtered = tools.filter((t) => {
+                  const matchCat = selectedCategory === 'all' || t.category === selectedCategory
+                  const q = toolSearch.trim().toLowerCase()
+                  const matchText =
+                    !q ||
+                    t.name.toLowerCase().includes(q) ||
+                    t.titleHebrew.includes(q) ||
+                    t.description.includes(q)
+                  return matchCat && matchText
+                })
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-800">
+                          ארגז כלים מורחב לבוט ({filtered.length} מתוך {tools.length})
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          תמיכה מלאה בתפעול הפורטל: תשאול, הוספה, עריכה, מחיקה ושחזור פעולות ישירות מוואטסאפ.
                         </p>
                       </div>
-                    ))}
+
+                      {/* Search box */}
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute start-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={toolSearch}
+                          onChange={(e) => setToolSearch(e.target.value)}
+                          placeholder="חיפוש כלי / פקודה..."
+                          className="w-full h-8 text-xs ps-8 pe-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category Filter Chips */}
+                    <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+                      {categories.map((c) => {
+                        const count =
+                          c.id === 'all' ? tools.length : tools.filter((t) => t.category === c.id).length
+                        if (c.id !== 'all' && count === 0) return null
+                        const active = selectedCategory === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            onClick={() => setSelectedCategory(c.id)}
+                            className={`px-2.5 py-1 text-xs rounded-lg font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+                              active
+                                ? 'bg-amber-500 text-white shadow-xs'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            <span>{c.label}</span>
+                            <span
+                              className={`text-[10px] px-1 py-0.2 rounded-full ${
+                                active ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-500'
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Tool Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[460px] overflow-y-auto pe-1">
+                      {filtered.length === 0 ? (
+                        <div className="col-span-full py-12 text-center text-slate-400 text-xs">
+                          לא נמצאו כלים התואמים לחיפוש &quot;{toolSearch}&quot;
+                        </div>
+                      ) : (
+                        filtered.map((t) => (
+                          <div
+                            key={t.name}
+                            className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-amber-300 hover:shadow-xs transition-all space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/80">
+                                {t.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 capitalize font-medium">
+                                {t.category}
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-800">{t.titleHebrew}</p>
+                            <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                              {t.description}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* ── TAB 3: USER GUIDE ── */}
               {activeTab === 'guide' && (
@@ -456,11 +538,11 @@ export function MosheMCPModal({ trigger }: Props) {
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                     <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
                       <MessageSquare className="w-4 h-4 text-emerald-600" />
-                      <h4>1. חיבור לבוט וואטסאפ (n8n / WhatsApp Bot)</h4>
+                      <h4>1. חיבור לבוט וואטסאפ (n8n / WhatsApp Bot) — תפעול מלא</h4>
                     </div>
                     <ol className="list-decimal list-inside text-xs space-y-2 leading-relaxed text-slate-600">
                       <li>
-                        ב-n8n או בפלטפורמת הבוט, הוסף צומת <strong>AI Agent</strong> ובחר באפשרות <strong>Tools ➔ MCP Tool</strong> (או HTTP Request JSON-RPC).
+                        ב-n8n או בפלטפורמת הבוט, הוסף צומת <strong>AI Agent</strong> ובחר באפשרות <strong>Tools ➔ MCP Tool</strong> (או חיבור HTTP Streamable).
                       </li>
                       <li>
                         הזן את כתובת ה-Endpoint: <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">{endpointUrl}</code>.
@@ -469,13 +551,33 @@ export function MosheMCPModal({ trigger }: Props) {
                         הוסף כותרת אימות (Header): <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">Authorization: Bearer &lt;TOKEN&gt;</code>.
                       </li>
                       <li>
-                        הבוט מוכן! כעת ניתן לשאול בוואטסאפ:
-                        <ul className="list-disc list-inside ms-4 mt-1 text-[11px] text-slate-500 space-y-0.5">
-                          <li>"משה, מה היתרה והכסף בקופה של פרויקט הרצל?"</li>
-                          <li>"אילו תשלומים מתוכננים לשבוע הקרוב?"</li>
-                          <li>"כמה שולם בפועל לקבלן השלד?"</li>
-                          <li>"מה סטטוס הקונים והתשלומים שהתקבלו?"</li>
-                        </ul>
+                        הבוט מוכן לתפעול מלא בעברית! דוגמאות לפקודות שהבוט מבין ומבצע:
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                          <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                            <p className="font-bold text-slate-800">פרויקטים ומאזנים:</p>
+                            <p>• &quot;משה, מה היתרה והכסף בקופה של פרויקט הרצל?&quot;</p>
+                            <p>• &quot;תוסיף פרויקט חדש בשם רמת אשכול ברחוב פלוני&quot;</p>
+                            <p>• &quot;תן לי סקירה פיננסית כללית של כל הפרויקטים&quot;</p>
+                          </div>
+                          <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                            <p className="font-bold text-slate-800">תשלומים ותנועות (מופרדים):</p>
+                            <p>• &quot;תוסיף ללוח של פרויקט יפו תשלום גמר שלד 150,000&quot;</p>
+                            <p>• &quot;שילמתי היום 40,000 ש&quot;ח לקבלן באישור העברה 552&quot;</p>
+                            <p>• &quot;כמה נשאר לשלם בסך הכל בלוח של הרצל?&quot;</p>
+                          </div>
+                          <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                            <p className="font-bold text-slate-800">קונים ותקבולים:</p>
+                            <p>• &quot;תוסיף קונה חדש בשם ישראל לוי דירה 3 ב-2,200,000&quot;</p>
+                            <p>• &quot;הקונה ישראל לוי העביר היום 100,000 בהעברה בנקאית&quot;</p>
+                            <p>• &quot;מה יתרת החוב של כל הקונים בפרויקט?&quot;</p>
+                          </div>
+                          <div className="p-2.5 bg-white rounded-lg border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                            <p className="font-bold text-slate-800">הלוואות, שותפים ושחזור:</p>
+                            <p>• &quot;משכתי 100,000 מההלוואה של גמ&quot;ח בית ישראל&quot;</p>
+                            <p>• &quot;השותף יצחק השקיע היום 200,000 ש&quot;ח&quot;</p>
+                            <p>• &quot;תבטל את המחיקה האחרונה שעשיתי / שחזר את התשלום&quot;</p>
+                          </div>
+                        </div>
                       </li>
                     </ol>
                   </div>
