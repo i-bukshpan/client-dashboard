@@ -10,15 +10,11 @@ const db = createClient(
 export const dynamic = 'force-dynamic'
 
 export default async function ActivityJournalPage() {
-  // purge entries older than 7 days
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  await db.from('moshe_audit_log').delete().lt('created_at', cutoff)
-
   const [{ data: logs }, { data: projects }] = await Promise.all([
     db.from('moshe_audit_log')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(500),
+      .limit(1000),
     db.from('moshe_projects').select('id, name'),
   ])
 
@@ -32,8 +28,8 @@ export default async function ActivityJournalPage() {
           <ScrollText className="w-5 h-5 text-violet-600" />
         </div>
         <div>
-          <h1 className="text-lg font-black text-slate-900">יומן פעילות מערכת</h1>
-          <p className="text-xs text-slate-400">מעקב אוטומטי אחרי כל השינויים · ביטול פעולה אפשרי עד 10 דקות · רשומות נמחקות לאחר 7 ימים</p>
+          <h1 className="text-lg font-black text-slate-900">יומן פעילות והיסטוריית מערכת</h1>
+          <p className="text-xs text-slate-400">מעקב אוטומטי מלא · השוואת שינויים לפני ואחרי · שחזור גרסאות לאורך זמן</p>
         </div>
       </div>
 

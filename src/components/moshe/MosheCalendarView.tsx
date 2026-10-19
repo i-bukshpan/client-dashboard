@@ -356,8 +356,8 @@ export function MosheCalendarView({ projPayments, buyerPayments, manualEvents, p
                       {dayItems.slice(0, 2).map((it, j) => (
                         <div key={j} className={cn(
                           'text-[9px] font-bold px-1 py-0.5 rounded truncate',
-                          it.kind === 'expense' ? (it.is_paid ? 'bg-slate-100 text-slate-400 line-through' : 'bg-red-100 text-red-700') :
-                          it.kind === 'income'  ? (it.is_received ? 'bg-slate-100 text-slate-400 line-through' : 'bg-emerald-100 text-emerald-700') :
+                          it.kind === 'expense' ? (it.is_paid ? 'bg-slate-100 text-slate-500 font-normal' : 'bg-red-100 text-red-700') :
+                          it.kind === 'income'  ? (it.is_received ? 'bg-slate-100 text-slate-500 font-normal' : 'bg-emerald-100 text-emerald-700') :
                           'bg-blue-100 text-blue-700'
                         )}>
                           {it.kind !== 'event' ? fmt(it.amount) : it.title}
@@ -635,7 +635,7 @@ function CalendarDayItem({ item, onToggle, onEditEvent, onDeleteEvent, onSelect 
           <p className="text-[10px] text-slate-400 truncate mt-0.5">{item.notes}</p>
         )}
         {item.kind !== 'event' && (
-          <p className={cn('text-xs font-black mt-0.5', item.kind === 'expense' ? 'text-red-600' : 'text-emerald-700', done && 'text-slate-400 line-through')}>
+          <p className={cn('text-xs font-black mt-0.5', item.kind === 'expense' ? 'text-red-600' : 'text-emerald-700', done && 'text-slate-400')}>
             {fmt(item.amount)}
           </p>
         )}
@@ -745,7 +745,7 @@ function CalendarListItem({ item, onToggle, onEditEvent, onDeleteEvent, onSelect
       {/* Amount / type badge */}
       {item.kind !== 'event' ? (
         <p className={cn('font-black text-sm shrink-0',
-          done ? 'text-slate-400 line-through' :
+          done ? 'text-slate-400' :
           overdue ? 'text-red-600' :
           item.kind === 'expense' ? 'text-red-700' : 'text-emerald-700'
         )}>

@@ -102,7 +102,7 @@ export default async function WorkerProjectPage({ params }: { params: Promise<{ 
                     </p>
                   )}
                 </div>
-                <span className={cn('text-sm font-black shrink-0', pay.is_paid ? 'text-slate-400 line-through' : 'text-red-600')}>
+                <span className={cn('text-sm font-black shrink-0', pay.is_paid ? 'text-slate-400' : 'text-red-600')}>
                   {fmt(Number(pay.amount))}
                 </span>
               </div>

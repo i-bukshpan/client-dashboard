@@ -23,6 +23,7 @@ export interface MosheProjectPayment {
   notes: string | null
   is_paid: boolean
   paid_at: string | null
+  payment_type?: 'schedule' | 'movement'
   created_at: string
 }
 
@@ -49,6 +50,7 @@ export interface MosheBuyerPayment {
   notes: string | null
   is_received: boolean
   received_at: string | null
+  payment_type?: 'schedule' | 'movement'
   created_at: string
 }
 
@@ -171,3 +173,21 @@ export interface MosheLoanReceipt {
   notes: string | null
   created_at: string
 }
+
+export interface MosheAuditEntry {
+  id: string
+  project_id: string | null
+  user_email: string | null
+  user_name: string | null
+  action_type: 'create' | 'update' | 'delete' | 'restore'
+  entity_type: string
+  entity_id: string | null
+  description: string
+  created_at: string
+  previous_snapshot: Record<string, unknown> | null
+  new_snapshot: Record<string, unknown> | null
+  undo_snapshot: Record<string, unknown> | null
+  is_undone: boolean
+  undone_at: string | null
+}
+

@@ -614,7 +614,7 @@ function LoanPaymentsList({ loan, projectId, partners }: {
               {p.notes || '—'}
             </p>
 
-            <p className={cn('font-bold text-xs shrink-0', p.is_paid ? 'text-slate-300 line-through' : overdue ? 'text-red-600' : 'text-violet-700')}>
+            <p className={cn('font-bold text-xs shrink-0', p.is_paid ? 'text-slate-400' : overdue ? 'text-red-600' : 'text-violet-700')}>
               {fmt(Number(p.amount))}
             </p>
 
@@ -822,7 +822,7 @@ function LoanReceiptsList({ loan, projectId }: {
                 {p.notes || '—'}
               </p>
 
-              <p className={cn('font-bold text-xs shrink-0', p.is_received ? 'text-slate-300 line-through' : overdue ? 'text-red-600' : 'text-blue-700')}>
+              <p className={cn('font-bold text-xs shrink-0', p.is_received ? 'text-slate-400' : overdue ? 'text-red-600' : 'text-blue-700')}>
                 {fmt(Number(p.amount))}
               </p>
 

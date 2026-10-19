@@ -118,10 +118,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const neighborScheduled = neighborPaymentsArr.reduce((s: number, x: any) => s + Number(x.amount), 0)
 
   // KPIs
-  const totalPaid     = pp.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborPaid
-  const totalScheduled = pp.reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborScheduled
-  const totalReceived  = bp.filter((x: any) => x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const totalExpected  = bp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalPaid = pp.filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.is_paid)).reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborPaid
+  const totalScheduled = pp.filter((x: any) => x.payment_type === 'schedule' || (!x.payment_type && !x.is_paid)).reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborScheduled
+  const totalReceived = bp.filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.is_received)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalExpected = bp.filter((x: any) => x.payment_type === 'schedule' || (!x.payment_type && !x.is_received)).reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txIncome       = tx.filter((x: any) => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txExpense      = tx.filter((x: any) => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
 
