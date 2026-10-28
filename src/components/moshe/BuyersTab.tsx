@@ -19,7 +19,8 @@ import {
   AlertCircle,
   FileCheck2,
   ArrowDownLeft,
-  Calendar
+  Calendar,
+  Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
@@ -30,7 +31,8 @@ import {
   addBuyerPayment,
   deleteBuyerPayment,
   updateBuyerPayment,
-  updateBuyer
+  updateBuyer,
+  toggleBuyerPayment,
 } from '@/app/moshe/actions'
 import { PaymentScheduleForm, type PaymentRow } from './PaymentScheduleForm'
 import { toast } from 'sonner'
@@ -521,7 +523,7 @@ function BuyerPaymentsDetail({
 
   // Sorted Schedule Items
   const schedulePayments = buyer.payments
-    .filter((p) => p.payment_type === 'schedule' || (!p.payment_type && !p.is_received))
+    .filter((p) => p.payment_type === 'schedule' || (!p.payment_type && !p.received_at))
     .sort((a, b) => {
       if (!a.due_date && !b.due_date) return 0
       if (!a.due_date) return 1
@@ -531,7 +533,7 @@ function BuyerPaymentsDetail({
 
   // Sorted Movements
   const movementPayments = buyer.payments
-    .filter((p) => p.payment_type === 'movement' || (!p.payment_type && p.is_received))
+    .filter((p) => p.payment_type === 'movement' || (!p.payment_type && p.received_at))
     .sort((a, b) => {
       const dateA = a.received_at ? new Date(a.received_at).getTime() : 0
       const dateB = b.received_at ? new Date(b.received_at).getTime() : 0
@@ -542,7 +544,22 @@ function BuyerPaymentsDetail({
   const totalReceived = movementPayments.reduce((s, p) => s + Number(p.amount), 0)
   const remaining = totalScheduled - totalReceived
 
+  // Visual completion stats for buyer schedule
+  const completedScheduleCount = schedulePayments.filter((p) => p.is_received).length
+  const pendingScheduleCount = schedulePayments.length - completedScheduleCount
+
   // Handlers for Schedule
+  async function handleToggleSchedule(p: MosheBuyerPayment) {
+    const nextStatus = !p.is_received
+    startTransition(async () => {
+      const r = await toggleBuyerPayment(p.id, projectId, nextStatus)
+      if (r?.error) {
+        toast.error(r.error)
+        return
+      }
+      toast.success(nextStatus ? 'תשלום הקונה סומן כבוצע בלוח' : 'סימון התשלום בלוח בוטל')
+    })
+  }
   async function handleAddSchedule() {
     if (!newSchedule.amount || Number(newSchedule.amount) <= 0) {
       toast.error('נא להזין סכום תקין לתשלום בלוח')
@@ -687,9 +704,21 @@ function BuyerPaymentsDetail({
                 <Calendar className="w-4 h-4" />
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-800">לוח תשלומים שנקבע לקונה</p>
-                <p className="text-[10px] text-slate-400">
-                  {schedulePayments.length} מועדים | סה&quot;כ {fmt(totalScheduled)}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs font-bold text-slate-800">לוח תשלומים שנקבע לקונה</p>
+                  {completedScheduleCount > 0 && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                      {completedScheduleCount} בוצעו
+                    </span>
+                  )}
+                  {pendingScheduleCount > 0 && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-full">
+                      {pendingScheduleCount} נותרו
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {schedulePayments.length} מועדים | סה&quot;כ {fmt(totalScheduled)} (סימון ״בוצע״ חזותי בלבד)
                 </p>
               </div>
             </div>
@@ -757,7 +786,8 @@ function BuyerPaymentsDetail({
             ) : (
               schedulePayments.map((p) => {
                 const due = p.due_date ? new Date(p.due_date) : null
-                const isOverdue = due ? due < today : false
+                const isCompleted = !!p.is_received
+                const isOverdue = due && !isCompleted ? due < today : false
 
                 if (editingScheduleId === p.id) {
                   return (
@@ -820,38 +850,86 @@ function BuyerPaymentsDetail({
                 return (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition-colors"
+                    className={cn(
+                      'flex items-center justify-between gap-3 px-4 py-2.5 transition-colors',
+                      isCompleted
+                        ? 'bg-emerald-50/25 hover:bg-emerald-50/40'
+                        : isOverdue
+                        ? 'bg-red-50/20 hover:bg-red-50/30'
+                        : 'hover:bg-slate-50/80'
+                    )}
                   >
                     <div className="flex items-center gap-3 min-w-0">
+                      {/* Visual completion checkbox */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSchedule(p)}
+                        disabled={pending}
+                        title={isCompleted ? 'בטל סימון כבוצע' : 'סמן תשלום כבוצע בלוח (חזותי בלבד)'}
+                        className={cn(
+                          'w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 cursor-pointer',
+                          isCompleted
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                            : isOverdue
+                            ? 'border-red-300 bg-red-50/50 hover:border-emerald-500 hover:bg-emerald-50 text-transparent'
+                            : 'border-slate-300 bg-white hover:border-emerald-500 hover:bg-emerald-50 text-transparent'
+                        )}
+                      >
+                        <Check className={cn('w-3 h-3 stroke-[2.5]', isCompleted ? 'block' : 'hidden')} />
+                      </button>
+
                       <div className="w-14 shrink-0 text-center">
                         {due ? (
                           <div>
                             <p
                               className={cn(
                                 'text-[11px] font-bold',
-                                isOverdue ? 'text-red-600' : 'text-slate-600'
+                                isCompleted
+                                  ? 'text-emerald-700'
+                                  : isOverdue
+                                  ? 'text-red-600'
+                                  : 'text-slate-600'
                               )}
                             >
                               {format(due, 'dd/MM/yy')}
                             </p>
-                            {isOverdue && (
+                            {isCompleted ? (
+                              <span className="text-[9px] text-emerald-600 font-semibold block">
+                                בוצע
+                              </span>
+                            ) : isOverdue ? (
                               <span className="text-[9px] text-red-500 font-medium block">
                                 עבר המועד
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         ) : (
                           <span className="text-[10px] text-slate-400">ללא תאריך</span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-700 truncate min-w-0">
-                        {p.notes || <span className="text-slate-300">ללא תיאור</span>}
-                      </p>
+                      <div className="min-w-0 flex items-center gap-1.5">
+                        <p className={cn(
+                          'text-xs truncate min-w-0',
+                          isCompleted ? 'text-slate-600' : 'text-slate-700 font-medium'
+                        )}>
+                          {p.notes || <span className="text-slate-300">ללא תיאור</span>}
+                        </p>
+                        {isCompleted && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-100/80 border border-emerald-200 px-1.5 py-0.2 rounded-full shrink-0">
+                            <Check className="w-2.5 h-2.5" /> בוצע
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
                       {/* Amount: ALWAYS crystal clear, NO line-through */}
-                      <p className="font-bold text-xs text-slate-900">{fmt(Number(p.amount))}</p>
+                      <p className={cn(
+                        'font-bold text-xs',
+                        isCompleted ? 'text-emerald-800' : isOverdue ? 'text-red-700' : 'text-slate-900'
+                      )}>
+                        {fmt(Number(p.amount))}
+                      </p>
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => startEditSchedule(p)}

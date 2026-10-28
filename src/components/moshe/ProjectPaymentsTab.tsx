@@ -14,11 +14,13 @@ import {
   Clock,
   History,
   AlertCircle,
+  Check,
 } from 'lucide-react'
 import {
   deleteProjectPayment,
   addProjectPayment,
   updateProjectPayment,
+  toggleProjectPayment,
 } from '@/app/moshe/actions'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -61,7 +63,7 @@ export function ProjectPaymentsTab({
 
   // ── 1. לוח תשלומים שנקבע (תשלומים מתוכננים בלבד) ───────────────────────────
   const schedulePayments = payments
-    .filter((p) => p.payment_type === 'schedule' || (!p.payment_type && !p.is_paid))
+    .filter((p) => p.payment_type === 'schedule' || (!p.payment_type && !p.paid_at))
     .sort((a, b) => {
       if (!a.due_date && !b.due_date) return 0
       if (!a.due_date) return 1
@@ -71,7 +73,7 @@ export function ProjectPaymentsTab({
 
   // ── 2. תנועות שבוצעו בפועל (רשימת תנועות כספיות עצמאית) ──────────────────────
   const executedPayments = payments
-    .filter((p) => p.payment_type === 'movement' || (!p.payment_type && p.is_paid))
+    .filter((p) => p.payment_type === 'movement' || (!p.payment_type && p.paid_at))
     .sort((a, b) => {
       const dateA = a.paid_at || a.created_at
       const dateB = b.paid_at || b.created_at
@@ -83,9 +85,25 @@ export function ProjectPaymentsTab({
   const totalPaid = executedPayments.reduce((s, p) => s + Number(p.amount), 0)
   const remaining = totalScheduled - totalPaid
 
+  // סטטיסטיקה חזותית ללוח התשלומים
+  const completedScheduleCount = schedulePayments.filter((p) => p.is_paid).length
+  const pendingScheduleCount = schedulePayments.length - completedScheduleCount
+
   const today = new Date()
 
   // ── Handlers ────────────────────────────────────────────────────────────────
+
+  async function handleToggleScheduled(p: MosheProjectPayment) {
+    const nextStatus = !p.is_paid
+    startTransition(async () => {
+      const r = await toggleProjectPayment(p.id, projectId, nextStatus)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
+      toast.success(nextStatus ? 'התשלום סומן כבוצע בלוח' : 'סימון התשלום בלוח בוטל')
+    })
+  }
 
   async function handleAddScheduled() {
     if (!scheduledRow.amount || parseFloat(scheduledRow.amount) <= 0) {
@@ -268,9 +286,24 @@ export function ProjectPaymentsTab({
               <CalendarDays className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-800">1. לוח התשלומים שנקבע</p>
-              <p className="text-xs text-slate-500">
-                טבלת תשלומים מתוכננים לפי יעדים. טבלה עצמאית ללא תלות בתנועות.
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-bold text-slate-800">1. לוח התשלומים שנקבע</p>
+                <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {schedulePayments.length} מועדים
+                </span>
+                {completedScheduleCount > 0 && (
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    {completedScheduleCount} בוצעו
+                  </span>
+                )}
+                {pendingScheduleCount > 0 && (
+                  <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    {pendingScheduleCount} נותרו
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                טבלת יעדי תשלום מתוכננים. סימון ״בוצע״ הינו חזותי בלבד ואינו משפיע על המאזן או על תנועות הקופה.
               </p>
             </div>
           </div>
@@ -354,7 +387,8 @@ export function ProjectPaymentsTab({
 
           {schedulePayments.map((p) => {
             const due = p.due_date ? new Date(p.due_date) : null
-            const isOverdue = due && due < today
+            const isCompleted = !!p.is_paid
+            const isOverdue = due && !isCompleted && due < today
 
             if (editingId === p.id) {
               return (
@@ -414,16 +448,40 @@ export function ProjectPaymentsTab({
                 key={p.id}
                 className={cn(
                   'flex items-center gap-3.5 px-5 py-3.5 transition-colors group',
-                  isOverdue ? 'bg-red-50/20 hover:bg-red-50/40' : 'hover:bg-slate-50/60'
+                  isCompleted
+                    ? 'bg-emerald-50/25 hover:bg-emerald-50/40'
+                    : isOverdue
+                    ? 'bg-red-50/20 hover:bg-red-50/40'
+                    : 'hover:bg-slate-50/60'
                 )}
               >
+                {/* Visual completion checkbox */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleScheduled(p)}
+                  disabled={pending}
+                  title={isCompleted ? 'בטל סימון כבוצע' : 'סמן תשלום כבוצע בלוח (חזותי בלבד)'}
+                  className={cn(
+                    'w-6 h-6 rounded-lg border flex items-center justify-center transition-all shrink-0 cursor-pointer',
+                    isCompleted
+                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                      : isOverdue
+                      ? 'border-red-300 bg-red-50/50 hover:border-emerald-500 hover:bg-emerald-50 text-transparent'
+                      : 'border-slate-300 bg-white hover:border-emerald-500 hover:bg-emerald-50 text-transparent'
+                  )}
+                >
+                  <Check className={cn('w-3.5 h-3.5 stroke-[2.5]', isCompleted ? 'block' : 'hidden')} />
+                </button>
+
                 {/* Due Date Box */}
                 <div className="w-16 shrink-0">
                   {due ? (
                     <div
                       className={cn(
                         'text-center rounded-lg py-1 border',
-                        isOverdue
+                        isCompleted
+                          ? 'bg-emerald-50/80 border-emerald-200/80 text-emerald-800'
+                          : isOverdue
                           ? 'bg-red-50 border-red-200 text-red-700'
                           : 'bg-amber-50/80 border-amber-200/80 text-amber-800'
                       )}
@@ -446,15 +504,23 @@ export function ProjectPaymentsTab({
                 {/* Description & Status */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-slate-800 truncate">
+                    <p className={cn(
+                      'text-sm font-bold truncate',
+                      isCompleted ? 'text-slate-600' : 'text-slate-800'
+                    )}>
                       {p.notes || 'תשלום ללא תיאור'}
                     </p>
-                    {isOverdue && (
+                    {isCompleted ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
+                        <Check className="w-3 h-3" />
+                        בוצע
+                      </span>
+                    ) : isOverdue ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-100/80 border border-red-200 px-2 py-0.5 rounded-full shrink-0">
                         <AlertCircle className="w-3 h-3" />
                         באיחור
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
                     {due && <span>יעד לתשלום: {format(due, 'dd/MM/yyyy')}</span>}
@@ -463,7 +529,10 @@ export function ProjectPaymentsTab({
 
                 {/* Amount (CLEAR, NO LINE-THROUGH!) */}
                 <div className="text-left shrink-0">
-                  <p className={cn('font-black text-sm', isOverdue ? 'text-red-700' : 'text-slate-800')}>
+                  <p className={cn(
+                    'font-black text-sm',
+                    isCompleted ? 'text-emerald-800' : isOverdue ? 'text-red-700' : 'text-slate-800'
+                  )}>
                     {fmt(Number(p.amount))}
                   </p>
                 </div>

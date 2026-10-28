@@ -83,10 +83,10 @@ export default async function ProjectsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {proj.map((p: any) => {
-            const pPaid    = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const pPaid    = pp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.paid_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
                            + np.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-            const bRecv    = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-            const bTotal   = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const bRecv    = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
+            const bTotal   = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
             const buyCount = buyersArr.filter((x: any) => x.project_id === p.id).length
             
             const txInc    = tx.filter((x: any) => x.project_id === p.id && x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)

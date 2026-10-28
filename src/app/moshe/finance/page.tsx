@@ -43,9 +43,9 @@ export default async function FinancePage() {
   buyersArr.forEach((b: any) => { buyerMap[b.id] = b.name })
 
   // Company-wide totals
-  const totalPaid      = pp.filter((x: any) => x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const totalReceived  = bp.filter((x: any) => x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-  const totalCommitted = bp.reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalPaid      = pp.filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.paid_at)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalReceived  = bp.filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.received_at)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+  const totalCommitted = bp.filter((x: any) => x.payment_type === 'schedule' || (!x.payment_type && !x.received_at)).reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txIncome       = tx.filter((x: any) => x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const txExpense      = tx.filter((x: any) => x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
   const totalBudget    = proj.reduce((s: number, p: any) => s + (Number(p.total_project_cost) || 0), 0)
@@ -55,9 +55,9 @@ export default async function FinancePage() {
 
   // Per-project stats
   const projectStats = proj.map((p: any) => {
-    const pPaid      = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const bRecv      = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const bCommitted = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const pPaid      = pp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.paid_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const bRecv      = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const bCommitted = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
     const tInc       = tx.filter((x: any) => x.project_id === p.id && x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
     const tExp       = tx.filter((x: any) => x.project_id === p.id && x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
     const realBal    = (bRecv + tInc) - (pPaid + tExp)

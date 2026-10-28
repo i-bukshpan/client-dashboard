@@ -297,7 +297,11 @@ export async function toggleProjectPayment(
 
   const { error } = await db
     .from('moshe_project_payments')
-    .update({ is_paid: isPaid, paid_at: effectivePaidAt })
+    .update({ 
+      is_paid: isPaid, 
+      paid_at: effectivePaidAt,
+      payment_type: oldPayment.payment_type || 'schedule'
+    })
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
@@ -462,14 +466,18 @@ export async function toggleBuyerPayment(id: string, projectId: string, isReceiv
 
   const { error } = await db
     .from('moshe_buyer_payments')
-    .update({ is_received: isReceived, received_at: isReceived ? new Date().toISOString() : null })
+    .update({ 
+      is_received: isReceived, 
+      received_at: null, // סימון כבוצע בלוח בלבד — לא מוסיף תנועה כספית שבוצעה!
+      payment_type: oldPayment.payment_type || 'schedule'
+    })
     .eq('id', id)
 
   if (error) return { error: `שגיאה בעדכון התשלום: ${error.message}` }
 
   const desc = isReceived 
-    ? `תשלום קונה סומן כהתקבל (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})` 
-    : `תשלום קונה בוטל כהתקבל (סכום: ₪${Number(oldPayment.amount).toLocaleString('he-IL')})`
+    ? `תשלום קונה סומן כבוצע בלוח בלבד (חזותי): ₪${Number(oldPayment.amount).toLocaleString('he-IL')}` 
+    : `תשלום קונה בוטל כבוצע בלוח: ₪${Number(oldPayment.amount).toLocaleString('he-IL')}`
 
   await writeAudit(projectId, 'update', 'buyer_payment', desc, id, oldPayment)
   revalidatePath(`/moshe/projects/${projectId}`)

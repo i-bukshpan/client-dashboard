@@ -53,12 +53,12 @@ export default async function MosheDashboard() {
   const np   = (neighborPayments as any[]) ?? []
 
   // Global totals
-  const bRecv = bp.filter(p => p.is_received).reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const bRecv = bp.filter((p: any) => p.payment_type === 'movement' || (!p.payment_type && p.received_at)).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const txInc = tx.filter((t: any) => t.type === 'income').reduce((s: number, t: any) => s + Number(t.amount), 0)
   const pInv  = ptx.filter((t: any) => t.type === 'investment').reduce((s: number, t: any) => s + Number(t.amount), 0)
   const lRecv = lr.filter(r => r.is_received).reduce((s: number, r: any) => s + Number(r.amount), 0)
   
-  const pPaid = pp.filter(p => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const pPaid = pp.filter((p: any) => p.payment_type === 'movement' || (!p.payment_type && p.paid_at)).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const nPaid = np.filter(p => p.is_paid).reduce((s: number, p: any) => s + Number(p.amount), 0)
   const txExp = tx.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + Number(t.amount), 0)
   const pWth  = ptx.filter((t: any) => t.type === 'withdrawal').reduce((s: number, t: any) => s + Number(t.amount), 0)
@@ -68,11 +68,11 @@ export default async function MosheDashboard() {
   const totalReceived = bRecv + txInc + pInv + lRecv
   const totalPaid = pPaid + nPaid + txExp + pWth + pExp + lPaid
 
-  const totalScheduledExpenses = pp.reduce((s: number, p: any) => s + Number(p.amount), 0) 
+  const totalScheduledExpenses = pp.filter((p: any) => p.payment_type === 'schedule' || (!p.payment_type && !p.paid_at)).reduce((s: number, p: any) => s + Number(p.amount), 0) 
                                + np.reduce((s: number, p: any) => s + Number(p.amount), 0)
                                + txExp + pWth + pExp + lPaid // keep known past non-scheduled as is
   
-  const totalScheduledIncome = bp.reduce((s: number, p: any) => s + Number(p.amount), 0)
+  const totalScheduledIncome = bp.filter((p: any) => p.payment_type === 'schedule' || (!p.payment_type && !p.received_at)).reduce((s: number, p: any) => s + Number(p.amount), 0)
                                + txInc + pInv + lRecv // keep known past non-scheduled as is
 
   const realBalance = totalReceived - totalPaid
@@ -86,17 +86,17 @@ export default async function MosheDashboard() {
   startOfToday.setHours(0, 0, 0, 0)
 
   const upcomingExpenses = pp
-    .filter((p: any) => !p.is_paid && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
+    .filter((p: any) => (p.payment_type === 'schedule' || (!p.payment_type && !p.paid_at)) && !p.is_paid && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
     .slice(0, 6)
 
   const upcomingIncome = bp
-    .filter((p: any) => !p.is_received && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
+    .filter((p: any) => (p.payment_type === 'schedule' || (!p.payment_type && !p.received_at)) && !p.is_received && p.due_date && !isBefore(new Date(p.due_date), startOfToday) && isBefore(new Date(p.due_date), in14))
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
     .slice(0, 6)
 
-  const overdueExpenses = pp.filter((p: any) => !p.is_paid && p.due_date && isBefore(new Date(p.due_date), today))
-  const overdueIncome = bp.filter((p: any) => !p.is_received && p.due_date && isBefore(new Date(p.due_date), today))
+  const overdueExpenses = pp.filter((p: any) => (p.payment_type === 'schedule' || (!p.payment_type && !p.paid_at)) && !p.is_paid && p.due_date && isBefore(new Date(p.due_date), today))
+  const overdueIncome = bp.filter((p: any) => (p.payment_type === 'schedule' || (!p.payment_type && !p.received_at)) && !p.is_received && p.due_date && isBefore(new Date(p.due_date), today))
   const overdueCount = overdueExpenses.length + overdueIncome.length
 
   // Project map for names
@@ -111,9 +111,9 @@ export default async function MosheDashboard() {
   // Insights: per-project collection stats
   const in30 = addDays(today, 30)
   const projectInsights = proj.map((p: any) => {
-    const pBRecv    = bp.filter((x: any) => x.project_id === p.id && x.is_received).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const bTotal    = bp.filter((x: any) => x.project_id === p.id).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const pPPaid    = pp.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const pBRecv    = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const bTotal    = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.received_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const pPPaid    = pp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'movement' || (!x.payment_type && x.paid_at))).reduce((s: number, x: any) => s + Number(x.amount), 0)
                     + np.filter((x: any) => x.project_id === p.id && x.is_paid).reduce((s: number, x: any) => s + Number(x.amount), 0)
     const pTxInc    = tx.filter((x: any) => x.project_id === p.id && x.type === 'income').reduce((s: number, x: any) => s + Number(x.amount), 0)
     const pTxExp    = tx.filter((x: any) => x.project_id === p.id && x.type === 'expense').reduce((s: number, x: any) => s + Number(x.amount), 0)
@@ -125,10 +125,10 @@ export default async function MosheDashboard() {
 
     const cashInFund = (pBRecv + pTxInc + pPInv + pLRecv) - (pPPaid + pTxExp + pPExp + pPWth + pLPaid)
 
-    const overdue     = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-      + bp.filter((x: any) => x.project_id === p.id && !x.is_received && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const next30In    = bp.filter((x: any) => x.project_id === p.id && !x.is_received && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
-    const next30Ex    = pp.filter((x: any) => x.project_id === p.id && !x.is_paid && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const overdue     = pp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.paid_at)) && !x.is_paid && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+      + bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.received_at)) && !x.is_received && x.due_date && isBefore(new Date(x.due_date), today)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const next30In    = bp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.received_at)) && !x.is_received && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
+    const next30Ex    = pp.filter((x: any) => x.project_id === p.id && (x.payment_type === 'schedule' || (!x.payment_type && !x.paid_at)) && !x.is_paid && x.due_date && !isBefore(new Date(x.due_date), today) && isBefore(new Date(x.due_date), in30)).reduce((s: number, x: any) => s + Number(x.amount), 0)
     const pct         = bTotal > 0 ? Math.round((pBRecv / bTotal) * 100) : 0
     return { id: p.id, name: p.name, pct, bRecv: pBRecv, bTotal, pPaid: pPPaid, overdue, next30In, next30Ex, cashInFund }
   }).sort((a: any, b: any) => b.overdue - a.overdue)
