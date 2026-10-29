@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText, Bot } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Calendar, BarChart3, Plus, Settings, LogOut, X, HardHat, ScrollText, Bot, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { WorkerBotNotification } from './WorkerBotNotification'
 import { MosheMCPModal } from './MosheMCPModal'
+import { MosheBackupModal } from './MosheBackupModal'
 
 const NAV = [
   { href: '/moshe', label: 'דשבורד', icon: LayoutDashboard, exact: true },
@@ -106,8 +107,19 @@ export function MosheSidebar({ isAdmin, onClose, pendingRepliesCount, pendingRep
         <WorkerBotNotification initialPending={pendingReplies} />
       </div>
 
-      {/* Footer: MCP + settings + logout */}
+      {/* Footer: Backup + MCP + settings + logout */}
       <div className="p-3 border-t border-white/10 space-y-1">
+        <MosheBackupModal
+          trigger={
+            <button
+              onClick={onClose}
+              className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all w-full text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10 border border-emerald-400/20"
+            >
+              <Download className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>גיבוי מלא ומסודר</span>
+            </button>
+          }
+        />
         <MosheMCPModal
           trigger={
             <button

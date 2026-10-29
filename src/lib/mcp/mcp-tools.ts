@@ -7,6 +7,8 @@ import { getSheetRows, getSpreadsheetMeta, getSheetData } from '@/lib/google-she
 import { listClientEmails } from '@/lib/google-gmail'
 import { listWorkspaceCalendarEvents } from '@/lib/v2/google-calendar'
 import { getInternalFinanceAgentContext } from '@/lib/v2/internal-finance'
+import { classifyTaskReminder } from '@/lib/v2/workspace-tasks'
+import { buildMosheOrganizedBackup } from '@/lib/moshe/backup-builder'
 import type { DashboardConfig } from '@/types/dashboard'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -31,13 +33,155 @@ async function getAllClients() {
   const db = getWorkspaceAdminDb()
   const { data, error } = await db
     .from('clients')
-    .select('id, name, email, phone, status, drive_folder_id, google_sheet_id, gmail_label, dashboard_config_json, portfolio_value, advisory_goal, created_at')
+    .select('*')
     .order('name')
 
   if (error) {
     throw new Error(`Failed to load clients: ${error.message}`)
   }
   return data || []
+}
+
+async function loadUnifiedWorkspaceTasks(options?: {
+  clientId?: string
+  clientName?: string
+  status?: 'all' | 'open' | 'completed'
+  priority?: 'all' | 'urgent' | 'high' | 'medium' | 'low'
+  dueOnOrBefore?: string
+}) {
+  const db = getWorkspaceAdminDb()
+  const clients = await getAllClients()
+  const clientMap = new Map(clients.map((c: any) => [c.id, c.name]))
+  const unified: Array<{
+    id: string
+    title: string
+    status: string
+    priority: string
+    dueDate: string | null
+    isRecurring: boolean
+    recurringPattern: string | null
+    clientName: string
+    source: string
+  }> = []
+
+  // 1. Operations Workspace Sheet ('משימות' tab)
+  try {
+    const { data: ws } = await db
+      .from('v2_operations_workspace')
+      .select('workbook_id')
+      .eq('id', 'primary')
+      .maybeSingle()
+
+    if (ws?.workbook_id) {
+      const rows = await getSheetRows(ws.workbook_id, 'משימות')
+      rows.forEach((row, idx) => {
+        const title = String(row['כותרת'] ?? row['משימה'] ?? row['תיאור'] ?? '').trim()
+        if (!title) return
+        const rawStatus = String(row['סטטוס'] ?? 'פתוח').trim()
+        const isDone =
+          rawStatus === 'הושלם' ||
+          rawStatus === 'בוצע' ||
+          rawStatus.toLowerCase() === 'done' ||
+          rawStatus.toLowerCase() === 'completed'
+        const rawPriority = String(row['עדיפות'] ?? row['דחיפות'] ?? 'רגיל').trim()
+        const dueDate = String(row['מועד יעד'] ?? row['תאריך יעד'] ?? '').trim() || null
+        const rowClient = String(row['שם לקוח'] ?? row['לקוח'] ?? 'כללי').trim() || 'כללי'
+        const recurrenceRaw = String(row['מחזוריות'] ?? '').trim()
+        const reminderState = classifyTaskReminder({
+          status: isDone ? 'completed' : 'todo',
+          dueAt: dueDate,
+          snoozedUntil: null,
+        })
+
+        let normPriority = 'medium'
+        if (rawPriority.includes('דחוף') || rawPriority.toLowerCase() === 'urgent' || reminderState === 'overdue') {
+          normPriority = 'urgent'
+        } else if (rawPriority.includes('גבוה') || rawPriority.toLowerCase() === 'high') {
+          normPriority = 'high'
+        } else if (rawPriority.includes('נמוכ') || rawPriority.toLowerCase() === 'low') {
+          normPriority = 'low'
+        }
+
+        unified.push({
+          id: String(row['מזהה'] || `sheet-task-${idx + 2}`),
+          title,
+          status: isDone ? 'done' : rawStatus || 'open',
+          priority: normPriority,
+          dueDate,
+          isRecurring: Boolean(recurrenceRaw && recurrenceRaw !== 'none'),
+          recurringPattern: recurrenceRaw && recurrenceRaw !== 'none' ? recurrenceRaw : null,
+          clientName: rowClient,
+          source: 'גיליון משימות תפעול',
+        })
+      })
+    }
+  } catch {
+    // Sheet optional
+  }
+
+  // 2. Recurring Client Routines (v2_client_routines)
+  try {
+    let rQuery = db.from('v2_client_routines').select('*').eq('is_active', true)
+    if (options?.clientId) rQuery = rQuery.eq('client_id', options.clientId)
+    const { data: routines } = await rQuery
+    for (const r of routines || []) {
+      const cName = clientMap.get(r.client_id) || 'כללי'
+      unified.push({
+        id: r.id,
+        title: r.title,
+        status: 'open',
+        priority: 'medium',
+        dueDate: r.day_of_month ? `יום ${r.day_of_month} בחודש` : null,
+        isRecurring: true,
+        recurringPattern: r.frequency || 'monthly',
+        clientName: cName,
+        source: 'שגרות מחזוריות',
+      })
+    }
+  } catch {
+    // Table optional
+  }
+
+  // 3. Legacy / Direct DB tasks table (select('*') avoids missing column errors)
+  try {
+    let tQuery = db.from('tasks').select('*')
+    if (options?.clientId) tQuery = tQuery.eq('client_id', options.clientId)
+    const { data: dbTasks } = await tQuery.limit(50)
+    for (const t of dbTasks || []) {
+      const isDone = t.status === 'done' || t.status === 'completed' || t.is_completed === true
+      unified.push({
+        id: String(t.id),
+        title: t.title || t.description || 'משימה',
+        status: isDone ? 'done' : t.status || 'open',
+        priority: t.priority || 'medium',
+        dueDate: t.due_date || null,
+        isRecurring: Boolean(t.is_recurring),
+        recurringPattern: t.recurring_pattern || null,
+        clientName: (t.client_id && clientMap.get(t.client_id)) || 'כללי',
+        source: 'משימות מערכת',
+      })
+    }
+  } catch {
+    // Table optional
+  }
+
+  // Filter results
+  return unified.filter((item) => {
+    if (options?.clientName) {
+      const cleanFilter = options.clientName.toLowerCase().trim()
+      const cleanItemClient = item.clientName.toLowerCase().trim()
+      if (!cleanItemClient.includes(cleanFilter) && !cleanFilter.includes(cleanItemClient)) {
+        return false
+      }
+    }
+    if (options?.status === 'open' && item.status === 'done') return false
+    if (options?.status === 'completed' && item.status !== 'done') return false
+    if (options?.priority && options.priority !== 'all' && item.priority !== options.priority) return false
+    if (options?.dueOnOrBefore && item.dueDate && /^\d{4}-\d{2}-\d{2}/.test(item.dueDate)) {
+      if (item.dueDate.slice(0, 10) > options.dueOnOrBefore) return false
+    }
+    return true
+  })
 }
 
 // ── MCP Tool Definitions ─────────────────────────────────────────────────────
@@ -169,32 +313,37 @@ export const MCP_TOOLS: McpToolSpec[] = [
       const db = getWorkspaceAdminDb()
       const { data: docs, error } = await db
         .from('v2_client_documents')
-        .select('id, file_name, file_type, ocr_status, ocr_text, summary, created_at')
+        .select('*')
         .eq('client_id', client.id)
         .order('created_at', { ascending: false })
-        .limit(20)
+        .limit(30)
 
       if (error) {
         return { error: `שגיאה בשליפת מסמכים: ${error.message}` }
       }
 
       const cleanQ = query.trim().toLowerCase()
-      const matched = (docs || []).filter((d) => {
+      const matched = (docs || []).filter((d: any) => {
+        if (!cleanQ) return true
         const nameMatch = d.file_name?.toLowerCase().includes(cleanQ)
         const ocrMatch = d.ocr_text?.toLowerCase().includes(cleanQ)
+        const typeMatch = d.file_type?.toLowerCase().includes(cleanQ)
         const summaryMatch = d.summary?.toLowerCase().includes(cleanQ)
-        return nameMatch || ocrMatch || summaryMatch
+        return nameMatch || ocrMatch || typeMatch || summaryMatch
       })
 
       return {
         clientName: client.name,
         totalFound: matched.length,
-        documents: matched.map((d) => ({
+        documents: matched.map((d: any) => ({
+          id: d.id,
           fileName: d.file_name,
-          fileType: d.file_type,
+          fileType: d.file_type || d.mime_type || null,
           ocrStatus: d.ocr_status,
-          summary: d.summary || null,
-          textExcerpt: d.ocr_text ? d.ocr_text.slice(0, 500) + '...' : null,
+          amount: d.amount ?? null,
+          fileDate: d.file_date ?? null,
+          driveUrl: d.drive_url ?? null,
+          textExcerpt: d.ocr_text ? d.ocr_text.slice(0, 500) + (d.ocr_text.length > 500 ? '...' : '') : null,
           createdAt: d.created_at,
         })),
       }
@@ -426,23 +575,54 @@ export const MCP_TOOLS: McpToolSpec[] = [
 
       const db = getWorkspaceAdminDb()
 
-      // Fetch open tasks for client
-      const { data: tasks } = await db
-        .from('tasks')
-        .select('id, title, status, priority, due_date, is_recurring')
-        .eq('client_id', client.id)
-        .neq('status', 'done')
-        .order('due_date', { ascending: true })
-        .limit(10)
+      // Fetch open tasks & routines for client via unified loader
+      const openTasks = await loadUnifiedWorkspaceTasks({
+        clientId: client.id,
+        clientName: client.name,
+        status: 'open',
+      })
 
-      // Fetch upcoming appointments
-      const { data: appointments } = await db
-        .from('appointments')
-        .select('id, title, start_time, end_time, status, location')
-        .eq('client_id', client.id)
-        .gte('start_time', new Date().toISOString())
-        .order('start_time', { ascending: true })
-        .limit(5)
+      // Fetch recent client documents safely
+      let recentDocuments: any[] = []
+      try {
+        const { data: docs } = await db
+          .from('v2_client_documents')
+          .select('*')
+          .eq('client_id', client.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
+        recentDocuments = (docs || []).map((d: any) => ({
+          id: d.id,
+          fileName: d.file_name,
+          fileType: d.file_type,
+          ocrStatus: d.ocr_status,
+          amount: d.amount ?? null,
+          createdAt: d.created_at,
+        }))
+      } catch {
+        // Optional
+      }
+
+      // Fetch upcoming calendar events matching client
+      let upcomingAppointments: any[] = []
+      try {
+        const now = new Date()
+        const future = new Date(now.getTime() + 14 * 86400000)
+        const calResult = await listWorkspaceCalendarEvents({
+          timeMin: now.toISOString(),
+          timeMax: future.toISOString(),
+        })
+        const cleanName = client.name.toLowerCase()
+        upcomingAppointments = (calResult.events || [])
+          .filter(
+            (ev: any) =>
+              ev.title?.toLowerCase().includes(cleanName) ||
+              ev.description?.toLowerCase().includes(cleanName)
+          )
+          .slice(0, 5)
+      } catch {
+        // Optional
+      }
 
       // Check unread emails preview if email configured
       let emailPreview = null
@@ -479,8 +659,9 @@ export const MCP_TOOLS: McpToolSpec[] = [
           hasDriveFolder: !!client.drive_folder_id,
           hasGoogleSheet: !!client.google_sheet_id,
         },
-        openTasks: tasks || [],
-        upcomingAppointments: appointments || [],
+        openTasks: openTasks.slice(0, 15),
+        recentDocuments,
+        upcomingAppointments,
         emailPreview,
       }
     },
@@ -500,40 +681,30 @@ export const MCP_TOOLS: McpToolSpec[] = [
       priority: z.enum(['all', 'urgent', 'high', 'medium', 'low']).optional().default('all'),
     }),
     execute: async ({ clientIdOrName, status, priority }) => {
-      const db = getWorkspaceAdminDb()
-      let query = db.from('tasks').select('id, title, status, priority, due_date, is_recurring, recurring_pattern, client_id, clients(name)')
+      let clientId: string | undefined
+      let clientName: string | undefined
 
       if (clientIdOrName) {
         const clients = await getAllClients()
         const client = findClient(clients, clientIdOrName)
-        if (client) query = query.eq('client_id', client.id)
+        if (client) {
+          clientId = client.id
+          clientName = client.name
+        } else {
+          clientName = clientIdOrName
+        }
       }
 
-      if (status === 'open') {
-        query = query.neq('status', 'done')
-      } else if (status === 'completed') {
-        query = query.eq('status', 'done')
-      }
-
-      if (priority && priority !== 'all') {
-        query = query.eq('priority', priority)
-      }
-
-      const { data, error } = await query.order('due_date', { ascending: true }).limit(40)
-      if (error) return { error: `שגיאה בשליפת משימות: ${error.message}` }
+      const tasks = await loadUnifiedWorkspaceTasks({
+        clientId,
+        clientName,
+        status: status || 'open',
+        priority: priority || 'all',
+      })
 
       return {
-        total: (data || []).length,
-        tasks: (data || []).map((t: any) => ({
-          id: t.id,
-          title: t.title,
-          status: t.status,
-          priority: t.priority,
-          dueDate: t.due_date,
-          isRecurring: !!t.is_recurring,
-          recurringPattern: t.recurring_pattern,
-          clientName: t.clients?.name || 'כללי (ללא לקוח)',
-        })),
+        total: tasks.length,
+        tasks: tasks.slice(0, 50),
       }
     },
   },
@@ -548,45 +719,57 @@ export const MCP_TOOLS: McpToolSpec[] = [
     }),
     execute: async ({ date }) => {
       const targetDate = date || new Date().toISOString().split('T')[0]
-      const db = getWorkspaceAdminDb()
-
-      // Appointments for the day
       const startIso = `${targetDate}T00:00:00Z`
       const endIso = `${targetDate}T23:59:59Z`
 
-      const { data: appointments } = await db
-        .from('appointments')
-        .select('id, title, start_time, end_time, status, location, clients(name)')
-        .gte('start_time', startIso)
-        .lte('start_time', endIso)
-        .order('start_time', { ascending: true })
+      let appointments: any[] = []
+      try {
+        const calResult = await listWorkspaceCalendarEvents({
+          timeMin: startIso,
+          timeMax: endIso,
+        })
+        appointments = (calResult.events || []).map((ev: any) => ({
+          title: ev.title,
+          start: ev.start,
+          end: ev.end,
+          location: ev.location || null,
+          source: 'Google Calendar',
+        }))
+      } catch {
+        // Calendar optional
+      }
 
-      // Tasks due on that day or overdue
-      const { data: tasks } = await db
-        .from('tasks')
-        .select('id, title, status, priority, due_date, is_recurring, clients(name)')
-        .lte('due_date', targetDate)
-        .neq('status', 'done')
-        .order('priority', { ascending: false })
+      // Also check Moshe calendar events for that date
+      try {
+        const db = getWorkspaceAdminDb()
+        const { data: mosheEvents } = await db
+          .from('moshe_calendar_events')
+          .select('*')
+          .gte('start_time', startIso)
+          .lte('start_time', endIso)
+        for (const me of mosheEvents || []) {
+          appointments.push({
+            title: me.title,
+            start: me.start_time,
+            end: me.end_time,
+            location: me.notes || null,
+            source: 'יומן פורטל משה',
+          })
+        }
+      } catch {
+        // Optional
+      }
+
+      const pendingTasksDue = await loadUnifiedWorkspaceTasks({
+        status: 'open',
+        dueOnOrBefore: targetDate,
+      })
 
       return {
         date: targetDate,
-        totalAppointments: (appointments || []).length,
-        appointments: (appointments || []).map((a: any) => ({
-          title: a.title,
-          start: a.start_time,
-          end: a.end_time,
-          status: a.status,
-          clientName: a.clients?.name,
-          location: a.location,
-        })),
-        pendingTasksDue: (tasks || []).map((t: any) => ({
-          title: t.title,
-          priority: t.priority,
-          dueDate: t.due_date,
-          clientName: t.clients?.name,
-          isRecurring: t.is_recurring,
-        })),
+        totalAppointments: appointments.length,
+        appointments,
+        pendingTasksDue: pendingTasksDue.slice(0, 30),
       }
     },
   },
@@ -604,14 +787,6 @@ export const MCP_TOOLS: McpToolSpec[] = [
       const future = new Date()
       future.setDate(future.getDate() + (daysAhead || 7))
 
-      const db = getWorkspaceAdminDb()
-      const { data: appts } = await db
-        .from('appointments')
-        .select('id, title, start_time, end_time, status, location, clients(name)')
-        .gte('start_time', now.toISOString())
-        .lte('start_time', future.toISOString())
-        .order('start_time', { ascending: true })
-
       let googleEvents: any[] = []
       try {
         const calResult = await listWorkspaceCalendarEvents({
@@ -623,21 +798,36 @@ export const MCP_TOOLS: McpToolSpec[] = [
         // Calendar API optional
       }
 
+      let mosheEvents: any[] = []
+      try {
+        const db = getWorkspaceAdminDb()
+        const { data } = await db
+          .from('moshe_calendar_events')
+          .select('*')
+          .gte('start_time', now.toISOString())
+          .lte('start_time', future.toISOString())
+          .order('start_time', { ascending: true })
+        mosheEvents = data || []
+      } catch {
+        // Optional
+      }
+
       return {
         daysAhead: daysAhead || 7,
-        totalAppointments: (appts || []).length,
-        appointments: (appts || []).map((a: any) => ({
-          title: a.title,
-          start: a.start_time,
-          end: a.end_time,
-          status: a.status,
-          clientName: a.clients?.name,
-        })),
+        totalAppointments: googleEvents.length + mosheEvents.length,
         googleCalendarEvents: googleEvents.map((g) => ({
           title: g.title,
           start: g.start,
           end: g.end,
           location: g.location,
+        })),
+        mosheCalendarEvents: mosheEvents.map((m: any) => ({
+          id: m.id,
+          title: m.title,
+          start: m.start_time,
+          end: m.end_time,
+          type: m.type,
+          notes: m.notes,
         })),
       }
     },
@@ -675,56 +865,116 @@ export const MCP_TOOLS: McpToolSpec[] = [
     name: 'get_moshe_portal_summary',
     titleHebrew: 'דשבורד פרויקטים נדל"ן (משה)',
     category: 'moshe',
-    description: 'סיכום מקיף של פרויקטי הנדל"ן של משה: יתרת תזרים אמיתי, תשלומים צפויים, גבייה מקונים והתראות איחורים.',
+    description: 'סיכום מקיף של פרויקטי הנדל"ן של משה: פרויקטים, קונים ויתרות, לוחות תשלומים ותנועות בפועל, הלוואות, שותפים והתראות איחורים.',
     schema: z.object({
-      projectId: z.string().optional().describe('אופציונלי: מזהה פרויקט ספציפי'),
+      projectId: z.string().optional().describe('אופציונלי: מזהה פרויקט ספציפי או שם פרויקט'),
     }),
     execute: async ({ projectId }) => {
-      const db = getWorkspaceAdminDb()
-
-      let projectsQuery = db.from('moshe_projects').select('id, name, status, budget').neq('status', 'closed')
-      if (projectId) projectsQuery = projectsQuery.eq('id', projectId)
-
-      const { data: projects, error } = await projectsQuery
-      if (error) return { error: `שגיאה בשליפת פרויקטים: ${error.message}` }
-
-      // Get overdue buyer payments
+      const backup = await buildMosheOrganizedBackup('mcp-crm')
       const today = new Date().toISOString().split('T')[0]
-      const { data: overdueBuyerPayments } = await db
-        .from('moshe_buyer_payments')
-        .select('id, amount, due_date, project_id, buyer_name')
-        .eq('is_received', false)
-        .lt('due_date', today)
-        .order('due_date', { ascending: true })
-        .limit(10)
 
-      // Get pending project supplier payments
-      const { data: pendingSupplierPayments } = await db
-        .from('moshe_project_payments')
-        .select('id, amount, due_date, project_id, supplier_name')
-        .eq('is_paid', false)
-        .order('due_date', { ascending: true })
-        .limit(10)
+      let filteredProjects = backup.organized_projects
+      if (projectId && projectId.trim()) {
+        const q = projectId.trim().toLowerCase()
+        filteredProjects = filteredProjects.filter(
+          (p) => p.id === q || p.name.toLowerCase().includes(q)
+        )
+      }
+
+      const overdueBuyerPayments: Array<{
+        projectId: string
+        projectName: string
+        buyerId: string
+        buyerName: string
+        unit: string
+        amount: number
+        formattedAmount: string
+        dueDate: string
+        notes: string
+      }> = []
+
+      const pendingSupplierPayments: Array<{
+        projectId: string
+        projectName: string
+        amount: number
+        formattedAmount: string
+        dueDate: string | null
+        notes: string
+      }> = []
+
+      for (const proj of filteredProjects) {
+        for (const buyer of proj.buyers) {
+          if (buyer.remaining_balance > 0) {
+            for (const sp of buyer.schedule_payments) {
+              if (sp.due_date && sp.due_date < today) {
+                overdueBuyerPayments.push({
+                  projectId: proj.id,
+                  projectName: proj.name,
+                  buyerId: buyer.id,
+                  buyerName: buyer.name,
+                  unit: buyer.unit_description,
+                  amount: sp.amount,
+                  formattedAmount: `₪${Number(sp.amount).toLocaleString('he-IL')}`,
+                  dueDate: sp.due_date,
+                  notes: sp.notes,
+                })
+              }
+            }
+          }
+        }
+
+        if (proj.kpis.remainingSupplierPayments > 0) {
+          for (const sp of proj.supplier_schedule_payments) {
+            pendingSupplierPayments.push({
+              projectId: proj.id,
+              projectName: proj.name,
+              amount: sp.amount,
+              formattedAmount: `₪${Number(sp.amount).toLocaleString('he-IL')}`,
+              dueDate: sp.due_date || null,
+              notes: sp.notes || 'תשלום בלוח פרויקט',
+            })
+          }
+        }
+      }
 
       return {
-        activeProjectsCount: (projects || []).length,
-        projects: (projects || []).map((p) => ({
+        activeProjectsCount: backup.macro_summary.activeProjectsCount,
+        totalProjectsCount: filteredProjects.length,
+        macroSummary: backup.macro_summary,
+        projects: filteredProjects.map((p) => ({
           id: p.id,
           name: p.name,
           status: p.status,
-          budget: p.budget ? `₪${Number(p.budget).toLocaleString('he-IL')}` : null,
+          statusHebrew: p.status_hebrew,
+          address: p.address,
+          contactName: p.contact_name,
+          contactPhone: p.contact_phone,
+          totalProjectCost: p.total_project_cost,
+          formattedBudget: p.total_project_cost ? `₪${Number(p.total_project_cost).toLocaleString('he-IL')}` : null,
+          kpis: p.kpis,
+          buyersCount: p.buyers.length,
+          buyers: p.buyers.map((b) => ({
+            id: b.id,
+            name: b.name,
+            phone: b.phone,
+            unit: b.unit_description,
+            contractTotal: b.contract_total,
+            scheduledTotal: b.scheduled_total,
+            receivedActual: b.received_actual,
+            remainingBalance: b.remaining_balance,
+            schedulePayments: b.schedule_payments,
+            actualMovements: b.actual_movements,
+          })),
+          supplierSchedulePayments: p.supplier_schedule_payments,
+          supplierActualMovements: p.supplier_actual_movements,
+          loans: p.loans,
+          partners: p.partners,
+          neighbors: p.neighbors,
         })),
-        overdueBuyerPaymentsCount: (overdueBuyerPayments || []).length,
-        overdueBuyerPayments: (overdueBuyerPayments || []).map((b) => ({
-          buyer: b.buyer_name,
-          amount: `₪${Number(b.amount).toLocaleString('he-IL')}`,
-          dueDate: b.due_date,
-        })),
-        pendingSupplierPayments: (pendingSupplierPayments || []).map((s) => ({
-          supplier: s.supplier_name,
-          amount: `₪${Number(s.amount).toLocaleString('he-IL')}`,
-          dueDate: s.due_date,
-        })),
+        overdueBuyerPaymentsCount: overdueBuyerPayments.length,
+        overdueBuyerPayments: overdueBuyerPayments.slice(0, 25),
+        pendingSupplierPaymentsCount: pendingSupplierPayments.length,
+        pendingSupplierPayments: pendingSupplierPayments.slice(0, 25),
       }
     },
   },

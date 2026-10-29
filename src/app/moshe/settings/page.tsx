@@ -5,9 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2, Download, HardDrive, Bot } from 'lucide-react'
+import { Loader2, Save, User, Mail, Lock, LogOut, CheckCircle2, Download, HardDrive, Bot, FileText, FileSpreadsheet } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { MosheMCPModal } from '@/components/moshe/MosheMCPModal'
+import { MosheBackupModal } from '@/components/moshe/MosheBackupModal'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -77,17 +78,21 @@ export default function SettingsPage() {
     router.push('/login')
   }
 
-  async function handleBackup(uploadToDrive: boolean) {
+  async function handleBackup(format: 'html' | 'csv' | 'json', uploadToDrive: boolean) {
     const set = uploadToDrive ? setDriveBackupLoading : setBackupLoading
     set(true)
     try {
-      const url = `/api/moshe/backup${uploadToDrive ? '?drive=1' : ''}`
+      const params = new URLSearchParams({ format })
+      if (uploadToDrive) params.set('drive', '1')
+      const url = `/api/moshe/backup?${params.toString()}`
       const res = await fetch(url)
       if (!res.ok) { const d = await res.json(); alert(d.error ?? 'שגיאה'); return }
       const blob = await res.blob()
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`
+      const date = new Date().toISOString().slice(0, 10)
+      const ext = format === 'html' ? 'html' : format === 'csv' ? 'csv' : 'json'
+      a.download = `moshe-portal-backup-${date}.${ext}`
       a.click()
       URL.revokeObjectURL(a.href)
       if (uploadToDrive) alert('גיבוי הועלה לתיקיית "גיבויים" בדרייב והורד למכשירך')
@@ -221,33 +226,55 @@ export default function SettingsPage() {
 
       {/* Backup */}
       <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 shadow-sm">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">גיבוי נתונים</p>
-          <p className="text-xs text-slate-400 mt-1">ייצוא כל הנתונים של המערכת לקובץ JSON</p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">גיבוי נתונים</p>
+            <p className="text-xs text-slate-400 mt-1">ייצוא כל המידע של הפורטל (פרויקטים, קונים, תשלומים, הלוואות ושותפים) לקובץ אחד מסודר</p>
+          </div>
+          <MosheBackupModal />
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Button
             type="button"
-            onClick={() => handleBackup(false)}
+            onClick={() => handleBackup('html', false)}
+            disabled={backupLoading}
+            className="font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white"
+          >
+            {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            דוח גיבוי מסודר לקריאה/הדפסה
+          </Button>
+          <Button
+            type="button"
+            onClick={() => handleBackup('csv', false)}
             disabled={backupLoading}
             variant="outline"
-            className="flex-1 font-bold gap-2 border-slate-200"
+            className="font-bold gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
-            {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {backupLoading ? 'מכין גיבוי...' : 'הורד גיבוי'}
+            {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            הורד קובץ גיבוי לאקסל (CSV)
           </Button>
           <Button
             type="button"
-            onClick={() => handleBackup(true)}
+            onClick={() => handleBackup('json', false)}
+            disabled={backupLoading}
+            variant="outline"
+            className="font-bold gap-2 border-slate-200"
+          >
+            {backupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            הורד גיבוי מערכת (JSON)
+          </Button>
+          <Button
+            type="button"
+            onClick={() => handleBackup('json', true)}
             disabled={driveBackupLoading}
             variant="outline"
-            className="flex-1 font-bold gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
+            className="font-bold gap-2 border-blue-200 text-blue-600 hover:bg-blue-50"
           >
             {driveBackupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
-            {driveBackupLoading ? 'מעלה לדרייב...' : 'גיבוי + העלה לדרייב'}
+            {driveBackupLoading ? 'מעלה לדרייב...' : 'גיבוי מלא + העלה לדרייב'}
           </Button>
         </div>
-        <p className="text-[11px] text-slate-400">הגיבוי מכיל את כל הפרויקטים, התשלומים, העסקאות, ההלוואות, השותפים, העובדים והמסמכים. לגיבוי בדרייב נדרש GOOGLE_DRIVE_PARENT_FOLDER_ID ו-OAuth מוגדרים.</p>
+        <p className="text-[11px] text-slate-400">הגיבוי מכיל את כל הפרויקטים, הקונים, לוחות התשלומים, התנועות בפועל, העסקאות, ההלוואות, השותפים, השכנים, העובדים והמסמכים.</p>
       </div>
 
       {/* Danger zone */}

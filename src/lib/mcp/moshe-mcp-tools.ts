@@ -3,6 +3,7 @@ import 'server-only'
 import { z } from 'zod'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { buildMosheOrganizedBackup } from '@/lib/moshe/backup-builder'
 
 const db = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2430,7 +2431,10 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
       'מחזיר סקירה פיננסית כוללת של כל הפרויקטים הפעילים של משה: סה"כ כסף בקופה, סה"כ שולם, סה"כ לוח תשלומים שנקבע, סה"כ הכנסות שהתקבלו מקונים, והלוואות.',
     schema: z.object({}),
     execute: async () => {
-      const { data: projects } = await db.from('moshe_projects').select('id, name, status').neq('status', 'closed')
+      const { data: projects } = await db
+        .from('moshe_projects')
+        .select('id, name, address, status, total_project_cost')
+        .neq('status', 'closed')
       const projs = projects || []
 
       const [
@@ -2440,6 +2444,8 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
         { data: partnerTransactions },
         { data: loanReceipts },
         { data: loanPayments },
+        { data: neighborPayments },
+        { data: buyers },
       ] = await Promise.all([
         db.from('moshe_project_payments').select('project_id, amount, is_paid, payment_type'),
         db.from('moshe_buyer_payments').select('project_id, amount, is_received, payment_type'),
@@ -2447,6 +2453,8 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
         db.from('moshe_partner_transactions').select('project_id, amount, type'),
         db.from('moshe_loan_receipts').select('project_id, amount, is_received'),
         db.from('moshe_loan_payments').select('project_id, amount, is_paid, is_interest'),
+        db.from('moshe_neighbor_payments').select('project_id, amount, is_paid'),
+        db.from('moshe_buyers').select('id, project_id, name, total_amount'),
       ])
 
       const pp = projPayments || []
@@ -2455,13 +2463,22 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
       const ptx = partnerTransactions || []
       const lr = loanReceipts || []
       const lp = loanPayments || []
+      const np = neighborPayments || []
+      const bu = buyers || []
 
-      const totalPaidAll = pp
-        .filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.is_paid))
+      const neighborPaidAll = np
+        .filter((x: any) => x.is_paid)
         .reduce((s: number, x: any) => s + Number(x.amount), 0)
-      const totalScheduledAll = pp
-        .filter((x: any) => x.payment_type === 'schedule' || (!x.payment_type && !x.is_paid))
-        .reduce((s: number, x: any) => s + Number(x.amount), 0)
+      const neighborScheduledAll = np.reduce((s: number, x: any) => s + Number(x.amount), 0)
+
+      const totalPaidAll =
+        pp
+          .filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.is_paid))
+          .reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborPaidAll
+      const totalScheduledAll =
+        pp
+          .filter((x: any) => x.payment_type === 'schedule' || (!x.payment_type && !x.is_paid))
+          .reduce((s: number, x: any) => s + Number(x.amount), 0) + neighborScheduledAll
 
       const totalReceivedAll = bp
         .filter((x: any) => x.payment_type === 'movement' || (!x.payment_type && x.is_received))
@@ -2479,6 +2496,9 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
       const totalWithdrawn = ptx
         .filter((x: any) => x.type === 'withdrawal')
         .reduce((s: number, x: any) => s + Number(x.amount), 0)
+      const ptxExpense = ptx
+        .filter((x: any) => x.type === 'expense')
+        .reduce((s: number, x: any) => s + Number(x.amount), 0)
 
       const loanReceived = lr.filter((r: any) => r.is_received).reduce((s: number, r: any) => s + Number(r.amount), 0)
       const loanPaid = lp
@@ -2487,7 +2507,46 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
 
       const totalCashInFund =
         totalReceivedAll + txIncome + totalInvested + loanReceived -
-        (totalPaidAll + txExpense + totalWithdrawn + loanPaid)
+        (totalPaidAll + txExpense + ptxExpense + totalWithdrawn + loanPaid)
+
+      const projectsBreakdown = projs.map((proj: any) => {
+        const pId = proj.id
+        const pNeighborPaid = np
+          .filter((x: any) => x.project_id === pId && x.is_paid)
+          .reduce((s: number, x: any) => s + Number(x.amount), 0)
+        const pNeighborSched = np
+          .filter((x: any) => x.project_id === pId)
+          .reduce((s: number, x: any) => s + Number(x.amount), 0)
+        const pPaid =
+          pp
+            .filter((x: any) => x.project_id === pId && (x.payment_type === 'movement' || (!x.payment_type && x.is_paid)))
+            .reduce((s: number, x: any) => s + Number(x.amount), 0) + pNeighborPaid
+        const pScheduled =
+          pp
+            .filter((x: any) => x.project_id === pId && (x.payment_type === 'schedule' || (!x.payment_type && !x.is_paid)))
+            .reduce((s: number, x: any) => s + Number(x.amount), 0) + pNeighborSched
+        const pReceived = bp
+          .filter((x: any) => x.project_id === pId && (x.payment_type === 'movement' || (!x.payment_type && x.is_received)))
+          .reduce((s: number, x: any) => s + Number(x.amount), 0)
+        const pExpected = bp
+          .filter((x: any) => x.project_id === pId && (x.payment_type === 'schedule' || (!x.payment_type && !x.is_received)))
+          .reduce((s: number, x: any) => s + Number(x.amount), 0)
+        const pBuyersCount = bu.filter((b: any) => b.project_id === pId).length
+
+        return {
+          id: pId,
+          name: proj.name,
+          status: proj.status,
+          total_project_cost: proj.total_project_cost ? Number(proj.total_project_cost) : null,
+          buyers_count: pBuyersCount,
+          paid_actual: pPaid,
+          scheduled_total: pScheduled,
+          remaining_to_pay: pScheduled - pPaid,
+          received_from_buyers: pReceived,
+          expected_from_buyers: pExpected,
+          remaining_from_buyers: pExpected - pReceived,
+        }
+      })
 
       return {
         active_projects_count: projs.length,
@@ -2499,7 +2558,14 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
           totalReceivedFromBuyers: totalReceivedAll,
           totalExpectedFromBuyers: totalExpectedAll,
           remainingIncomeToCollect: totalExpectedAll - totalReceivedAll,
+          loanReceived,
+          loanPaid,
+          netLoans: loanReceived - loanPaid,
+          totalInvested,
+          totalWithdrawn,
+          partnerExpenses: ptxExpense,
         },
+        projects_breakdown: projectsBreakdown,
       }
     },
   },
@@ -2524,11 +2590,11 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
         { data: neighbors },
         { data: loans },
       ] = await Promise.all([
-        db.from('moshe_projects').select('id, name, address, status').or(`name.ilike.${q},address.ilike.${q}`),
-        db.from('moshe_buyers').select('id, project_id, name, phone, unit_description').or(`name.ilike.${q},phone.ilike.${q},unit_description.ilike.${q}`),
-        db.from('moshe_partners').select('id, project_id, name, phone').or(`name.ilike.${q},phone.ilike.${q}`),
+        db.from('moshe_projects').select('id, name, address, status, total_project_cost').or(`name.ilike.${q},address.ilike.${q}`),
+        db.from('moshe_buyers').select('id, project_id, name, phone, unit_description, total_amount').or(`name.ilike.${q},phone.ilike.${q},unit_description.ilike.${q}`),
+        db.from('moshe_partners').select('id, project_id, name, phone, email').or(`name.ilike.${q},phone.ilike.${q}`),
         db.from('moshe_workers').select('id, name, phone, role').or(`name.ilike.${q},phone.ilike.${q},role.ilike.${q}`),
-        db.from('moshe_neighbors').select('id, project_id, name, phone, apartment').or(`name.ilike.${q},phone.ilike.${q}`),
+        db.from('moshe_neighbors').select('id, project_id, name, phone, email, notes, total_amount').or(`name.ilike.${q},phone.ilike.${q},notes.ilike.${q}`),
         db.from('moshe_loans').select('id, project_id, lender, total_amount').ilike('lender', q),
       ])
 
@@ -2551,6 +2617,34 @@ export const MOSHE_MCP_TOOLS: MosheMcpToolSpec[] = [
           neighbors: neighbors || [],
           loans: loans || [],
         },
+      }
+    },
+  },
+
+  {
+    name: 'moshe_get_full_backup_report',
+    titleHebrew: 'דוח גיבוי מלא ומאורגן של כל הפורטל',
+    category: 'finance',
+    description:
+      'שולף גיבוי ודוח מלא ומסודר של כל נתוני פורטל משה (כל הפרויקטים, הקונים, לוחות התשלומים, התנועות בפועל, ההלוואות, השותפים, השכנים והעובדים) במבנה היררכי ברור.',
+    schema: z.object({
+      includeRawTables: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('האם לכלול גם את הטבלאות הגולמיות המלאות (ברירת מחדל: false כדי לשמור על פלט קריא ומסודר)'),
+    }),
+    execute: async ({ includeRawTables }) => {
+      const backup = await buildMosheOrganizedBackup('mcp-bot')
+      if (includeRawTables) {
+        return backup
+      }
+      return {
+        created_at: backup.created_at,
+        macro_summary: backup.macro_summary,
+        organized_projects: backup.organized_projects,
+        workers: backup.workers,
+        calendar_events: backup.calendar_events,
       }
     },
   },

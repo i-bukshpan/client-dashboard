@@ -3,6 +3,7 @@ import 'server-only'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { MCP_TOOLS, getMcpToolsCatalog } from './mcp-tools'
+import { MOSHE_MCP_TOOLS } from './moshe-mcp-tools'
 import { validateMcpToken } from './mcp-tokens'
 
 export const MCP_SERVER_INFO = {
@@ -32,8 +33,11 @@ export function createConfiguredMcpServer(): McpServer {
     }
   )
 
-  // Register all 14 tools
-  for (const tool of MCP_TOOLS) {
+  // Register all workspace & Moshe portal tools
+  const seenNames = new Set<string>()
+  for (const tool of [...MCP_TOOLS, ...MOSHE_MCP_TOOLS]) {
+    if (seenNames.has(tool.name)) continue
+    seenNames.add(tool.name)
     server.tool(
       tool.name,
       tool.description,

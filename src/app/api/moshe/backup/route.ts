@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { google } from 'googleapis'
 import { Readable } from 'stream'
+import {
+  buildMosheOrganizedBackup,
+  renderMosheBackupHtml,
+  renderMosheBackupCsv,
+} from '@/lib/moshe/backup-builder'
 
 export const maxDuration = 120
-export const dynamic = 'force-dynamic'; // 👈 אומר ל-Next.js לדלג על הקובץ הזה בזמן ה-Build!
-
-const db = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const dynamic = 'force-dynamic'
 
 function getDriveAuth() {
-  const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
   const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN
   if (clientId && clientSecret && refreshToken) {
@@ -25,26 +24,6 @@ function getDriveAuth() {
   return null
 }
 
-const TABLES = [
-  'moshe_projects',
-  'moshe_project_payments',
-  'moshe_buyer_payments',
-  'moshe_transactions',
-  'moshe_buyers',
-  'moshe_partners',
-  'moshe_partner_transactions',
-  'moshe_loans',
-  'moshe_loan_payments',
-  'moshe_project_documents',
-  'moshe_project_logs',
-  'moshe_audit_log',
-  'moshe_workers',
-  'moshe_worker_project_permissions',
-  'moshe_worker_logs',
-  'moshe_worker_tasks',
-  'moshe_calendar_events',
-]
-
 export async function GET(request: NextRequest) {
   // Auth check
   const cookieStore = await cookies()
@@ -53,26 +32,37 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
   )
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const uploadToDrive = new URL(request.url).searchParams.get('drive') === '1'
+  const searchParams = new URL(request.url).searchParams
+  const uploadToDrive = searchParams.get('drive') === '1'
+  const formatParam = (searchParams.get('format') || 'json').toLowerCase()
 
-  // Fetch all tables in parallel
-  const results = await Promise.all(
-    TABLES.map(t => db.from(t).select('*').then(r => ({ table: t, rows: r.data ?? [] })))
-  )
+  const backup = await buildMosheOrganizedBackup(user.email)
+  const date = new Date().toISOString().slice(0, 10)
 
-  const backup = {
-    created_at: new Date().toISOString(),
-    created_by: user.email,
-    tables: Object.fromEntries(results.map(r => [r.table, r.rows])),
+  let contentString: string
+  let mimeType: string
+  let fileName: string
+
+  if (formatParam === 'html' || formatParam === 'report') {
+    contentString = renderMosheBackupHtml(backup)
+    mimeType = 'text/html; charset=utf-8'
+    fileName = `moshe-portal-report-${date}.html`
+  } else if (formatParam === 'csv' || formatParam === 'excel') {
+    contentString = renderMosheBackupCsv(backup)
+    mimeType = 'text/csv; charset=utf-8'
+    fileName = `moshe-portal-backup-${date}.csv`
+  } else {
+    contentString = JSON.stringify(backup, null, 2)
+    mimeType = 'application/json; charset=utf-8'
+    fileName = `moshe-portal-backup-${date}.json`
   }
 
-  const json  = JSON.stringify(backup, null, 2)
-  const bytes = Buffer.from(json, 'utf-8')
-  const date  = new Date().toISOString().slice(0, 10)
-  const fileName = `backup-${date}.json`
+  const bytes = Buffer.from(contentString, 'utf-8')
 
   // Optionally upload to Drive
   if (uploadToDrive) {
@@ -90,16 +80,30 @@ export async function GET(request: NextRequest) {
         let backupFolderId = folderSearch.data.files?.[0]?.id
         if (!backupFolderId) {
           const created = await drive.files.create({
-            requestBody: { name: 'גיבויים', mimeType: 'application/vnd.google-apps.folder', parents: [parentFolderId] },
+            requestBody: {
+              name: 'גיבויים',
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [parentFolderId],
+            },
             fields: 'id',
           })
           backupFolderId = created.data.id!
         }
 
+        // Upload requested file
         await drive.files.create({
           requestBody: { name: fileName, parents: [backupFolderId] },
-          media: { mimeType: 'application/json', body: Readable.from(bytes) },
+          media: { mimeType: mimeType.split(';')[0], body: Readable.from(bytes) },
         })
+
+        // If user triggered Drive backup from JSON mode, also upload the readable HTML report to Drive!
+        if (formatParam === 'json') {
+          const htmlBytes = Buffer.from(renderMosheBackupHtml(backup), 'utf-8')
+          await drive.files.create({
+            requestBody: { name: `moshe-portal-report-${date}.html`, parents: [backupFolderId] },
+            media: { mimeType: 'text/html', body: Readable.from(htmlBytes) },
+          })
+        }
       } catch {
         // Drive upload failure is non-fatal — still return the file
       }
@@ -108,7 +112,7 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(bytes, {
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': mimeType,
       'Content-Disposition': `attachment; filename="${fileName}"`,
     },
   })
