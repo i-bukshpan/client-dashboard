@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useCallback, useEffect, Fragment } from 'react'
+import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive, ChevronRight } from 'lucide-react'
@@ -44,7 +45,7 @@ function parseFolderId(url: string): string | null {
   return m ? m[1] : /^[a-zA-Z0-9_-]{20,}$/.test(url) ? url : null
 }
 
-function DriveBrowser({ folderUrl }: { folderUrl: string | null }) {
+function DriveBrowser({ folderUrl, refreshKey }: { folderUrl: string | null; refreshKey?: number }) {
   const [stack, setStack]       = useState<FolderEntry[]>([])
   const [files, setFiles]       = useState<DriveFile[] | null>(null)
   const [loading, setLoading]   = useState(false)
@@ -76,7 +77,7 @@ function DriveBrowser({ folderUrl }: { folderUrl: string | null }) {
       setFiles(null)
       load(currentFolder)
     }
-  }, [currentFolder, load])
+  }, [currentFolder, load, refreshKey])
 
   function openFolder(file: DriveFile) {
     setStack(s => [...s, { id: file.id, name: file.name }])
@@ -218,57 +219,117 @@ interface Props {
 }
 
 export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
+  const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [docsList, setDocsList] = useState<Document[]>(documents)
   const [showAdd, setShowAdd] = useState(false)
   const [newDoc, setNewDoc] = useState({ name: '', url: '' })
   const [uploading, setUploading] = useState(false)
+  const [driveRefreshKey, setDriveRefreshKey] = useState(0)
   const fileInputRef   = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    setDocsList(documents)
+  }, [documents])
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const selectedFiles = Array.from(e.target.files ?? [])
+    if (selectedFiles.length === 0) return
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      if (driveFolderUrl) fd.append('folderUrl', driveFolderUrl)
-      const res = await fetch('/api/moshe/upload-drive', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok || data.error) { toast.error(data.error ?? 'שגיאה בהעלאה'); return }
-      const r = await addDocument({ project_id: projectId, name: data.name ?? file.name, url: data.url })
-      if (r.error) { toast.error(r.error); return }
-      toast.success(`"${file.name}" הועלה לדרייב ונשמר`)
+      let uploadedCount = 0
+      for (const file of selectedFiles) {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('projectId', projectId)
+        if (driveFolderUrl) fd.append('folderUrl', driveFolderUrl)
+
+        const res = await fetch('/api/moshe/upload-drive', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (!res.ok || data.error) {
+          toast.error(data.error ?? `שגיאה בהעלאת "${file.name}"`)
+          continue
+        }
+
+        const r = await addDocument({
+          project_id: projectId,
+          name: data.name ?? file.name,
+          url: data.url,
+        })
+        if (r.error) {
+          toast.error(r.error)
+          continue
+        }
+
+        if ((r as any).document) {
+          setDocsList(prev => [(r as any).document, ...prev])
+        } else {
+          setDocsList(prev => [
+            {
+              id: `temp-${Date.now()}-${Math.random()}`,
+              name: data.name ?? file.name,
+              url: data.url,
+              created_at: new Date().toISOString(),
+            },
+            ...prev,
+          ])
+        }
+        uploadedCount++
+      }
+
+      if (uploadedCount > 0) {
+        toast.success(
+          uploadedCount === 1
+            ? `"${selectedFiles[0].name}" הועלה ונשמר בהצלחה`
+            : `${uploadedCount} קבצים הועלו ונשמרו בהצלחה`,
+        )
+        setDriveRefreshKey(k => k + 1)
+        router.refresh()
+      }
+    } catch (err: any) {
+      toast.error(`שגיאה בהעלאה: ${err?.message || 'נסה שוב'}`)
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
     }
   }
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDoc, setEditDoc] = useState({ name: '', url: '' })
   const [driveUrl, setDriveUrl] = useState(driveFolderUrl ?? '')
   const [editingDrive, setEditingDrive] = useState(false)
   const [driveSaving, setDriveSaving] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewType, setPreviewType] = useState<'iframe' | 'image'>('iframe')
   const [previewName, setPreviewName] = useState('')
 
   async function handleAddDoc() {
     if (!newDoc.name.trim()) return toast.error('שם הקובץ נדרש')
     if (!newDoc.url.trim()) return toast.error('קישור נדרש')
-    const r = await addDocument({ project_id: projectId, name: newDoc.name, url: newDoc.url })
+    const r = await addDocument({ project_id: projectId, name: newDoc.name.trim(), url: newDoc.url.trim() })
     if (r.error) { toast.error(r.error); return }
+    if ((r as any).document) {
+      setDocsList(prev => [(r as any).document, ...prev])
+    }
     toast.success('מסמך נוסף')
     setNewDoc({ name: '', url: '' })
     setShowAdd(false)
+    router.refresh()
   }
 
   function handleDelete(id: string, name: string) {
     if (!confirm(`למחוק את המסמך "${name}"?`)) return
     startTransition(async () => {
       const r = await deleteDocument(id, projectId)
-      if (r.error) toast.error(r.error)
-      else toast.success('מסמך נמחק')
+      if (r.error) {
+        toast.error(r.error)
+      } else {
+        setDocsList(prev => prev.filter(d => d.id !== id))
+        toast.success('מסמך נמחק')
+        router.refresh()
+      }
     })
   }
 
@@ -281,8 +342,10 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
     startTransition(async () => {
       const r = await updateDocument(id, editDoc)
       if (r.error) { toast.error(r.error); return }
+      setDocsList(prev => prev.map(d => (d.id === id ? { ...d, name: editDoc.name, url: editDoc.url } : d)))
       toast.success('מסמך עודכן')
       setEditingId(null)
+      router.refresh()
     })
   }
 
@@ -293,51 +356,63 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
       if (r.error) { toast.error(r.error); return }
       toast.success('קישור דרייב עודכן')
       setEditingDrive(false)
+      router.refresh()
     } finally {
       setDriveSaving(false)
     }
   }
 
-  function getPreviewUrl(url: string): string | null {
+  function getPreviewInfo(url: string): { url: string; type: 'iframe' | 'image' } | null {
+    // Direct image URLs (including Supabase storage images)
+    if (/\.(jpe?g|png|gif|webp|svg|bmp|avif)(\?|$)/i.test(url)) {
+      return { url, type: 'image' }
+    }
     // Google Drive file URL patterns
-    // https://drive.google.com/file/d/{id}/view
     const driveFileMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/)
     if (driveFileMatch) {
-      return `https://drive.google.com/file/d/${driveFileMatch[1]}/preview`
+      return { url: `https://drive.google.com/file/d/${driveFileMatch[1]}/preview`, type: 'iframe' }
     }
     // Google Docs
     const docsMatch = url.match(/docs\.google\.com\/document\/d\/([^/]+)/)
     if (docsMatch) {
-      return `https://docs.google.com/document/d/${docsMatch[1]}/preview`
+      return { url: `https://docs.google.com/document/d/${docsMatch[1]}/preview`, type: 'iframe' }
     }
-    // Google Sheets - use htmlview for horizontal scroll
+    // Google Sheets
     const sheetsMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([^/]+)/)
     if (sheetsMatch) {
-      return `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/htmlview?rm=minimal`
+      return { url: `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/htmlview?rm=minimal`, type: 'iframe' }
     }
     // Google Slides
     const slidesMatch = url.match(/docs\.google\.com\/presentation\/d\/([^/]+)/)
     if (slidesMatch) {
-      return `https://docs.google.com/presentation/d/${slidesMatch[1]}/preview`
+      return { url: `https://docs.google.com/presentation/d/${slidesMatch[1]}/preview`, type: 'iframe' }
     }
-    // Direct PDF URL (use Google Docs Viewer)
-    if (url.match(/\.pdf(\?|$)/i)) {
-      return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
+    // Direct PDF URL
+    if (/\.pdf(\?|$)/i.test(url)) {
+      if (url.includes('/storage/v1/object/public/')) {
+        return { url, type: 'iframe' }
+      }
+      return { url: `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`, type: 'iframe' }
+    }
+    // Any other Supabase Storage file (e.g., Office document via Google Viewer)
+    if (/\.(docx?|xlsx?|pptx?)(\?|$)/i.test(url)) {
+      return { url: `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`, type: 'iframe' }
     }
     return null
   }
 
   function openPreview(doc: Document) {
-    const preview = getPreviewUrl(doc.url)
-    if (!preview) {
-      toast.error('\u05ea\u05e6\u05d5\u05d2\u05d4 \u05de\u05e7\u05d3\u05d9\u05de\u05d4 \u05d0\u05d9\u05e0\u05d4 \u05e0\u05ea\u05de\u05db\u05ea \u05dc\u05e7\u05d9\u05e9\u05d5\u05e8 \u05d6\u05d4. \u05e0\u05ea\u05de\u05da \u05e2\u05dd Google Drive, Docs, Sheets, Slides \u05d0\u05d5 PDF.')
+    const info = getPreviewInfo(doc.url)
+    if (!info) {
+      toast.error('תצוגה מקדימה אינה נתמכת לקישור זה.')
       return
     }
-    setPreviewUrl(preview)
+    setPreviewUrl(info.url)
+    setPreviewType(info.type)
     setPreviewName(doc.name)
   }
 
-  const canPreview = (url: string) => getPreviewUrl(url) !== null
+  const canPreview = (url: string) => getPreviewInfo(url) !== null
 
   return (
     <div className="space-y-4">
@@ -401,11 +476,11 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-slate-400" />
-            <p className="text-sm font-bold text-slate-700">מסמכים ({documents.length})</p>
+            <p className="text-sm font-bold text-slate-700 tabular-nums">מסמכים ({docsList.length})</p>
           </div>
           <div className="flex items-center gap-1.5">
             {/* hidden: any file (for desktop / gallery pick) */}
-            <input ref={fileInputRef} type="file" accept="*/*" className="hidden" onChange={handleFileUpload} />
+            <input ref={fileInputRef} type="file" accept="*/*" multiple className="hidden" onChange={handleFileUpload} />
             {/* hidden: camera capture (mobile) */}
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileUpload} />
 
@@ -476,12 +551,12 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
 
         {/* List */}
         <div className="divide-y divide-slate-50">
-          {documents.length === 0 && !showAdd && (
+          {docsList.length === 0 && !showAdd && (
             <p className="text-center text-sm text-slate-400 py-10">
-              אין מסמכים עדיין. לחץ "הוסף מסמך" להוספה.
+              אין מסמכים עדיין. לחץ "העלה", "צלם" או "קישור" להוספה.
             </p>
           )}
-          {documents.map(doc => {
+          {docsList.map(doc => {
             if (editingId === doc.id) {
               return (
                 <div key={doc.id} className="px-4 py-3 bg-amber-50/60 space-y-2">
@@ -534,7 +609,7 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
                 </a>
                 {canPreview(doc.url) && (
                   <button onClick={() => openPreview(doc)}
-                    title="\u05ea\u05e6\u05d5\u05d2\u05d4 \u05de\u05e7\u05d3\u05d9\u05de\u05d4"
+                    title="תצוגה מקדימה"
                     className="w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-500 hover:bg-blue-50 hover:border-blue-200 flex items-center justify-center transition-colors shrink-0">
                     <Eye className="w-3.5 h-3.5" />
                   </button>
@@ -554,7 +629,7 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
       </div>
 
       {/* Drive folder browser */}
-      <DriveBrowser folderUrl={driveFolderUrl ?? null} />
+      <DriveBrowser folderUrl={driveFolderUrl ?? null} refreshKey={driveRefreshKey} />
 
       {/* Preview Dialog */}
       <Dialog open={!!previewUrl} onOpenChange={open => !open && setPreviewUrl(null)}>
@@ -562,8 +637,14 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
           <DialogHeader className="px-5 py-3 border-b border-slate-100 shrink-0">
             <DialogTitle className="text-sm font-bold text-slate-700">{previewName}</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 w-full h-full min-h-0 overflow-auto">
-            {previewUrl && (
+          <div className="flex-1 w-full h-full min-h-0 overflow-auto flex items-center justify-center bg-slate-900/5">
+            {previewUrl && previewType === 'image' ? (
+              <img
+                src={previewUrl}
+                alt={previewName}
+                className="max-w-full max-h-[calc(92vh-56px)] object-contain p-4"
+              />
+            ) : previewUrl ? (
               <iframe
                 src={previewUrl}
                 className="w-full h-[calc(92vh-56px)] border-0"
@@ -571,7 +652,7 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
                 allow="autoplay"
                 title={previewName}
               />
-            )}
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

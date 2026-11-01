@@ -974,20 +974,42 @@ export async function addDocument(raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { error } = await db.from('moshe_project_documents').insert({
-    project_id: d.project_id,
-    name: d.name,
-    url: d.url,
-  })
+  const { data: doc, error } = await db
+    .from('moshe_project_documents')
+    .insert({
+      project_id: d.project_id,
+      name: d.name,
+      url: d.url,
+    })
+    .select('*')
+    .single()
 
   if (error) return { error: `שגיאה בהוספת מסמך: ${error.message}` }
+  await writeAudit(d.project_id, 'create', 'document', `נוסף מסמך: ${d.name}`, doc?.id, null, doc as any)
   revalidatePath(`/moshe/projects/${d.project_id}`)
-  return { success: true }
+  return { success: true, document: doc }
 }
 
 export async function deleteDocument(id: string, projectId: string) {
+  const { data: doc } = await db
+    .from('moshe_project_documents')
+    .select('*')
+    .eq('id', id)
+    .single()
+
   const { error } = await db.from('moshe_project_documents').delete().eq('id', id)
   if (error) return { error: `שגיאה במחיקת מסמך: ${error.message}` }
+
+  const docUrl = (doc as any)?.url as string | undefined
+  if (docUrl && docUrl.includes('/storage/v1/object/public/moshe-documents/')) {
+    const marker = '/storage/v1/object/public/moshe-documents/'
+    const storagePath = decodeURIComponent(docUrl.split(marker)[1]?.split('?')[0] ?? '')
+    if (storagePath) {
+      await db.storage.from('moshe-documents').remove([storagePath]).catch(() => {})
+    }
+  }
+
+  await writeAudit(projectId, 'delete', 'document', `נמחק מסמך: ${(doc as any)?.name ?? id}`, id, doc as any, null)
   revalidatePath(`/moshe/projects/${projectId}`)
   return { success: true }
 }
@@ -1001,12 +1023,21 @@ export async function updateDocument(id: string, raw: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'נתונים לא תקינים' }
   const d = parsed.data
 
-  const { data: doc } = await db.from('moshe_project_documents').select('project_id').eq('id', id).single()
-  const { error } = await db.from('moshe_project_documents').update({ name: d.name, url: d.url }).eq('id', id)
+  const { data: prevDoc } = await db.from('moshe_project_documents').select('*').eq('id', id).single()
+  const { data: updatedDoc, error } = await db
+    .from('moshe_project_documents')
+    .update({ name: d.name, url: d.url })
+    .eq('id', id)
+    .select('*')
+    .single()
 
   if (error) return { error: `שגיאה בעדכון מסמך: ${error.message}` }
-  revalidatePath(`/moshe/projects/${(doc as any)?.project_id}`)
-  return { success: true }
+  const projId = (prevDoc as any)?.project_id
+  if (projId) {
+    await writeAudit(projId, 'update', 'document', `עודכן מסמך: ${d.name}`, id, prevDoc as any, updatedDoc as any)
+    revalidatePath(`/moshe/projects/${projId}`)
+  }
+  return { success: true, document: updatedDoc }
 }
 
 export async function updateCalendarEvent(id: string, raw: unknown) {
