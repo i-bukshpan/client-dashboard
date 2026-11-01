@@ -151,48 +151,57 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
     folderId = extractFolderId(proj?.drive_folder_url)
   }
+
+  // If no Drive folder configured for this project, require updating it first
   if (!folderId) {
-    folderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID ?? null
+    return NextResponse.json(
+      {
+        error: 'לא מוגדרת תיקיית Google Drive לפרויקט זה. יש לעדכן קישור לתיקיית דרייב לפני העלאת מסמכים.',
+        code: 'NO_DRIVE_FOLDER',
+      },
+      { status: 400 }
+    )
   }
 
   // 1. Try uploading to Google Drive if folderId and valid OAuth client exist
-  if (folderId) {
-    const oauthClients = await getOAuthClientsToTry()
-    for (const auth of oauthClients) {
-      try {
-        const drive = google.drive({ version: 'v3', auth })
-        const res = await drive.files.create({
+  const oauthClients = await getOAuthClientsToTry()
+  let driveUploadError: string | null = null
+
+  for (const auth of oauthClients) {
+    try {
+      const drive = google.drive({ version: 'v3', auth })
+      const res = await drive.files.create({
+        supportsAllDrives: true,
+        requestBody: {
+          name: file.name,
+          parents: [folderId],
+        },
+        media: {
+          mimeType,
+          body: Readable.from(buffer),
+        },
+        fields: 'id, name, webViewLink, mimeType',
+      })
+
+      const fileId = res.data.id!
+      await drive.permissions
+        .create({
+          fileId,
           supportsAllDrives: true,
-          requestBody: {
-            name: file.name,
-            parents: [folderId],
-          },
-          media: {
-            mimeType,
-            body: Readable.from(buffer),
-          },
-          fields: 'id, name, webViewLink, mimeType',
+          requestBody: { role: 'reader', type: 'anyone' },
         })
+        .catch(() => {})
 
-        const fileId = res.data.id!
-        await drive.permissions
-          .create({
-            fileId,
-            supportsAllDrives: true,
-            requestBody: { role: 'reader', type: 'anyone' },
-          })
-          .catch(() => {})
-
-        return NextResponse.json({
-          id: fileId,
-          name: res.data.name ?? file.name,
-          url: res.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
-          mimeType: res.data.mimeType ?? mimeType,
-          storage: 'drive',
-        })
-      } catch (driveErr: any) {
-        console.warn('[Drive Upload Attempt Failed, falling back]:', driveErr?.message || driveErr)
-      }
+      return NextResponse.json({
+        id: fileId,
+        name: res.data.name ?? file.name,
+        url: res.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
+        mimeType: res.data.mimeType ?? mimeType,
+        storage: 'drive',
+      })
+    } catch (driveErr: any) {
+      driveUploadError = driveErr?.message || String(driveErr)
+      console.warn('[Drive Upload Attempt Failed]:', driveUploadError)
     }
   }
 

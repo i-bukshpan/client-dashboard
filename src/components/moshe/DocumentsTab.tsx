@@ -236,6 +236,16 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(e.target.files ?? [])
     if (selectedFiles.length === 0) return
+
+    // Verify drive folder exists before uploading
+    if (!driveFolderUrl) {
+      toast.error('לא מוגדרת תיקיית Google Drive לפרויקט זה. יש לעדכן קישור לתיקיית דרייב לפני העלאת מסמכים.')
+      setEditingDrive(true)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
+      return
+    }
+
     setUploading(true)
     try {
       let uploadedCount = 0
@@ -248,6 +258,9 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
         const res = await fetch('/api/moshe/upload-drive', { method: 'POST', body: fd })
         const data = await res.json()
         if (!res.ok || data.error) {
+          if (data.code === 'NO_DRIVE_FOLDER') {
+            setEditingDrive(true)
+          }
           toast.error(data.error ?? `שגיאה בהעלאת "${file.name}"`)
           continue
         }
@@ -281,8 +294,8 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
       if (uploadedCount > 0) {
         toast.success(
           uploadedCount === 1
-            ? `"${selectedFiles[0].name}" הועלה ונשמר בהצלחה`
-            : `${uploadedCount} קבצים הועלו ונשמרו בהצלחה`,
+            ? `"${selectedFiles[0].name}" הועלה לדרייב ונשמר בהצלחה`
+            : `${uploadedCount} קבצים הועלו לדרייב ונשמרו בהצלחה`,
         )
         setDriveRefreshKey(k => k + 1)
         router.refresh()
