@@ -167,6 +167,17 @@ export async function POST(request: NextRequest) {
   const oauthClients = await getOAuthClientsToTry()
   let driveUploadError: string | null = null
 
+  if (oauthClients.length === 0) {
+    return NextResponse.json(
+      {
+        error: 'חשבון Google אינו מחובר. יש להתחבר לחשבון Google כדי להעלות מסמכים לדרייב.',
+        code: 'GOOGLE_AUTH_REQUIRED',
+        authUrl: `/api/google/auth?returnUrl=${encodeURIComponent(`/moshe/projects/${projectId || ''}`)}`,
+      },
+      { status: 401 }
+    )
+  }
+
   for (const auth of oauthClients) {
     try {
       const drive = google.drive({ version: 'v3', auth })
@@ -205,15 +216,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 2. Guaranteed Fallback: Upload to Supabase Storage ('moshe-documents' public bucket)
-  try {
-    const stored = await uploadToSupabaseStorage(buffer, file.name, mimeType, projectId)
-    return NextResponse.json(stored)
-  } catch (err: any) {
-    console.error('[Moshe Document Upload Error]', err)
-    return NextResponse.json(
-      { error: `שגיאה בהעלאת הקובץ: ${err.message ?? 'שגיאה לא ידועה'}` },
-      { status: 500 }
-    )
-  }
+  // If OAuth failed with invalid_grant or unauthorized, prompt user to re-authenticate
+  return NextResponse.json(
+    {
+      error: 'חיבור Google Drive פג תוקף או אינו מורשה. אנא התחבר מחדש לחשבון Google.',
+      code: 'GOOGLE_AUTH_REQUIRED',
+      authUrl: `/api/google/auth?returnUrl=${encodeURIComponent(`/moshe/projects/${projectId || ''}`)}`,
+      details: driveUploadError,
+    },
+    { status: 401 }
+  )
 }

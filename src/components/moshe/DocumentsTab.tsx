@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useCallback, useEffect, Fragment } fro
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive, ChevronRight } from 'lucide-react'
+import { ExternalLink, Trash2, Pencil, Plus, X, FolderOpen, FileText, Link2, Save, CheckCircle2, Eye, Loader2, Camera, FolderUp, RefreshCw, HardDrive, ChevronRight, AlertCircle, LogIn } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { addDocument, deleteDocument, updateDocument, updateDriveLink } from '@/app/moshe/actions'
 import { toast } from 'sonner'
@@ -226,6 +226,7 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
   const [newDoc, setNewDoc] = useState({ name: '', url: '' })
   const [uploading, setUploading] = useState(false)
   const [driveRefreshKey, setDriveRefreshKey] = useState(0)
+  const [googleAuthError, setGoogleAuthError] = useState<{ message: string; authUrl: string } | null>(null)
   const fileInputRef   = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -260,6 +261,16 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
         if (!res.ok || data.error) {
           if (data.code === 'NO_DRIVE_FOLDER') {
             setEditingDrive(true)
+            toast.error(data.error ?? 'נדרש קישור לתיקיית דרייב')
+            break
+          }
+          if (data.code === 'GOOGLE_AUTH_REQUIRED') {
+            const authUrl = data.authUrl || `/api/google/auth?returnUrl=${encodeURIComponent(window.location.pathname)}`
+            setGoogleAuthError({
+              message: data.error || 'חיבור Google Drive פג תוקף או אינו מורשה. יש להתחבר מחדש לחשבון Google כדי לאפשר העלאת קבצים לדרייב.',
+              authUrl,
+            })
+            break
           }
           toast.error(data.error ?? `שגיאה בהעלאת "${file.name}"`)
           continue
@@ -436,14 +447,24 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
             <FolderOpen className="w-4 h-4 text-amber-500" />
             <p className="text-sm font-bold text-slate-700">תיקיית Google Drive</p>
           </div>
-          {!editingDrive && (
-            <Button size="sm" variant="ghost"
-              onClick={() => setEditingDrive(true)}
-              className="text-xs gap-1.5 h-8 text-slate-500 hover:text-amber-600 hover:bg-amber-50">
-              <Pencil className="w-3.5 h-3.5" />
-              {driveFolderUrl ? 'עריכה' : 'הוסף קישור'}
-            </Button>
-          )}
+          <div className="flex items-center gap-1.5">
+            <a
+              href={`/api/google/auth?returnUrl=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : `/moshe/projects/${projectId}`)}`}
+              className="text-xs inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+              title="חיבור או עדכון הרשאות חשבון Google"
+            >
+              <RefreshCw className="w-3 h-3 text-slate-400" />
+              חיבור Google
+            </a>
+            {!editingDrive && (
+              <Button size="sm" variant="ghost"
+                onClick={() => setEditingDrive(true)}
+                className="text-xs gap-1.5 h-8 text-slate-500 hover:text-amber-600 hover:bg-amber-50">
+                <Pencil className="w-3.5 h-3.5" />
+                {driveFolderUrl ? 'עריכה' : 'הוסף קישור'}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="px-4 py-4">
@@ -643,6 +664,43 @@ export function DocumentsTab({ projectId, documents, driveFolderUrl }: Props) {
 
       {/* Drive folder browser */}
       <DriveBrowser folderUrl={driveFolderUrl ?? null} refreshKey={driveRefreshKey} />
+
+      {/* Google Authentication Required Modal */}
+      <Dialog open={!!googleAuthError} onOpenChange={open => !open && setGoogleAuthError(null)}>
+        <DialogContent className="max-w-md w-full p-6 text-center" dir="rtl">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mb-4 text-amber-600">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <DialogHeader className="space-y-2 text-center sm:text-center">
+            <DialogTitle className="text-lg font-bold text-slate-800">
+              נדרש חיבור לחשבון Google
+            </DialogTitle>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              {googleAuthError?.message}
+            </p>
+          </DialogHeader>
+          <div className="mt-6 flex flex-col gap-2.5">
+            <Button
+              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium gap-2 shadow-sm"
+              onClick={() => {
+                if (googleAuthError?.authUrl) {
+                  window.location.href = googleAuthError.authUrl
+                }
+              }}
+            >
+              <LogIn className="w-4 h-4" />
+              התחבר לחשבון Google עכשיו
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full h-10 border-slate-200 text-slate-600 hover:bg-slate-50"
+              onClick={() => setGoogleAuthError(null)}
+            >
+              ביטול
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={!!previewUrl} onOpenChange={open => !open && setPreviewUrl(null)}>
